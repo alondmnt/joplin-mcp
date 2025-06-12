@@ -17,10 +17,10 @@ TEST_SERVER_URL = "http://localhost:41184"
 
 # Sample test data
 SAMPLE_NOTE_DATA = {
-    "id": "note123456789abcdef",
+    "id": "12345678901234567890123456789012",
     "title": "Test Note",
     "body": "This is a **test** note with some markdown content.\n\n- Item 1\n- Item 2",
-    "parent_id": "folder123456789abcdef",
+    "parent_id": "abcdef12345678901234567890123456",
     "created_time": 1609459200000,  # 2021-01-01 00:00:00 UTC
     "updated_time": 1609545600000,  # 2021-01-02 00:00:00 UTC
     "user_created_time": 1609459200000,
@@ -48,7 +48,7 @@ SAMPLE_NOTE_DATA = {
 }
 
 SAMPLE_NOTEBOOK_DATA = {
-    "id": "folder123456789abcdef",
+    "id": "abcdef12345678901234567890123456",
     "title": "Test Notebook",
     "created_time": 1609459200000,
     "updated_time": 1609545600000,
@@ -64,7 +64,7 @@ SAMPLE_NOTEBOOK_DATA = {
 }
 
 SAMPLE_TAG_DATA = {
-    "id": "tag123456789abcdef",
+    "id": "fedcba09876543210987654321098765",
     "title": "test-tag",
     "created_time": 1609459200000,
     "updated_time": 1609545600000,
@@ -79,10 +79,10 @@ SAMPLE_TAG_DATA = {
 SAMPLE_SEARCH_RESULT = {
     "items": [
         {
-            "id": "note123456789abcdef",
+            "id": "12345678901234567890123456789012",
             "title": "Test Note",
             "body": "This is a **test** note with some markdown content.",
-            "parent_id": "folder123456789abcdef",
+            "parent_id": "abcdef12345678901234567890123456",
             "updated_time": 1609545600000,
         }
     ],
@@ -132,7 +132,7 @@ def multiple_notes_data() -> List[Dict[str, Any]]:
     notes = []
     for i in range(5):
         note = SAMPLE_NOTE_DATA.copy()
-        note["id"] = f"note{i:02d}456789abcdef"
+        note["id"] = f"1234567890123456789012345678901{i:1d}"
         note["title"] = f"Test Note {i+1}"
         note["body"] = f"This is test note number {i+1} with some content."
         notes.append(note)
@@ -145,7 +145,7 @@ def multiple_notebooks_data() -> List[Dict[str, Any]]:
     notebooks = []
     for i in range(3):
         notebook = SAMPLE_NOTEBOOK_DATA.copy()
-        notebook["id"] = f"folder{i:02d}56789abcdef"
+        notebook["id"] = f"abcdef123456789012345678901234567{i:1d}0"
         notebook["title"] = f"Test Notebook {i+1}"
         notebooks.append(notebook)
     return notebooks
@@ -158,7 +158,7 @@ def multiple_tags_data() -> List[Dict[str, Any]]:
     tag_names = ["work", "personal", "project-alpha", "important"]
     for i, name in enumerate(tag_names):
         tag = SAMPLE_TAG_DATA.copy()
-        tag["id"] = f"tag{i:02d}6789abcdef"
+        tag["id"] = f"fedcba098765432109876543210987654{i:02d}"
         tag["title"] = name
         tags.append(tag)
     return tags
