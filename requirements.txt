@@ -7,6 +7,7 @@ joppy>=1.0.0
 pydantic>=2.0.0
 httpx>=0.24.0
 typing-extensions>=4.0.0
+PyYAML>=6.0.0
 
 # Testing framework and plugins
 pytest>=7.0.0
