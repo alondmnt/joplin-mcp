@@ -972,58 +972,177 @@ class JoplinMCPClient:
     # Helper methods for enhanced search functionality
     
     def _execute_joppy_search(self, query: str) -> List[Any]:
-        """Execute basic search using joppy.
+        """Execute the search with joppy and return raw note objects."""
+        if not query.strip():
+            return []
+        
+        try:
+            # Use joppy search API directly
+            search_results = self._joppy_client.search(
+                query=query
+            )
+            
+            if search_results is None:
+                return []
+            
+            # Extract notes from search results
+            if hasattr(search_results, 'items'):
+                return search_results.items or []
+            elif isinstance(search_results, list):
+                return search_results
+            elif isinstance(search_results, dict) and 'items' in search_results:
+                return search_results['items'] or []
+            else:
+                # If we get a single note or different structure, wrap in list
+                return [search_results] if search_results else []
+            
+        except Exception as e:
+            # Log the error but don't fail completely
+            print(f"Warning: Search API error: {e}")
+            return []
+    
+    def search_notes(
+        self,
+        query: str,
+        limit: int = 20,
+        notebook_id: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        sort_by: str = "updated_time",
+        sort_order: str = "desc"
+    ) -> List[Dict[str, Any]]:
+        """Simple search_notes method that wraps enhanced_search for MCP server compatibility.
         
         Args:
             query: Search query string
+            limit: Maximum number of results to return (default: 20, max: 100)
+            notebook_id: Filter by notebook ID (optional)
+            tags: Filter by tags (optional)
+            sort_by: Field to sort by (default: "updated_time")
+            sort_order: Sort order - "asc" or "desc" (default: "desc")
             
         Returns:
-            List of search results from joppy
-            
-        Raises:
-            JoplinClientError: If search fails
+            List of note dictionaries
         """
+        # Input validation and sanitization
+        query = query.strip() if isinstance(query, str) else ''
+        if not query:
+            return []  # Return empty for empty queries
+        
+        # Validate and clamp limit
+        limit = max(1, min(limit, 100))
+        
+        # Validate tags parameter
+        if tags and isinstance(tags, list):
+            tags = [tag for tag in tags if tag and str(tag).strip()]
+            if not tags:
+                tags = None
+        elif tags is not None:
+            tags = None
+        
         try:
-            # Execute search using joppy - try different methods based on what's available
-            if hasattr(self._joppy_client, 'search_all'):
-                # Use search_all method if available
-                result = self._joppy_client.search_all(query=query)
-                # search_all typically returns a list directly
-                if isinstance(result, list):
-                    return result
-                elif isinstance(result, dict) and 'items' in result:
-                    return result['items']
-                else:
-                    raise JoplinClientError(f"Unexpected search_all result format: {type(result)}")
-            elif hasattr(self._joppy_client, 'search'):
-                # Use search method if available
-                result = self._joppy_client.search(query=query)
-                # Check if it's a paginated response
-                if isinstance(result, dict) and 'items' in result:
-                    return result['items']
-                elif isinstance(result, list):
-                    return result
-                else:
-                    raise JoplinClientError(f"Unexpected search result format: {type(result)}")
-            else:
-                # Fallback: try to get all notes and filter manually
-                all_notes = self._joppy_client.get_all_notes()
-                if not query.strip():
-                    return all_notes
+            # Build filters for enhanced_search
+            filters = {}
+            if notebook_id and str(notebook_id).strip():
+                filters['notebook_id'] = notebook_id
+            if tags:
+                filters['tags'] = tags
+            
+            # Call enhanced_search with simplified parameters
+            search_result = self.enhanced_search(
+                query=query,
+                limit=limit,
+                sort_by=sort_by,
+                sort_order=sort_order,
+                filters=filters if filters else None,
+                include_body=True,
+                return_pagination_info=False,
+                highlight_matches=False,
+                include_facets=False,
+                fuzzy_matching=False,
+                include_related=False,
+                include_scores=False,
+                enable_boolean_operators=True,
+                enable_field_queries=False,
+                enable_date_queries=False,
+                stream_results=False,
+                enable_cache=False
+            )
+            
+            # Convert MCPSearchResult to list of dictionaries
+            if hasattr(search_result, 'notes') and search_result.notes:
+                # Convert MCPNote objects to dictionaries
+                note_dicts = []
+                for note in search_result.notes:
+                    if hasattr(note, '__dict__'):
+                        # Convert MCPNote to dict
+                        note_dict = {
+                            'id': getattr(note, 'id', ''),
+                            'title': getattr(note, 'title', ''),
+                            'body': getattr(note, 'body', ''),
+                            'created_time': getattr(note, 'created_time', 0),
+                            'updated_time': getattr(note, 'updated_time', 0),
+                            'parent_id': getattr(note, 'parent_id', ''),
+                            'is_todo': getattr(note, 'is_todo', False),
+                            'todo_completed': getattr(note, 'todo_completed', False),
+                            'tags': getattr(note, 'tags', [])
+                        }
+                        note_dicts.append(note_dict)
+                    elif isinstance(note, dict):
+                        # Already a dictionary
+                        note_dicts.append(note)
+                    else:
+                        # Convert other types to dict if possible
+                        try:
+                            note_dict = {
+                                'id': getattr(note, 'id', str(note) if hasattr(note, 'id') else ''),
+                                'title': getattr(note, 'title', 'Untitled'),
+                                'body': getattr(note, 'body', ''),
+                                'created_time': getattr(note, 'created_time', 0),
+                                'updated_time': getattr(note, 'updated_time', 0),
+                                'parent_id': getattr(note, 'parent_id', ''),
+                                'is_todo': getattr(note, 'is_todo', False),
+                                'todo_completed': getattr(note, 'todo_completed', False),
+                                'tags': getattr(note, 'tags', [])
+                            }
+                            note_dicts.append(note_dict)
+                        except:
+                            # Skip problematic entries
+                            continue
                 
-                # Simple text search in title and body
-                query_lower = query.lower()
-                filtered_notes = []
-                for note in all_notes:
-                    title = getattr(note, 'title', '').lower()
-                    body = getattr(note, 'body', '').lower()
-                    if query_lower in title or query_lower in body:
-                        filtered_notes.append(note)
-                return filtered_notes
+                return note_dicts[:limit]  # Ensure we don't exceed limit
+            
+            return []
             
         except Exception as e:
-            raise JoplinClientError(f"Search execution failed: {e}") from e
-    
+            # Fallback: try direct joppy search if enhanced_search fails
+            try:
+                results = self._execute_joppy_search(query)
+                note_dicts = []
+                
+                for result in results[:limit]:
+                    if hasattr(result, '__dict__'):
+                        # Convert to dict
+                        note_dict = {
+                            'id': getattr(result, 'id', ''),
+                            'title': getattr(result, 'title', ''),
+                            'body': getattr(result, 'body', ''),
+                            'created_time': getattr(result, 'created_time', 0),
+                            'updated_time': getattr(result, 'updated_time', 0),
+                            'parent_id': getattr(result, 'parent_id', ''),
+                            'is_todo': getattr(result, 'is_todo', False),
+                            'todo_completed': getattr(result, 'todo_completed', False),
+                            'tags': getattr(result, 'tags', [])
+                        }
+                        note_dicts.append(note_dict)
+                    elif isinstance(result, dict):
+                        note_dicts.append(result)
+                
+                return note_dicts
+                
+            except Exception as fallback_error:
+                print(f"Warning: Both enhanced_search and fallback search failed: {e}, {fallback_error}")
+                return []
+
     def _apply_enhanced_filters(self, results: List[Any], query: str, **kwargs) -> List[Any]:
         """Apply all enhanced filters to search results.
         
