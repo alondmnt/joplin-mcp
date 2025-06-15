@@ -130,6 +130,10 @@ class MCPNote(BaseModel):
             "parent_id": self.parent_id
         }
     
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary format (alias for to_joplin_dict)."""
+        return self.to_joplin_dict()
+    
     class Config:
         """Pydantic configuration."""
         validate_assignment = True
@@ -280,6 +284,13 @@ class MCPSearchResult(BaseModel):
     total_count: Optional[int] = Field(None, description="Total number of results")
     page: Optional[int] = Field(None, description="Current page number")
     
+    # Enhanced search fields
+    search_metadata: Optional[Dict[str, Any]] = Field(None, description="Enhanced search metadata")
+    pagination: Optional[Dict[str, Any]] = Field(None, description="Detailed pagination information")
+    facets: Optional[Dict[str, List[Dict[str, Any]]]] = Field(None, description="Faceted search results")
+    suggestions: Optional[List[Dict[str, Any]]] = Field(None, description="Related content suggestions")
+    aggregations: Optional[Dict[str, Any]] = Field(None, description="Search result aggregations")
+    
     def get_pagination_info(self) -> Dict[str, Any]:
         """Get pagination information."""
         return {
@@ -299,7 +310,7 @@ class MCPSearchResult(BaseModel):
     
     def to_mcp_response(self) -> Dict[str, Any]:
         """Convert to MCP response format."""
-        return {
+        response = {
             "content": {
                 "items": self.items
             },
@@ -311,6 +322,20 @@ class MCPSearchResult(BaseModel):
                 "items_count": len(self.items)
             }
         }
+        
+        # Add enhanced fields if present
+        if self.search_metadata:
+            response["meta"]["search_metadata"] = self.search_metadata
+        if self.pagination:
+            response["meta"]["pagination"] = self.pagination
+        if self.facets:
+            response["meta"]["facets"] = self.facets
+        if self.suggestions:
+            response["meta"]["suggestions"] = self.suggestions
+        if self.aggregations:
+            response["meta"]["aggregations"] = self.aggregations
+        
+        return response
     
     def merge(self, other: "MCPSearchResult") -> "MCPSearchResult":
         """Merge this search result with another."""
