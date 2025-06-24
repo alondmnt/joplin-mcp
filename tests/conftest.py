@@ -5,11 +5,11 @@ This module provides comprehensive fixtures for testing the Joplin MCP implement
 including mock Joplin server responses, test data, and testing utilities.
 """
 
-import pytest
-from unittest.mock import MagicMock, AsyncMock
-from typing import Dict, List, Any, Optional
-from datetime import datetime, timezone
 import json
+from typing import Any, Dict, List
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 # Test data constants
 TEST_TOKEN = "test_token_123456789"
@@ -44,7 +44,7 @@ SAMPLE_NOTE_DATA = {
     "is_shared": 0,
     "share_id": "",
     "conflict_original_id": "",
-    "master_key_id": ""
+    "master_key_id": "",
 }
 
 SAMPLE_NOTEBOOK_DATA = {
@@ -60,7 +60,7 @@ SAMPLE_NOTEBOOK_DATA = {
     "is_shared": 0,
     "share_id": "",
     "master_key_id": "",
-    "icon": ""
+    "icon": "",
 }
 
 SAMPLE_TAG_DATA = {
@@ -73,7 +73,7 @@ SAMPLE_TAG_DATA = {
     "encryption_cipher_text": "",
     "encryption_applied": 0,
     "is_shared": 0,
-    "master_key_id": ""
+    "master_key_id": "",
 }
 
 SAMPLE_SEARCH_RESULT = {
@@ -86,7 +86,7 @@ SAMPLE_SEARCH_RESULT = {
             "updated_time": 1609545600000,
         }
     ],
-    "has_more": False
+    "has_more": False,
 }
 
 
@@ -168,34 +168,34 @@ def multiple_tags_data() -> List[Dict[str, Any]]:
 def mock_joppy_client():
     """Create a mock joppy ClientApi instance for testing."""
     mock_client = MagicMock()
-    
+
     # Mock basic connection methods
     mock_client.ping = MagicMock(return_value="JoplinClipperServer")
-    
+
     # Mock note operations
     mock_client.get_note = MagicMock()
     mock_client.add_note = MagicMock()
     mock_client.modify_note = MagicMock()
     mock_client.delete_note = MagicMock()
     mock_client.get_all_notes = MagicMock()
-    
+
     # Mock notebook operations
     mock_client.get_folder = MagicMock()
     mock_client.add_folder = MagicMock()
     mock_client.modify_folder = MagicMock()
     mock_client.delete_folder = MagicMock()
     mock_client.get_all_folders = MagicMock()
-    
+
     # Mock tag operations
     mock_client.get_tag = MagicMock()
     mock_client.add_tag = MagicMock()
     mock_client.modify_tag = MagicMock()
     mock_client.delete_tag = MagicMock()
     mock_client.get_all_tags = MagicMock()
-    
+
     # Mock search operations
     mock_client.search = MagicMock()
-    
+
     return mock_client
 
 
@@ -207,31 +207,38 @@ def mock_joppy_responses(
     sample_search_result,
     multiple_notes_data,
     multiple_notebooks_data,
-    multiple_tags_data
+    multiple_tags_data,
 ):
     """Configure mock joppy client with realistic response data."""
+
     def configure_mock(mock_client):
         # Configure note responses
         mock_client.get_note.return_value = MagicMock(**sample_note_data)
         mock_client.add_note.return_value = sample_note_data["id"]
-        mock_client.get_all_notes.return_value = [MagicMock(**note) for note in multiple_notes_data]
-        
+        mock_client.get_all_notes.return_value = [
+            MagicMock(**note) for note in multiple_notes_data
+        ]
+
         # Configure notebook responses
         mock_client.get_folder.return_value = MagicMock(**sample_notebook_data)
         mock_client.add_folder.return_value = sample_notebook_data["id"]
-        mock_client.get_all_folders.return_value = [MagicMock(**nb) for nb in multiple_notebooks_data]
-        
+        mock_client.get_all_folders.return_value = [
+            MagicMock(**nb) for nb in multiple_notebooks_data
+        ]
+
         # Configure tag responses
         mock_client.get_tag.return_value = MagicMock(**sample_tag_data)
         mock_client.add_tag.return_value = sample_tag_data["id"]
-        mock_client.get_all_tags.return_value = [MagicMock(**tag) for tag in multiple_tags_data]
-        
+        mock_client.get_all_tags.return_value = [
+            MagicMock(**tag) for tag in multiple_tags_data
+        ]
+
         # Configure search responses
         search_results = [MagicMock(**item) for item in sample_search_result["items"]]
         mock_client.search.return_value = search_results
-        
+
         return mock_client
-    
+
     return configure_mock
 
 
@@ -247,13 +254,7 @@ def mock_mcp_server():
 @pytest.fixture
 def sample_mcp_tool_request():
     """Return a sample MCP tool request for testing."""
-    return {
-        "name": "search_notes",
-        "arguments": {
-            "query": "test",
-            "limit": 10
-        }
-    }
+    return {"name": "search_notes", "arguments": {"query": "test", "limit": 10}}
 
 
 @pytest.fixture
@@ -263,17 +264,19 @@ def sample_mcp_tool_response():
         "content": [
             {
                 "type": "text",
-                "text": json.dumps({
-                    "results": [
-                        {
-                            "id": "note123456789abcdef",
-                            "title": "Test Note",
-                            "body": "This is a **test** note with some markdown content.",
-                            "updated_time": 1609545600000
-                        }
-                    ],
-                    "has_more": False
-                })
+                "text": json.dumps(
+                    {
+                        "results": [
+                            {
+                                "id": "note123456789abcdef",
+                                "title": "Test Note",
+                                "body": "This is a **test** note with some markdown content.",
+                                "updated_time": 1609545600000,
+                            }
+                        ],
+                        "has_more": False,
+                    }
+                ),
             }
         ]
     }
@@ -286,7 +289,7 @@ def test_config():
         "joplin_token": TEST_TOKEN,
         "joplin_host": "localhost",
         "joplin_port": 41184,
-        "joplin_base_url": TEST_SERVER_URL
+        "joplin_base_url": TEST_SERVER_URL,
     }
 
 
@@ -309,27 +312,15 @@ pytest_plugins = []
 
 def pytest_configure(config):
     """Configure pytest with custom markers."""
-    config.addinivalue_line(
-        "markers", "unit: mark test as a unit test"
-    )
-    config.addinivalue_line(
-        "markers", "integration: mark test as an integration test"
-    )
-    config.addinivalue_line(
-        "markers", "slow: mark test as slow running"
-    )
+    config.addinivalue_line("markers", "unit: mark test as a unit test")
+    config.addinivalue_line("markers", "integration: mark test as an integration test")
+    config.addinivalue_line("markers", "slow: mark test as slow running")
 
 
 @pytest.fixture
 def temp_config_file(tmp_path):
     """Create a temporary config file for testing."""
-    config_data = {
-        "joplin": {
-            "token": TEST_TOKEN,
-            "host": "localhost",
-            "port": 41184
-        }
-    }
+    config_data = {"joplin": {"token": TEST_TOKEN, "host": "localhost", "port": 41184}}
     config_file = tmp_path / "test_config.json"
     config_file.write_text(json.dumps(config_data, indent=2))
-    return config_file 
+    return config_file

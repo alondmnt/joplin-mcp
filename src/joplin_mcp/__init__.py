@@ -26,21 +26,18 @@ __description__ = "Model Context Protocol server for Joplin note-taking applicat
 __all__ = [
     # Core server and client classes
     "JoplinMCPServer",
-    "JoplinMCPClient", 
-    
+    "JoplinMCPClient",
     # Configuration and models
     "JoplinConfig",
     "MCPNote",
-    "MCPNotebook", 
+    "MCPNotebook",
     "MCPTag",
     "MCPSearchResult",
-    
     # Exceptions
     "JoplinMCPError",
     "JoplinConnectionError",
     "JoplinAuthenticationError",
     "JoplinNotFoundError",
-    
     # Version and metadata
     "__version__",
     "__author__",
@@ -51,9 +48,9 @@ __all__ = [
 # Import exceptions first (they have no dependencies)
 try:
     from .exceptions import (
-        JoplinMCPError,
-        JoplinConnectionError,
         JoplinAuthenticationError,
+        JoplinConnectionError,
+        JoplinMCPError,
         JoplinNotFoundError,
     )
 except ImportError:
@@ -61,19 +58,24 @@ except ImportError:
     # Define placeholder classes to prevent import errors
     class JoplinMCPError(Exception):
         """Base exception for Joplin MCP operations."""
+
         pass
-    
+
     class JoplinConnectionError(JoplinMCPError):
         """Raised when connection to Joplin server fails."""
+
         pass
-    
+
     class JoplinAuthenticationError(JoplinMCPError):
         """Raised when Joplin API authentication fails."""
+
         pass
-    
+
     class JoplinNotFoundError(JoplinMCPError):
         """Raised when requested Joplin resource is not found."""
+
         pass
+
 
 # Import configuration
 try:
@@ -87,8 +89,8 @@ try:
     from .models import (
         MCPNote,
         MCPNotebook,
-        MCPTag,
         MCPSearchResult,
+        MCPTag,
     )
 except ImportError:
     # Placeholders during development
@@ -124,7 +126,7 @@ def get_server_info() -> dict:
         "license": __license__,
         "supported_tools": [
             "search_notes",
-            "get_note", 
+            "get_note",
             "create_note",
             "update_note",
             "delete_note",
@@ -141,13 +143,13 @@ def get_server_info() -> dict:
     }
 
 
-# Package-level configuration
+# Set up logging for the package
 import logging
 
-# Set up logging for the package
+# Package-level configuration
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 # Optional: Add package-level configuration
 _DEFAULT_LOG_LEVEL = logging.WARNING
 _logger = logging.getLogger(__name__)
-_logger.setLevel(_DEFAULT_LOG_LEVEL) 
+_logger.setLevel(_DEFAULT_LOG_LEVEL)
