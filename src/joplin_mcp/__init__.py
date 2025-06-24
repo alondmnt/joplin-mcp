@@ -17,6 +17,38 @@ Example usage:
     >>> await server.start()
 """
 
+import logging
+from typing import Optional
+
+# Import exceptions first (they have no dependencies)
+from .exceptions import (
+    JoplinAPIError,
+    JoplinConfigurationError,
+    JoplinConnectionError,
+    JoplinMCPError,
+    JoplinServerError,
+)
+
+# Import configuration
+from .config import JoplinMCPConfig
+
+# Import data models
+from .models import (
+    MCPNote,
+    MCPNotebook,
+    MCPSearchResult,
+    MCPTag,
+    MCPPaginatedResponse,
+    MCPErrorResponse,
+    MCPAPIResponse,
+    NotePriority,
+    JoplinTimestamp,
+)
+
+# Import client and server
+from .client import JoplinMCPClient
+from .server import JoplinMCPServer
+
 __version__ = "0.1.0"
 __author__ = "Joplin MCP Contributors"
 __license__ = "MIT"
@@ -28,88 +60,28 @@ __all__ = [
     "JoplinMCPServer",
     "JoplinMCPClient",
     # Configuration and models
-    "JoplinConfig",
+    "JoplinMCPConfig",
     "MCPNote",
     "MCPNotebook",
     "MCPTag",
     "MCPSearchResult",
+    "MCPPaginatedResponse",
+    "MCPErrorResponse",
+    "MCPAPIResponse",
+    "NotePriority",
+    "JoplinTimestamp",
     # Exceptions
     "JoplinMCPError",
     "JoplinConnectionError",
-    "JoplinAuthenticationError",
-    "JoplinNotFoundError",
+    "JoplinConfigurationError",
+    "JoplinAPIError",
+    "JoplinServerError",
     # Version and metadata
     "__version__",
     "__author__",
     "__license__",
     "__description__",
 ]
-
-# Import exceptions first (they have no dependencies)
-try:
-    from .exceptions import (
-        JoplinAuthenticationError,
-        JoplinConnectionError,
-        JoplinMCPError,
-        JoplinNotFoundError,
-    )
-except ImportError:
-    # During development, modules might not exist yet
-    # Define placeholder classes to prevent import errors
-    class JoplinMCPError(Exception):
-        """Base exception for Joplin MCP operations."""
-
-        pass
-
-    class JoplinConnectionError(JoplinMCPError):
-        """Raised when connection to Joplin server fails."""
-
-        pass
-
-    class JoplinAuthenticationError(JoplinMCPError):
-        """Raised when Joplin API authentication fails."""
-
-        pass
-
-    class JoplinNotFoundError(JoplinMCPError):
-        """Raised when requested Joplin resource is not found."""
-
-        pass
-
-
-# Import configuration
-try:
-    from .config import JoplinConfig
-except ImportError:
-    # Placeholder during development
-    JoplinConfig = None
-
-# Import data models
-try:
-    from .models import (
-        MCPNote,
-        MCPNotebook,
-        MCPSearchResult,
-        MCPTag,
-    )
-except ImportError:
-    # Placeholders during development
-    MCPNote = None
-    MCPNotebook = None
-    MCPTag = None
-    MCPSearchResult = None
-
-# Import client and server (these depend on models and config)
-try:
-    from .client import JoplinMCPClient
-except ImportError:
-    JoplinMCPClient = None
-
-try:
-    from .server import JoplinMCPServer
-except ImportError:
-    JoplinMCPServer = None
-
 
 def get_version() -> str:
     """Get the current version of joplin-mcp."""
@@ -143,10 +115,7 @@ def get_server_info() -> dict:
     }
 
 
-# Set up logging for the package
-import logging
-
-# Package-level configuration
+# Package-level logging configuration
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 # Optional: Add package-level configuration

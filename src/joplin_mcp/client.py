@@ -158,7 +158,7 @@ class JoplinMCPClient:
             try:
                 config.validate()
             except Exception as e:
-                raise JoplinClientError(f"Configuration validation failed: {e}")
+                raise JoplinClientError(f"Configuration validation failed: {e}") from e
 
             self.config = config
 
@@ -1013,7 +1013,8 @@ class JoplinMCPClient:
     def _execute_joppy_search(self, query: str) -> List[Any]:
         """Execute the search with joppy and return raw note objects."""
         if not query.strip():
-            return []
+            # Use wildcard search for empty queries
+            query = "*"
 
         try:
             # Use joppy search API directly
@@ -1063,7 +1064,7 @@ class JoplinMCPClient:
         # Input validation and sanitization
         query = query.strip() if isinstance(query, str) else ""
         if not query:
-            return []  # Return empty for empty queries
+            query = "*"  # Use wildcard for empty queries
 
         # Validate and clamp limit
         limit = max(1, min(limit, 100))
@@ -1768,10 +1769,10 @@ class JoplinMCPClient:
                     end_ts = int(end_dt.timestamp() * 1000)
 
                     date_ranges[field] = {"start": start_ts, "end": end_ts}
-                except ValueError:
+                except ValueError as e:
                     raise JoplinClientError(
                         f"Invalid date format in query: {start_date} or {end_date}"
-                    )
+                    ) from e
 
             return date_ranges
 
@@ -2588,7 +2589,7 @@ class JoplinMCPClient:
         """
         try:
             # Get all notebooks from joppy
-            joppy_notebooks = self._joppy_client.get_all_folders()
+            joppy_notebooks = self._joppy_client.get_all_notebooks()
 
             # Transform to MCP format
             return [
@@ -2674,7 +2675,7 @@ class JoplinMCPClient:
                 notebook_data["parent_id"] = parent_id
 
             # Create notebook using joppy
-            notebook_id = self._joppy_client.add_folder(**notebook_data)
+            notebook_id = self._joppy_client.add_notebook(**notebook_data)
 
             return str(notebook_id)
 
@@ -2743,7 +2744,7 @@ class JoplinMCPClient:
                 update_data["parent_id"] = parent_id
 
             # Update notebook using joppy
-            self._joppy_client.modify_folder(notebook_id.strip(), **update_data)
+            self._joppy_client.modify_notebook(notebook_id.strip(), **update_data)
 
             return True
 

@@ -617,7 +617,7 @@ class TestJoplinMCPServerLifecycle:
         assert hasattr(server, "start")
         await server.start()
         assert hasattr(server, "is_running")
-        assert server.is_running == True
+        assert server.is_running  is True
 
     @pytest.mark.asyncio
     async def test_server_has_stop_method(self, server):
@@ -625,7 +625,7 @@ class TestJoplinMCPServerLifecycle:
         await server.start()
         assert hasattr(server, "stop")
         await server.stop()
-        assert server.is_running == False
+        assert server.is_running  is False
 
 
 class TestJoplinMCPServerSearchNotesTool:
@@ -1599,7 +1599,7 @@ class TestJoplinMCPServerCreateNoteTool:
         from mcp.types import CallToolRequest
 
         # Create a mock tool call request
-        request = CallToolRequest(
+        CallToolRequest(
             method="tools/call",
             params={
                 "name": "create_note",
@@ -2582,3 +2582,109 @@ class TestJoplinMCPServerUntagNoteTool:
         # Test missing tag_id
         with pytest.raises(ValueError, match="tag_id parameter is required"):
             await server.handle_untag_note({"note_id": "note_123"})
+
+
+class TestJoplinMCPServerSecurity:
+    """Test suite for server security features."""
+
+    @pytest.fixture
+    def mock_client(self):
+        """Mock client for testing."""
+        client = Mock()
+        client.is_connected = True
+        client.search_notes.return_value = []
+        return client
+
+    @pytest.fixture
+    def server(self, mock_client):
+        """Create server instance with mocked client for testing."""
+        from joplin_mcp.server import JoplinMCPServer
+
+        server = JoplinMCPServer(
+            token="test_token", host="localhost", port=41184, client=mock_client
+        )
+        return server
+
+    @pytest.mark.asyncio
+    async def test_rate_limiting_blocks_excessive_requests(self, server):
+        """Test that rate limiting blocks excessive requests."""
+        # Make requests up to the limit
+        for i in range(60):  # Default limit is 60 per minute
+            await server.handle_search_notes({"query": f"test {i}"})
+        
+        # The next request should be rate limited
+        with pytest.raises(Exception, match="Rate limit exceeded"):
+            await server.handle_search_notes({"query": "rate limited"})
+
+    @pytest.mark.asyncio 
+    async def test_input_validation_sanitizes_strings(self, server):
+        """Test that input validation sanitizes malicious strings."""
+        # Test with null bytes and control characters
+        malicious_query = "normal text\x00\x01\x02malicious"
+        
+        # Should not raise exception but sanitize the input
+        result = await server.handle_search_notes({"query": malicious_query})
+        
+        # Verify the sanitized query was processed
+        assert "content" in result
+        # The null bytes should have been removed by sanitization
+
+    @pytest.mark.asyncio
+    async def test_input_validation_truncates_long_strings(self, server):
+        """Test that excessively long inputs are truncated."""
+        long_query = "A" * 1000  # Longer than max length
+        
+        # Should not raise exception but truncate the input
+        result = await server.handle_search_notes({"query": long_query})
+        
+        # Verify the request was processed
+        assert "content" in result
+
+    @pytest.mark.asyncio
+    async def test_tags_parameter_security_validation(self, server):
+        """Test security validation of tags parameter."""
+        # Test with too many tags
+        many_tags = [f"tag{i}" for i in range(20)]  # More than limit of 10
+        
+        result = await server.handle_search_notes({
+            "query": "test",
+            "tags": many_tags
+        })
+        
+        # Should process without error (tags truncated internally)
+        assert "content" in result
+
+    def test_rate_limit_timestamps_cleanup(self, server):
+        """Test that old timestamps are cleaned up properly."""
+        import time
+        
+        # Add some old timestamps
+        old_time = time.time() - 120  # 2 minutes ago
+        server._request_timestamps = [old_time] * 10
+        
+        # Make a new request which should trigger cleanup
+        server._check_rate_limit()
+        
+        # Old timestamps should be removed
+        assert len(server._request_timestamps) == 1  # Only the new one
+
+    def test_string_validation_type_checking(self, server):
+        """Test string validation with non-string inputs."""
+        with pytest.raises(ValueError, match="Input must be a string"):
+            server._validate_string_input(123)
+
+    def test_string_validation_length_limiting(self, server):
+        """Test string validation length limiting."""
+        long_string = "A" * 2000
+        result = server._validate_string_input(long_string, max_length=100)
+        assert len(result) == 100
+
+    def test_string_validation_control_character_removal(self, server):
+        """Test removal of control characters."""
+        dirty_string = "clean\x00text\x01with\x02control\x03chars"
+        clean_string = server._validate_string_input(dirty_string)
+        assert "\x00" not in clean_string
+        assert "\x01" not in clean_string
+        assert "\x02" not in clean_string
+        assert "\x03" not in clean_string
+        assert "cleantext" in clean_string

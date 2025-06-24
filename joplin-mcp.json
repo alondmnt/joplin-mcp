@@ -1,0 +1,8 @@
+{
+  "host": "localhost",
+  "port": 41184,
+  "token": "e624dc5b38b4eb06f65dbb85935a19250509d8e63d6369fef391bb76ce93626d313f8d675928c0b939b06e75c7bb37346ac4419833a546a91d5f3c30d9704e53",
+  "timeout": 30,
+  "verify_ssl": false,
+  "log_level": "INFO"
+} 

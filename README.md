@@ -32,7 +32,52 @@ This MCP server provides AI assistants with comprehensive access to your Joplin 
 ### 🔧 System Tools
 - **ping_joplin** - Test server connectivity and health
 
+## ✨ Key Features
+
+### 🦙 **Direct Ollama Integration**
+- **Interactive chat client** - Talk to your notes in plain English
+- **Zero-config setup** - Just run two commands and start chatting
+- **Intelligent tool usage** - Ollama automatically decides when to use Joplin tools
+- **Real-time feedback** - See exactly what's happening with your notes
+
+### 🚀 **Production Ready**
+- **13 comprehensive tools** for complete note management
+- **Rate limiting & security** - Safe for production use
+- **300+ tests** - Thoroughly tested and reliable
+- **Type-safe** - Full TypeScript compatibility
+
+### 🔌 **MCP Compliant**
+- **Industry standard** - Works with any MCP-compatible client
+- **Extensible** - Easy to add new tools and capabilities
+- **Well-documented** - Comprehensive API documentation
+
 ## 🚀 Quick Start
+
+### Option 1: Direct Ollama Integration (Easiest)
+
+The fastest way to get started is with our interactive Ollama client:
+
+```bash
+# 1. Clone and install
+git clone https://github.com/alondmnt/joplin-mcp.git
+cd joplin-mcp
+pip install -e .
+
+# 2. Configure Joplin (see Configuration section below)
+# Create joplin-mcp.json with your API token
+
+# 3. Install and setup Ollama
+curl -fsSL https://ollama.ai/install.sh | sh
+ollama pull gemma3:4b
+
+# 4. Start chatting!
+python run_mcp_server.py        # Terminal 1
+python ollama_mcp_client.py     # Terminal 2 - Interactive chat starts
+```
+
+You'll immediately have an AI assistant that can search, create, and manage your Joplin notes through natural conversation!
+
+### Option 2: Standard MCP Server Setup
 
 ### Prerequisites
 
@@ -44,61 +89,346 @@ This MCP server provides AI assistants with comprehensive access to your Joplin 
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/joplin-mcp.git
+git clone https://github.com/alondmnt/joplin-mcp.git
 cd joplin-mcp
 
-# Install dependencies
+# Install the package
 pip install -e .
-
-# Or install development dependencies
-pip install -e ".[dev]"
 ```
 
 ### Configuration
 
-1. **Enable Joplin Web Clipper**:
-   - Open Joplin Desktop
-   - Go to Tools → Options → Web Clipper
-   - Enable the Web Clipper service
-   - Note the port (default: 41184)
+#### 1. Enable Joplin Web Clipper
+- Open Joplin Desktop
+- Go to **Tools → Options → Web Clipper**
+- Enable the Web Clipper service
+- Note the port (default: 41184)
 
-2. **Generate API Token**:
-   - In Web Clipper settings, copy the API token
-   - Or generate a new token if needed
+#### 2. Get Your API Token
+- In Web Clipper settings, copy the **Authorization token**
+- Or click **"Advanced options"** to generate a new token
 
-3. **Set Environment Variables**:
-```bash
-export JOPLIN_TOKEN="your_api_token_here"
-export JOPLIN_HOST="localhost"  # Optional, defaults to localhost
-export JOPLIN_PORT="41184"      # Optional, defaults to 41184
+#### 3. Create Configuration File
+Create `joplin-mcp.json` in your project directory:
+
+```json
+{
+  "token": "your_api_token_here",
+  "host": "localhost",
+  "port": 41184,
+  "timeout": 30,
+  "verify_ssl": false
+}
 ```
 
-### Basic Usage
+#### 4. Test the Connection
+```bash
+# Test basic connectivity
+python test_connection.py
+
+# Run the MCP server
+python run_mcp_server.py
+```
+
+You should see:
+```
+🚀 Starting Joplin MCP Server...
+✅ Successfully connected to Joplin!
+📚 Found X notebooks
+🎯 Server starting on localhost:41184
+📋 Available tools: 13 tools ready
+```
+
+## 📁 Project Structure
+
+### Core Files
+- **`run_mcp_server.py`** - Main MCP server launcher script
+- **`ollama_mcp_client.py`** - Interactive Ollama chat client (⭐ **New!**)
+- **`joplin-mcp.json`** - Configuration file (you create this)
+- **`test_connection.py`** - Connection testing utility
+
+### Configuration Files
+- **`ollama-mcp-config.json`** - Pre-configured Ollama MCP setup
+- **`pyproject.toml`** - Python package configuration
+- **`requirements.txt`** - Python dependencies
+
+### Source Code
+- **`src/joplin_mcp/`** - Main package directory
+  - `server.py` - MCP server implementation
+  - `client.py` - Joplin API client
+  - `models.py` - Data models and schemas
+  - `config.py` - Configuration management
+  - `exceptions.py` - Custom exceptions
+
+### Documentation & Testing
+- **`docs/`** - API documentation and guides
+- **`tests/`** - Comprehensive test suite (300+ tests)
+- **`README.md`** - This documentation
+
+## 🦙 Ollama Integration
+
+### Quick Start with Ollama
+
+The easiest way to use this MCP server with Ollama is through our pre-built interactive client:
+
+```bash
+# 1. Start the MCP server (in one terminal)
+python run_mcp_server.py
+
+# 2. Start the Ollama chat client (in another terminal)
+python ollama_mcp_client.py
+```
+
+That's it! You'll have an interactive chat session where you can talk to Ollama and it will automatically use your Joplin notes.
+
+### Prerequisites for Ollama Integration
+
+1. **Ollama installed** and running:
+   ```bash
+   # Install Ollama (macOS/Linux)
+   curl -fsSL https://ollama.ai/install.sh | sh
+   
+   # Or download from https://ollama.ai/
+   ```
+
+2. **At least one model downloaded**:
+   ```bash
+   # Download a recommended model
+   ollama pull gemma3:4b
+   # or
+   ollama pull llama3.2
+   ```
+
+3. **Joplin MCP server configured** (see Quick Start section above)
+
+### Method 1: Direct Ollama Client (Recommended)
+
+Our custom Ollama client (`ollama_mcp_client.py`) provides the best experience:
+
+#### Features:
+- 🗣️ **Natural conversation** with your Joplin notes
+- 🔍 **Automatic tool detection** - Ollama decides when to use Joplin tools
+- 📝 **Smart JSON parsing** - Handles Ollama's various response formats
+- 🎯 **Real-time feedback** - See exactly what tools are being executed
+- 🛠️ **All 13 tools** supported seamlessly
+
+#### Usage Examples:
+
+```bash
+# Start the client
+python ollama_mcp_client.py
+
+# Example conversations:
+💬 You: list all my notebooks
+🤖 Assistant: I'll list your Joplin notebooks for you...
+[Tool executes and returns your 40 notebooks organized by category]
+
+💬 You: find notes about machine learning
+🤖 Assistant: Let me search your notes for machine learning content...
+[Searches and returns relevant notes with summaries]
+
+💬 You: create a new note called "Meeting Notes" in my work notebook
+🤖 Assistant: I'll create that note for you...
+[Creates the note and confirms success]
+```
+
+#### Configuration:
+Edit `ollama_mcp_client.py` to change the model:
 
 ```python
-from joplin_mcp import JoplinMCPServer
+# Change the default model (line ~20)
+def __init__(self, ollama_model: str = "gemma3:4b"):  # or "llama3.2", "phi3:latest", etc.
+```
 
-# Initialize the server
-server = JoplinMCPServer(token="your_api_token")
+#### Available Commands in Chat:
+- `help` - Show available commands
+- `tools` - List all Joplin tools
+- `quit` - Exit the chat
 
-# Start the server
-await server.start()
+### Method 2: MCP Registry Integration
 
-# Search for notes
-results = await server.handle_search_notes({
+For advanced users who want to integrate with multiple MCP servers:
+
+#### Step 1: Install MCP Registry
+```bash
+pip install mcp-registry
+```
+
+#### Step 2: Initialize and Add Joplin Server
+```bash
+# Initialize MCP Registry
+mcp-registry init
+
+# Add your Joplin MCP server
+mcp-registry add joplin python /path/to/your/joplin-mcp/run_mcp_server.py
+
+# Verify it's registered
+mcp-registry list
+```
+
+#### Step 3: Test the Integration
+```bash
+# List available tools
+mcp-registry list-tools joplin
+
+# Test a specific tool
+mcp-registry test-tool joplin list_notebooks '{}'
+```
+
+### Method 3: Manual Ollama MCP Configuration
+
+For direct Ollama MCP integration (requires Ollama with MCP support):
+
+#### Step 1: Create Ollama MCP Config
+Create or edit `~/.ollama/mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "joplin": {
+      "command": "python",
+      "args": ["/Users/yourusername/projects/joplin-mcp/run_mcp_server.py"],
+      "env": {
+        "PYTHONPATH": "/Users/yourusername/projects/joplin-mcp"
+      }
+    }
+  }
+}
+```
+
+#### Step 2: Update Paths
+Replace `/Users/yourusername/projects/joplin-mcp` with your actual project path.
+
+#### Step 3: Restart Ollama
+```bash
+# Stop Ollama if running
+killall ollama
+
+# Start Ollama with MCP support
+ollama serve
+```
+
+### Example Conversations with Ollama
+
+Here are real examples of what you can ask:
+
+#### 📚 **Notebook Management**
+```
+You: "Show me all my notebooks"
+Ollama: Lists and categorizes your 40 notebooks by purpose
+
+You: "Create a new notebook called 'AI Projects'"
+Ollama: Creates the notebook and confirms with the new ID
+```
+
+#### 🔍 **Smart Search**
+```
+You: "Find all notes about Python programming"
+Ollama: Searches your notes and returns relevant matches with summaries
+
+You: "Show me my recent todo items"
+Ollama: Finds todo notes and shows their completion status
+```
+
+#### ✍️ **Note Creation**
+```
+You: "Create a meeting note for today's standup"
+Ollama: Creates a new note with proper title and structure
+
+You: "Make a todo for 'Review MCP integration' in my work notebook"
+Ollama: Creates a todo note in the specified notebook
+```
+
+#### 🏷️ **Organization**
+```
+You: "What tags do I have available?"
+Ollama: Lists all your tags
+
+You: "Tag my recent notes about AI with 'important'"
+Ollama: Finds recent AI notes and adds the tag
+```
+
+### Supported Ollama Models
+
+Tested and working models:
+- `gemma3:4b` ⭐ (recommended for JSON tool usage)
+- `llama3.2`
+- `phi3:latest`
+- `orca-mini:latest`
+
+### Troubleshooting Ollama Integration
+
+**Client won't start:**
+```bash
+# Ensure dependencies are installed
+pip install mcp
+
+# Check if Ollama is running
+ollama list
+```
+
+**Tool execution fails:**
+```bash
+# Ensure MCP server is running first
+python run_mcp_server.py
+# Then start the client in another terminal
+```
+
+**JSON parsing issues:**
+- Some models are better at JSON formatting than others
+- The client includes robust JSON extraction for various formats
+- Try different models if you have issues
+
+**Connection timeouts:**
+- Increase timeout in `ollama_mcp_client.py` if needed
+- Ensure your Joplin instance is responsive
+
+## 🔧 Advanced Configuration
+
+### Environment Variables (Alternative)
+
+Instead of the JSON config file, you can use environment variables:
+
+```bash
+export JOPLIN_TOKEN="your_api_token_here"
+export JOPLIN_HOST="localhost"
+export JOPLIN_PORT="41184"
+export JOPLIN_TIMEOUT="30"
+```
+
+### Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `token` | *required* | Joplin API authentication token |
+| `host` | `localhost` | Joplin server hostname |
+| `port` | `41184` | Joplin Web Clipper port |
+| `timeout` | `30` | Request timeout in seconds |
+| `verify_ssl` | `false` | SSL certificate verification |
+
+### Programmatic Usage
+
+```python
+from joplin_mcp.server import JoplinMCPServer
+from joplin_mcp.config import JoplinMCPConfig
+
+# Create configuration
+config = JoplinMCPConfig(
+    token="your_token",
+    host="localhost",
+    port=41184,
+    timeout=30,
+    verify_ssl=False
+)
+
+# Initialize server
+server = JoplinMCPServer(config=config)
+
+# Use server tools
+result = await server.handle_search_notes({
     "query": "meeting notes",
     "limit": 10
 })
-
-# Create a new note
-note_result = await server.handle_create_note({
-    "title": "My New Note",
-    "body": "This is the content of my note.",
-    "parent_id": "notebook_id_here"
-})
-
-# Stop the server
-await server.stop()
 ```
 
 ## 📚 Comprehensive Examples
@@ -118,385 +448,3 @@ search_params = {
 
 results = await server.handle_search_notes(search_params)
 ```
-
-### Creating Todo Notes
-
-```python
-# Create a todo item with tags
-todo_params = {
-    "title": "Complete project documentation",
-    "body": "Write comprehensive docs for the new feature",
-    "parent_id": "work_notebook_id",
-    "is_todo": True,
-    "todo_completed": False,
-    "tags": ["urgent", "documentation", "project-x"]
-}
-
-todo_result = await server.handle_create_note(todo_params)
-```
-
-### Notebook Organization
-
-```python
-# Create a hierarchical notebook structure
-parent_notebook = await server.handle_create_notebook({
-    "title": "Work Projects"
-})
-
-child_notebook = await server.handle_create_notebook({
-    "title": "Project Alpha",
-    "parent_id": parent_notebook["notebook_id"]
-})
-
-# List all notebooks
-notebooks = await server.handle_list_notebooks({})
-```
-
-### Tag Management Workflow
-
-```python
-# Create tags for organization
-await server.handle_create_tag({"title": "urgent"})
-await server.handle_create_tag({"title": "review"})
-
-# Tag a note
-await server.handle_tag_note({
-    "note_id": "note_123",
-    "tag_id": "urgent_tag_id"
-})
-
-# List all tags
-tags = await server.handle_list_tags({})
-```
-
-## 🧪 Test-Driven Development (TDD) Approach
-
-This project was built using **strict Test-Driven Development** methodology:
-
-### TDD Cycle: RED → GREEN → REFACTOR
-
-1. **🔴 RED Phase**: Write failing tests first
-   - Define expected behavior through tests
-   - Ensure tests fail initially (no implementation)
-   - Validate test quality and coverage
-
-2. **🟢 GREEN Phase**: Implement minimal code to pass tests
-   - Write just enough code to make tests pass
-   - Focus on functionality over optimization
-   - Maintain test coverage at 100%
-
-3. **🔵 REFACTOR Phase**: Optimize and clean up
-   - Improve code structure and performance
-   - Extract common patterns and utilities
-   - Maintain all tests passing throughout
-
-### Test Coverage
-
-- **385 total tests** with **100% pass rate**
-- **Unit tests**: 129 tests for server functionality
-- **Integration tests**: 11 end-to-end workflow tests
-- **Client tests**: 245 tests for Joplin API integration
-- **Model tests**: Comprehensive validation testing
-- **Configuration tests**: Environment and file-based config
-
-### Running Tests
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage report
-pytest --cov=src/joplin_mcp --cov-report=html
-
-# Run specific test categories
-pytest tests/test_integration.py  # Integration tests
-pytest tests/test_server.py       # Server unit tests
-pytest tests/test_client.py       # Client tests
-
-# Run tests with verbose output
-pytest -v --tb=short
-```
-
-## 🔧 Development Setup
-
-### Development Dependencies
-
-```bash
-# Install development dependencies
-pip install -e ".[dev]"
-
-# This includes:
-# - pytest (testing framework)
-# - pytest-asyncio (async test support)
-# - pytest-mock (mocking utilities)
-# - black (code formatting)
-# - mypy (type checking)
-# - ruff (linting)
-# - coverage (test coverage)
-```
-
-### Code Quality Tools
-
-```bash
-# Format code with Black
-black src/ tests/
-
-# Type checking with MyPy
-mypy src/joplin_mcp
-
-# Linting with Ruff
-ruff check src/ tests/
-
-# Run all quality checks
-black src/ tests/ && mypy src/joplin_mcp && ruff check src/ tests/
-```
-
-### Project Structure
-
-```
-joplin-mcp/
-├── src/joplin_mcp/           # Main package
-│   ├── __init__.py           # Package exports
-│   ├── server.py             # MCP server implementation
-│   ├── client.py             # Joplin API client wrapper
-│   ├── models.py             # Pydantic data models
-│   ├── config.py             # Configuration management
-│   ├── exceptions.py         # Custom exceptions
-│   └── py.typed              # Type checking marker
-├── tests/                    # Test suite
-│   ├── conftest.py           # Test fixtures
-│   ├── test_server.py        # Server unit tests
-│   ├── test_integration.py   # End-to-end tests
-│   ├── test_client.py        # Client tests
-│   ├── test_models.py        # Model validation tests
-│   └── test_config.py        # Configuration tests
-├── pyproject.toml            # Project configuration
-├── requirements.txt          # Dependencies
-└── README.md                 # This file
-```
-
-## 🔌 MCP Integration
-
-### Using with Claude Desktop
-
-1. **Install the MCP server** following the installation steps above
-
-2. **Configure Claude Desktop** by adding to your MCP settings:
-
-```json
-{
-  "mcpServers": {
-    "joplin": {
-      "command": "python",
-      "args": ["-m", "joplin_mcp.server"],
-      "env": {
-        "JOPLIN_TOKEN": "your_api_token_here",
-        "JOPLIN_HOST": "localhost",
-        "JOPLIN_PORT": "41184"
-      }
-    }
-  }
-}
-```
-
-3. **Restart Claude Desktop** to load the MCP server
-
-4. **Start using Joplin tools** in your conversations:
-   - "Search my notes for meeting minutes from last week"
-   - "Create a new note about project planning"
-   - "Show me all my todo items"
-   - "Organize my notes with tags"
-
-### MCP Protocol Compliance
-
-This server implements the full MCP specification:
-
-- **Tools**: 13 comprehensive tools for note management
-- **Resources**: Access to notebooks, tags, and server information
-- **Prompts**: Helper prompts for search syntax and organization
-- **Error Handling**: Proper MCP error responses and validation
-- **Type Safety**: Full TypeScript-compatible type definitions
-
-## 🛠️ Configuration Options
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `JOPLIN_TOKEN` | *required* | Joplin API authentication token |
-| `JOPLIN_HOST` | `localhost` | Joplin server hostname |
-| `JOPLIN_PORT` | `41184` | Joplin Web Clipper port |
-| `JOPLIN_TIMEOUT` | `30` | Request timeout in seconds |
-
-### Configuration File
-
-Create `joplin_config.json` in your project directory:
-
-```json
-{
-  "joplin": {
-    "token": "your_api_token",
-    "host": "localhost",
-    "port": 41184,
-    "timeout": 30
-  },
-  "mcp": {
-    "server_name": "joplin-mcp",
-    "version": "0.1.0"
-  }
-}
-```
-
-### Programmatic Configuration
-
-```python
-from joplin_mcp import JoplinMCPConfig, JoplinMCPServer
-
-# Create configuration
-config = JoplinMCPConfig(
-    token="your_token",
-    host="localhost",
-    port=41184,
-    timeout=30
-)
-
-# Initialize server with config
-server = JoplinMCPServer(config=config)
-```
-
-## 🔍 API Reference
-
-### Search Notes
-
-```python
-await server.handle_search_notes({
-    "query": str,              # Required: search query
-    "limit": int,              # Optional: max results (1-100, default: 20)
-    "notebook_id": str,        # Optional: filter by notebook
-    "tags": List[str],         # Optional: filter by tags
-    "sort_by": str,            # Optional: title|created_time|updated_time|relevance
-    "sort_order": str          # Optional: asc|desc (default: desc)
-})
-```
-
-### Create Note
-
-```python
-await server.handle_create_note({
-    "title": str,              # Required: note title
-    "parent_id": str,          # Required: notebook ID
-    "body": str,               # Optional: note content
-    "is_todo": bool,           # Optional: create as todo (default: False)
-    "todo_completed": bool,    # Optional: todo status (default: False)
-    "tags": List[str]          # Optional: list of tag names
-})
-```
-
-### Update Note
-
-```python
-await server.handle_update_note({
-    "note_id": str,            # Required: note to update
-    "title": str,              # Optional: new title
-    "body": str,               # Optional: new content
-    "is_todo": bool,           # Optional: convert to/from todo
-    "todo_completed": bool,    # Optional: update todo status
-    "tags": List[str]          # Optional: replace tags
-})
-```
-
-For complete API documentation, see the [API Documentation](docs/api.md).
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Connection Failed**
-```
-Error: Failed to connect to Joplin server
-```
-- Ensure Joplin Desktop is running
-- Check Web Clipper is enabled in Joplin settings
-- Verify the port number (default: 41184)
-- Confirm API token is correct
-
-**Authentication Error**
-```
-Error: Invalid API token
-```
-- Generate a new API token in Joplin Web Clipper settings
-- Ensure token is set in environment variables or config
-- Check for extra spaces or characters in token
-
-**Import Errors**
-```
-ModuleNotFoundError: No module named 'joplin_mcp'
-```
-- Install the package: `pip install -e .`
-- Ensure you're in the correct virtual environment
-- Check Python path includes the package
-
-### Debug Mode
-
-Enable debug logging for troubleshooting:
-
-```python
-import logging
-logging.basicConfig(level=logging.DEBUG)
-
-server = JoplinMCPServer(token="your_token")
-```
-
-### Health Check
-
-Test your connection:
-
-```python
-# Test server connectivity
-result = await server.handle_ping_joplin({})
-print(result)  # Should show "connection successful"
-```
-
-## 🤝 Contributing
-
-We welcome contributions! This project follows strict TDD practices:
-
-1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-3. **Write failing tests first** (RED phase)
-4. **Implement minimal code** to pass tests (GREEN phase)
-5. **Refactor and optimize** while keeping tests green (REFACTOR phase)
-6. **Ensure 100% test coverage**: `pytest --cov=src/joplin_mcp`
-7. **Run quality checks**: `black . && mypy src/joplin_mcp && ruff check .`
-8. **Commit changes**: `git commit -m 'Add amazing feature'`
-9. **Push to branch**: `git push origin feature/amazing-feature`
-10. **Open a Pull Request**
-
-### Development Guidelines
-
-- **Test-first development**: Always write tests before implementation
-- **100% test coverage**: All code must be covered by tests
-- **Type safety**: Use type hints and pass mypy checks
-- **Code formatting**: Use Black for consistent formatting
-- **Documentation**: Update README and docstrings for new features
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **[Joplin](https://joplinapp.org/)** - The excellent note-taking application
-- **[Model Context Protocol](https://modelcontextprotocol.io/)** - The standardized AI integration protocol
-- **[joppy](https://github.com/marph91/joppy)** - Python client library for Joplin API
-- **TDD Community** - For promoting test-driven development practices
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/your-org/joplin-mcp/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/joplin-mcp/discussions)
-- **Documentation**: [Project Wiki](https://github.com/your-org/joplin-mcp/wiki)
-
----
-
-**Built with ❤️ using Test-Driven Development** 

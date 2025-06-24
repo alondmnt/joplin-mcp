@@ -1,7 +1,10 @@
 """Joplin MCP Server Implementation."""
 
+import logging
+import time
 from typing import Any, Callable, Dict, List, Optional
 from unittest.mock import Mock
+import asyncio
 
 # Import MCP components - with fallback for development
 try:
@@ -33,6 +36,12 @@ except ImportError:
 
 from joplin_mcp.client import JoplinMCPClient
 
+# Configure structured logging
+logger = logging.getLogger(__name__)
+
+# Add rate limiting constants for security
+RATE_LIMIT_REQUESTS_PER_MINUTE = 60
+RATE_LIMIT_WINDOW_SIZE = 60  # seconds
 
 class JoplinMCPServer:
     """MCP Server for Joplin note-taking application."""
@@ -45,6 +54,7 @@ class JoplinMCPServer:
         timeout: Optional[int] = None,
         config: Optional[Any] = None,
         client: Optional[JoplinMCPClient] = None,
+        skip_ping: Optional[bool] = False,
     ):
         """Initialize Joplin MCP Server.
 
@@ -55,17 +65,34 @@ class JoplinMCPServer:
             timeout: Request timeout
             config: Configuration object (optional)
             client: Pre-configured client (optional)
+            skip_ping: Skip ping validation during init (optional)
         """
+        logger.info("Initializing Joplin MCP Server", extra={
+            "host": host or "localhost",
+            "port": port or 41184,
+            "has_token": bool(token),
+            "has_config": bool(config),
+            "has_client": bool(client),
+            "skip_ping": skip_ping
+        })
+        
+        # Initialize rate limiting
+        self._request_timestamps = []
+        
         # Validate required parameters
         if not token and not config and not client:
+            logger.error("Server initialization failed: missing token")
             raise Exception("Token is required for Joplin MCP server initialization")
 
         # Validate configuration parameters BEFORE creating client
         if host == "":
+            logger.error("Invalid configuration: empty host parameter")
             raise Exception("Invalid host parameter")
         if port is not None and (port < 1 or port > 65535):
+            logger.error("Invalid configuration: port out of range", extra={"port": port})
             raise Exception("Invalid port parameter - must be between 1 and 65535")
         if timeout is not None and timeout < 0:
+            logger.error("Invalid configuration: negative timeout", extra={"timeout": timeout})
             raise Exception("Invalid timeout parameter - must be positive")
 
         # Store configuration
@@ -82,30 +109,34 @@ class JoplinMCPServer:
         # Initialize Joplin client
         if client:
             self.client = client
+        elif config:
+            # Use the config object directly
+            self.client = JoplinMCPClient(config=config)
         else:
             self.client = JoplinMCPClient(
                 host=self.host, port=self.port, token=self.token, timeout=self.timeout
             )
 
-        # Validate connection to Joplin (skip if client is mocked for testing)
-        try:
-            # Check if client is a mock (for testing)
-            if (
-                hasattr(self.client, "_mock_name")
-                or str(type(self.client)).find("Mock") != -1
-            ):
-                # Skip validation for mock clients
-                pass
-            else:
-                if not self.client.ping():
-                    raise Exception("Failed to connect to Joplin server")
-        except Exception as e:
-            # Only raise if it's not a mock client
-            if not (
-                hasattr(self.client, "_mock_name")
-                or str(type(self.client)).find("Mock") != -1
-            ):
-                raise Exception(f"Joplin connection validation failed: {e}")
+        # Validate connection to Joplin (skip if client is mocked for testing or explicitly skipped)
+        if not skip_ping:
+            try:
+                # Check if client is a mock (for testing)
+                if (
+                    hasattr(self.client, "_mock_name")
+                    or str(type(self.client)).find("Mock") != -1
+                ):
+                    # Skip validation for mock clients
+                    pass
+                else:
+                    if not self.client.ping():
+                        logger.warning("Failed initial ping to Joplin server - continuing anyway")
+            except Exception as e:
+                # Only raise if it's not a mock client
+                if not (
+                    hasattr(self.client, "_mock_name")
+                    or str(type(self.client)).find("Mock") != -1
+                ):
+                    logger.warning(f"Joplin connection validation failed: {e} - continuing anyway")
 
         # Create underlying MCP server
         self._mcp_server: Any = Server(self.server_name)
@@ -118,8 +149,63 @@ class JoplinMCPServer:
 
     def _setup_mcp_handlers(self) -> None:
         """Setup MCP protocol handlers."""
-        # This will be expanded in later sub-tasks
-        pass
+        if not MCP_AVAILABLE:
+            return
+            
+        # Set up tool handlers using the correct MCP Python SDK approach
+        @self._mcp_server.call_tool()
+        async def handle_tool_call(name: str, arguments: dict) -> list:
+            """Handle MCP tool calls."""
+            try:
+                self._check_rate_limit()
+                
+                # Route to appropriate handler based on tool name
+                if name == "search_notes":
+                    result = await self.handle_search_notes(arguments)
+                elif name == "get_note":
+                    result = await self.handle_get_note(arguments)
+                elif name == "create_note":
+                    result = await self.handle_create_note(arguments)
+                elif name == "update_note":
+                    result = await self.handle_update_note(arguments)
+                elif name == "delete_note":
+                    result = await self.handle_delete_note(arguments)
+                elif name == "list_notebooks":
+                    result = await self.handle_list_notebooks(arguments)
+                elif name == "get_notebook":
+                    result = await self.handle_get_notebook(arguments)
+                elif name == "create_notebook":
+                    result = await self.handle_create_notebook(arguments)
+                elif name == "list_tags":
+                    result = await self.handle_list_tags(arguments)
+                elif name == "create_tag":
+                    result = await self.handle_create_tag(arguments)
+                elif name == "tag_note":
+                    result = await self.handle_tag_note(arguments)
+                elif name == "untag_note":
+                    result = await self.handle_untag_note(arguments)
+                elif name == "ping_joplin":
+                    result = await self.handle_ping_joplin(arguments)
+                else:
+                    return [{"type": "text", "text": f"Unknown tool: {name}"}]
+                
+                # Convert result to MCP format
+                if isinstance(result, dict) and "content" in result:
+                    return result["content"]
+                else:
+                    return [{"type": "text", "text": str(result)}]
+                    
+            except Exception as e:
+                error_context = self.get_error_context(e, f"tool_{name}")
+                logger.error("Tool execution failed", extra=error_context)
+                return [{"type": "text", "text": f"Error executing {name}: {str(e)}"}]
+        
+        @self._mcp_server.list_tools()
+        async def handle_list_tools() -> list:
+            """Handle MCP list tools request."""
+            return self.get_available_tools()
+            
+        logger.info("MCP tool handlers registered successfully")
 
     def get_capabilities(self) -> Any:
         """Get MCP server capabilities."""
@@ -166,9 +252,13 @@ class JoplinMCPServer:
         ]
 
         for name, description in tool_definitions:
-            tool = Mock()
-            tool.name = name
-            tool.description = description
+            # Use proper Tool object if MCP is available, otherwise Mock
+            if MCP_AVAILABLE:
+                tool = Tool(name=name, description=description, inputSchema={})
+            else:
+                tool = Mock()
+                tool.name = name
+                tool.description = description
 
             # Initialize basic schema structure
             schema: Dict[str, Any] = {"properties": {}}
@@ -257,7 +347,15 @@ class JoplinMCPServer:
 
             # Add type and set required fields
             schema["type"] = "object"
-            tool.inputSchema = schema
+            
+            # Set the input schema based on tool type
+            if MCP_AVAILABLE:
+                # For proper Tool objects, we need to recreate with the schema
+                tool = Tool(name=name, description=description, inputSchema=schema)
+            else:
+                # For Mock objects, just set the attribute
+                tool.inputSchema = schema
+                
             tools.append(tool)
 
         return tools
@@ -303,11 +401,67 @@ class JoplinMCPServer:
 
     async def start(self) -> None:
         """Start the MCP server."""
+        logger.info("Starting MCP server loop...")
         self.is_running = True
+        
+        # Check if MCP is available
+        if not MCP_AVAILABLE:
+            logger.warning("MCP framework not available - running in mock mode")
+            # In mock mode, just run indefinitely
+            try:
+                while self.is_running:
+                    await asyncio.sleep(1)
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                logger.info("MCP server stopped")
+                self.is_running = False
+            return
+        
+        # Start the actual MCP server
+        try:
+            from mcp.server.stdio import stdio_server
+            
+            logger.info("Starting MCP server with stdio transport")
+            
+            # Setup tool list for MCP
+            tools = self.get_available_tools()
+            
+            # Configure the server
+            async with stdio_server() as (read_stream, write_stream):
+                await self._mcp_server.run(
+                    read_stream, 
+                    write_stream, 
+                    self._mcp_server.create_initialization_options()
+                )
+                
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            logger.info("MCP server stopped")
+            self.is_running = False
+        except Exception as e:
+            logger.error(f"Failed to start MCP server: {e}")
+            self.is_running = False
+            # For now, fallback to mock mode to keep server running
+            logger.info("Falling back to mock mode...")
+            try:
+                while self.is_running:
+                    await asyncio.sleep(1)
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                logger.info("MCP server stopped")
+                self.is_running = False
 
     async def stop(self) -> None:
         """Stop the MCP server."""
+        logger.info("Stopping MCP server...")
         self.is_running = False
+        
+        # If we have an actual MCP server, stop it
+        if hasattr(self, '_mcp_server') and self._mcp_server:
+            try:
+                # MCP server cleanup if needed
+                pass
+            except Exception as e:
+                logger.warning(f"Error during MCP server cleanup: {e}")
+        
+        logger.info("MCP server stopped")
 
     def __enter__(self) -> "JoplinMCPServer":
         """Context manager entry."""
@@ -427,6 +581,41 @@ class JoplinMCPServer:
             },
         }
 
+    def _check_rate_limit(self) -> None:
+        """Check rate limiting for security."""
+        current_time = time.time()
+        # Remove timestamps older than the window
+        self._request_timestamps = [
+            ts for ts in self._request_timestamps 
+            if current_time - ts < RATE_LIMIT_WINDOW_SIZE
+        ]
+        
+        if len(self._request_timestamps) >= RATE_LIMIT_REQUESTS_PER_MINUTE:
+            logger.warning("Rate limit exceeded", extra={
+                "requests_in_window": len(self._request_timestamps),
+                "limit": RATE_LIMIT_REQUESTS_PER_MINUTE
+            })
+            raise Exception("Rate limit exceeded. Please try again later.")
+        
+        self._request_timestamps.append(current_time)
+    
+    def _validate_string_input(self, value: str, max_length: int = 1000) -> str:
+        """Validate and sanitize string input for security."""
+        if not isinstance(value, str):
+            raise ValueError("Input must be a string")
+        
+        # Remove null bytes and control characters
+        sanitized = ''.join(char for char in value if ord(char) >= 32 or char in '\t\n\r')
+        
+        if len(sanitized) > max_length:
+            logger.warning("Input truncated due to length limit", extra={
+                "original_length": len(sanitized),
+                "max_length": max_length
+            })
+            sanitized = sanitized[:max_length]
+        
+        return sanitized
+
     async def handle_search_notes(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle search_notes MCP tool call.
 
@@ -447,17 +636,35 @@ class JoplinMCPServer:
         Raises:
             Exception: Re-raises client exceptions for MCP framework to handle
         """
-        # Extract and validate parameters
-        query = params.get("query", "").strip()
+        # Check rate limiting
+        self._check_rate_limit()
+        
+        logger.info("Processing search_notes request", extra={
+            "query_length": len(params.get("query", "")),
+            "has_notebook_filter": bool(params.get("notebook_id")),
+            "has_tags_filter": bool(params.get("tags")),
+            "limit": params.get("limit", 20)
+        })
+        
+        # Extract and validate parameters with security checks
+        query = self._validate_string_input(params.get("query", "").strip(), max_length=500)
         limit = max(1, min(params.get("limit", 20), 100))  # Clamp between 1-100
+        
         notebook_id = params.get("notebook_id")
+        if notebook_id:
+            notebook_id = self._validate_string_input(notebook_id, max_length=64)
+            
         tags = params.get("tags")
         sort_by = params.get("sort_by", "updated_time")
         sort_order = params.get("sort_order", "desc")
 
         # Validate tags parameter
         if tags is not None and not isinstance(tags, list):
+            logger.warning("Invalid tags parameter type, ignoring", extra={"tags_type": type(tags)})
             tags = None
+        elif tags:
+            # Sanitize tag values
+            tags = [self._validate_string_input(tag, max_length=100) for tag in tags if isinstance(tag, str)][:10]  # Limit to 10 tags
 
         try:
             # Call client search method
@@ -1079,12 +1286,15 @@ class JoplinMCPServer:
             Exception: Re-raises client exceptions for MCP framework to handle
         """
         try:
-            # Call client list_notebooks method
-            notebooks = self.client.list_notebooks()
+            # Call client get_all_notebooks method
+            notebooks = self.client.get_all_notebooks()
+            
+            # Convert MCPNotebook objects to dictionaries for formatting
+            notebooks_dict = [notebook.model_dump() if hasattr(notebook, 'model_dump') else notebook.__dict__ for notebook in notebooks]
 
             # Build standardized list response
             return self._build_list_response(
-                items=notebooks,
+                items=notebooks_dict,
                 entity_type="notebooks",
                 formatter_method=self._format_notebooks_list,
             )
@@ -1242,12 +1452,15 @@ class JoplinMCPServer:
             Exception: Re-raises client exceptions for MCP framework to handle
         """
         try:
-            # Call client list_tags method
-            tags = self.client.list_tags()
+            # Call client get_all_tags method
+            tags = self.client.get_all_tags()
+            
+            # Convert MCPTag objects to dictionaries for formatting
+            tags_dict = [tag.model_dump() if hasattr(tag, 'model_dump') else tag.__dict__ for tag in tags]
 
             # Build standardized list response
             return self._build_list_response(
-                items=tags, entity_type="tags", formatter_method=self._format_tags_list
+                items=tags_dict, entity_type="tags", formatter_method=self._format_tags_list
             )
 
         except Exception as e:

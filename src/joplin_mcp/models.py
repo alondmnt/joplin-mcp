@@ -179,8 +179,8 @@ class MCPNotebook(BaseModel):
     @validator("parent_id")
     def validate_parent_id(cls, v):
         """Validate that parent_id follows the same format as id when provided."""
-        if v is None:
-            return v
+        if v is None or v == "":
+            return None  # Convert empty strings to None
         if not isinstance(v, str) or len(v) != 32:
             raise ValueError("Parent ID must be 32 characters long")
         if not re.match(r"^[a-f0-9]{32}$", v):

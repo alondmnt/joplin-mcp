@@ -848,7 +848,7 @@ class TestConfigErrorHandlingAndMessages:
             config_file = f.name
 
         try:
-            with pytest.raises(ConfigError) as exc_info:
+            with pytest.raises(ConfigError):
                 config = JoplinMCPConfig.from_file(config_file)
                 # If it loads, validate it to get all errors
                 config.validate_all_with_details()
@@ -935,7 +935,7 @@ class TestConfigErrorHandlingAndMessages:
             },
         ):
             warnings = []
-            config = JoplinMCPConfig.from_environment_with_warnings(
+            JoplinMCPConfig.from_environment_with_warnings(
                 warning_collector=warnings
             )
 

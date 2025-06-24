@@ -80,13 +80,13 @@ class ConfigParser:
                         )
 
             return int(value)
-        except ValueError:
+        except ValueError as e:
             if strict:
                 raise ConfigError(
                     f"Invalid integer value for {field_name}: '{value}'. Use a numeric value (e.g., '30', '8080')"
-                )
+                ) from e
             else:
-                raise ConfigError(f"Invalid integer value for {field_name}: {value}")
+                raise ConfigError(f"Invalid integer value for {field_name}: {value}") from e
 
     @staticmethod
     def get_env_var(name: str, prefix: str = "JOPLIN_") -> Optional[str]:
@@ -287,17 +287,17 @@ class JoplinMCPConfig:
             if file_path.suffix.lower() == ".json":
                 try:
                     data = json.loads(content)
-                except json.JSONDecodeError as e:
+                except json.JSONDecodeError as json_error:
                     raise ConfigError(
-                        f"Invalid JSON in file {file_path}: {e}. Please check syntax and fix any formatting errors."
-                    )
+                        f"Invalid JSON in file {file_path}: {json_error}. Please check syntax and fix any formatting errors."
+                    ) from json_error
             elif file_path.suffix.lower() in (".yaml", ".yml"):
                 try:
                     data = yaml.safe_load(content)
-                except yaml.YAMLError as e:
+                except yaml.YAMLError as yaml_error:
                     raise ConfigError(
-                        f"Invalid YAML in file {file_path}: {e}. Please check syntax and fix any formatting errors."
-                    )
+                        f"Invalid YAML in file {file_path}: {yaml_error}. Please check syntax and fix any formatting errors."
+                    ) from yaml_error
             else:
                 raise ConfigError(
                     f"Unsupported file format '{file_path.suffix}' for file {file_path}. Use .json, .yaml, or .yml files."
@@ -312,13 +312,13 @@ class JoplinMCPConfig:
             # Validate and convert data types with file context
             try:
                 validated_data = cls._validate_file_data(data)
-            except ConfigError as e:
-                raise ConfigError(f"Error in file {file_path}: {e}")
+            except ConfigError as config_error:
+                raise ConfigError(f"Error in file {file_path}: {config_error}") from config_error
 
             return cls(**validated_data)
 
-        except OSError as e:
-            raise ConfigError(f"Error reading configuration file {file_path}: {e}")
+        except OSError as os_error:
+            raise ConfigError(f"Error reading configuration file {file_path}: {os_error}") from os_error
 
     @classmethod
     def _validate_file_data(cls, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -646,8 +646,8 @@ class JoplinMCPConfig:
                     yaml.safe_dump(config_data, f, default_flow_style=False, indent=2)
                 else:
                     raise ConfigError(f"Unsupported format: {format}")
-        except OSError as e:
-            raise ConfigError(f"Error writing configuration file {file_path}: {e}")
+        except OSError as os_error:
+            raise ConfigError(f"Error writing configuration file {file_path}: {os_error}") from os_error
 
     def test_connection(self) -> bool:
         """Test if the configuration allows successful connection to Joplin.

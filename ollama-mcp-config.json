@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "joplin": {
+      "command": "python",
+      "args": ["/Users/alondmnt/projects/joplin/mcp/run_mcp_server.py"],
+      "env": {
+        "PYTHONPATH": "/Users/alondmnt/projects/joplin/mcp"
+      }
+    }
+  }
+} 

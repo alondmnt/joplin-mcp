@@ -51,14 +51,14 @@ class TestJoplinMCPServerIntegration:
         """Test complete server initialization and capability reporting."""
         # Test server initialization
         assert server.token == "integration_test_token"
-        assert server.is_running == False
+        assert server.is_running  is False
 
         # Test lifecycle management
         await server.start()
-        assert server.is_running == True
+        assert server.is_running  is True
 
         await server.stop()
-        assert server.is_running == False
+        assert server.is_running  is False
 
         # Test capabilities
         capabilities = server.get_capabilities()
