@@ -155,9 +155,14 @@ class JoplinMCPServer:
         # Set up tool handlers using the correct MCP Python SDK approach
         @self._mcp_server.call_tool()
         async def handle_tool_call(name: str, arguments: dict) -> list:
-            """Handle MCP tool calls."""
+            """Handle MCP tool calls with automatic parameter validation and hints."""
             try:
                 self._check_rate_limit()
+                
+                # Pre-validate parameters and provide hints if needed
+                validation_result = self._validate_and_enhance_parameters(name, arguments)
+                if validation_result["enhanced_params"] is not None:
+                    arguments = validation_result["enhanced_params"]
                 
                 # Route to appropriate handler based on tool name
                 if name == "search_notes":
@@ -198,6 +203,16 @@ class JoplinMCPServer:
             except Exception as e:
                 error_context = self.get_error_context(e, f"tool_{name}")
                 logger.error("Tool execution failed", extra=error_context)
+                
+                # Check if this is a parameter validation error that we can help with
+                error_str = str(e)
+                if any(hint in error_str.lower() for hint in ["parameter", "required", "missing", "empty"]):
+                    # Try to provide enhanced error guidance
+                    validation_result = self._validate_and_enhance_parameters(name, arguments)
+                    if validation_result["error"]:
+                        return [{"type": "text", "text": validation_result["error"]}]
+                
+                # Fallback to basic error message
                 return [{"type": "text", "text": f"Error executing {name}: {str(e)}"}]
         
         @self._mcp_server.list_tools()
@@ -341,6 +356,100 @@ class JoplinMCPServer:
                     },
                 }
                 schema["required"] = ["title", "parent_id"]
+            elif name == "create_notebook":
+                schema["properties"] = {
+                    "title": {
+                        "type": "string",
+                        "description": "Title of the new notebook (required)",
+                    },
+                    "parent_id": {
+                        "type": "string",
+                        "description": "ID of the parent notebook (optional)",
+                    },
+                }
+                schema["required"] = ["title"]
+            elif name == "create_tag":
+                schema["properties"] = {
+                    "title": {
+                        "type": "string",
+                        "description": "Title of the new tag (required)",
+                    },
+                }
+                schema["required"] = ["title"]
+            elif name == "update_note":
+                schema["properties"] = {
+                    "note_id": {
+                        "type": "string",
+                        "description": "ID of the note to update (required)",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "New title for the note (optional)",
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "New content body for the note (optional)",
+                    },
+                    "is_todo": {
+                        "type": "boolean",
+                        "description": "Whether this note is a todo item (optional)",
+                    },
+                    "todo_completed": {
+                        "type": "boolean",
+                        "description": "Whether the todo item is completed (optional)",
+                    },
+                    "parent_id": {
+                        "type": "string",
+                        "description": "ID of the parent notebook (optional)",
+                    },
+                }
+                schema["required"] = ["note_id"]
+            elif name == "delete_note":
+                schema["properties"] = {
+                    "note_id": {
+                        "type": "string",
+                        "description": "ID of the note to delete (required)",
+                    },
+                }
+                schema["required"] = ["note_id"]
+            elif name == "list_notebooks":
+                # No required parameters for list_notebooks
+                schema["required"] = []
+            elif name == "get_notebook":
+                schema["properties"] = {
+                    "notebook_id": {
+                        "type": "string",
+                        "description": "ID of the notebook to retrieve (required)",
+                    },
+                }
+                schema["required"] = ["notebook_id"]
+            elif name == "list_tags":
+                # No required parameters for list_tags
+                schema["required"] = []
+            elif name == "tag_note":
+                schema["properties"] = {
+                    "note_id": {
+                        "type": "string",
+                        "description": "ID of the note to tag (required)",
+                    },
+                    "tag_id": {
+                        "type": "string",
+                        "description": "ID of the tag to add (required)",
+                    },
+                }
+                schema["required"] = ["note_id", "tag_id"]
+            elif name == "untag_note":
+                schema["properties"] = {
+                    "note_id": {
+                        "type": "string",
+                        "description": "ID of the note to untag (required)",
+                    },
+                    "tag_id": {
+                        "type": "string",
+                        "description": "ID of the tag to remove (required)",
+                    },
+                }
+                schema["required"] = ["note_id", "tag_id"]
             elif name == "ping_joplin":
                 # No required parameters for ping
                 schema["required"] = []
@@ -615,6 +724,249 @@ class JoplinMCPServer:
             sanitized = sanitized[:max_length]
         
         return sanitized
+
+    def _build_parameter_correction_hint(
+        self, 
+        tool_name: str, 
+        expected_param: str, 
+        received_params: List[str], 
+        common_alternatives: List[str] = None,
+        received_value: str = None
+    ) -> str:
+        """Build a helpful parameter correction message for LLMs.
+
+        Args:
+            tool_name: Name of the tool being called
+            expected_param: The correct parameter name expected
+            received_params: List of parameters actually received
+            common_alternatives: List of common alternative parameter names
+            received_value: The value that was sent with wrong parameter name
+
+        Returns:
+            Formatted correction hint message
+        """
+        common_alternatives = common_alternatives or []
+        
+        # Build the correction message
+        message_parts = [
+            f"❌ Parameter Error in {tool_name}:",
+            f"Expected parameter: '{expected_param}'",
+        ]
+        
+        if received_params:
+            message_parts.append(f"Received parameters: {received_params}")
+            
+            # Check if any received params match common alternatives
+            matches = [p for p in received_params if p in common_alternatives]
+            if matches:
+                message_parts.append(f"💡 Hint: Use '{expected_param}' instead of '{matches[0]}'")
+                if received_value:
+                    message_parts.append(f"🔧 Correct usage: {{\"{expected_param}\": \"{received_value}\"}}")
+        
+        if common_alternatives:
+            message_parts.append(f"✅ Accepted alternatives: {common_alternatives}")
+            
+        # Add correct usage example based on tool schema
+        tool_schema = self.get_tool_schema(tool_name)
+        if tool_schema and "inputSchema" in tool_schema:
+            required_params = tool_schema["inputSchema"].get("required", [])
+            message_parts.append(f"📋 Required parameters: {required_params}")
+            
+        message_parts.append(f"🔄 Please retry with the correct parameter name.")
+        
+        return "\n".join(message_parts)
+
+    def _validate_and_enhance_parameters(self, tool_name: str, arguments: dict) -> Dict[str, Any]:
+        """Centralized parameter validation and enhancement for all tools.
+        
+        This method:
+        1. Validates parameters against the tool schema
+        2. Provides helpful error messages for wrong parameters
+        3. Auto-corrects common parameter name variations
+        4. Returns enhanced parameters or error guidance
+        
+        Args:
+            tool_name: Name of the tool being called
+            arguments: Raw arguments from LLM
+            
+        Returns:
+            Dict with 'enhanced_params' (corrected args) or 'error' (helpful message)
+        """
+        # Get tool schema
+        tool_schema = self.get_tool_schema(tool_name)
+        if not tool_schema or "inputSchema" not in tool_schema:
+            return {"enhanced_params": arguments, "error": None}
+            
+        schema = tool_schema["inputSchema"]
+        properties = schema.get("properties", {})
+        required = schema.get("required", [])
+        
+        # Define common parameter aliases for auto-correction
+        parameter_aliases = {
+            # Universal aliases
+            "name": ["title"],
+            "content": ["body"], 
+            "text": ["body"],
+            "notebook_id": ["parent_id"],
+            "folder_id": ["parent_id"],
+            
+            # Tool-specific aliases
+            "tag_name": ["title"],  # for create_tag
+            "note_name": ["title"], # for create_note
+            "notebook_name": ["title"], # for create_notebook
+        }
+        
+        enhanced_args = dict(arguments)
+        missing_required = []
+        found_alternatives = {}
+        
+        # Check each required parameter
+        for required_param in required:
+            if required_param not in enhanced_args or not str(enhanced_args.get(required_param, "")).strip():
+                # Try to find value in aliases
+                found_value = None
+                found_alias = None
+                
+                # Check direct aliases
+                for alias in parameter_aliases.get(required_param, []):
+                    if alias in arguments and str(arguments[alias]).strip():
+                        found_value = str(arguments[alias]).strip()
+                        found_alias = alias
+                        break
+                
+                # Check reverse aliases (e.g., if they sent "tag_name" but we need "title")
+                for alias_key, alias_values in parameter_aliases.items():
+                    if required_param in alias_values and alias_key in arguments:
+                        if str(arguments[alias_key]).strip():
+                            found_value = str(arguments[alias_key]).strip()
+                            found_alias = alias_key
+                            break
+                
+                if found_value:
+                    # Auto-correct the parameter
+                    enhanced_args[required_param] = found_value
+                    found_alternatives[required_param] = found_alias
+                    logger.info(f"Auto-corrected parameter: {found_alias} -> {required_param}")
+                else:
+                    missing_required.append(required_param)
+        
+        # If we have missing required parameters, generate helpful error
+        if missing_required:
+            error_message = self._build_comprehensive_tool_hint(
+                tool_name=tool_name,
+                schema=schema,
+                received_params=list(arguments.keys()),
+                missing_required=missing_required,
+                found_alternatives=found_alternatives
+            )
+            return {"enhanced_params": None, "error": error_message}
+        
+        # Add helpful defaults for some tools
+        enhanced_args = self._add_intelligent_defaults(tool_name, enhanced_args)
+        
+        return {"enhanced_params": enhanced_args, "error": None}
+
+    def _build_comprehensive_tool_hint(
+        self,
+        tool_name: str,
+        schema: Dict[str, Any],
+        received_params: List[str],
+        missing_required: List[str],
+        found_alternatives: Dict[str, str]
+    ) -> str:
+        """Build comprehensive usage hints for any tool."""
+        
+        properties = schema.get("properties", {})
+        required = schema.get("required", [])
+        
+        message_parts = [
+            f"🔧 **{tool_name.upper()} Tool Usage Help**",
+            f"❌ Missing required parameters: {missing_required}",
+            ""
+        ]
+        
+        # Show what was received vs what's expected
+        if received_params:
+            message_parts.extend([
+                f"📥 **Received parameters:** {received_params}",
+                f"📋 **Required parameters:** {required}",
+                ""
+            ])
+        
+        # Show parameter details
+        message_parts.append("📖 **Parameter Guide:**")
+        for param_name, param_info in properties.items():
+            is_required = param_name in required
+            param_type = param_info.get("type", "string")
+            description = param_info.get("description", "No description")
+            
+            status = "**REQUIRED**" if is_required else "*optional*"
+            message_parts.append(f"  • `{param_name}` ({param_type}) - {status}")
+            message_parts.append(f"    {description}")
+            
+            # Show examples or defaults
+            if "default" in param_info:
+                message_parts.append(f"    Default: {param_info['default']}")
+            if "enum" in param_info:
+                message_parts.append(f"    Options: {param_info['enum']}")
+        
+        message_parts.append("")
+        
+        # Show auto-corrections that were found
+        if found_alternatives:
+            message_parts.extend([
+                "✅ **Auto-corrections applied:**",
+                *[f"  • {alias} → {param}" for param, alias in found_alternatives.items()],
+                ""
+            ])
+        
+        # Provide usage example
+        example_params = {}
+        for param in required:
+            if param in found_alternatives:
+                continue  # Already handled
+            param_info = properties.get(param, {})
+            param_type = param_info.get("type", "string")
+            
+            if param_type == "string":
+                example_params[param] = f"your_{param}_here"
+            elif param_type == "boolean":
+                example_params[param] = False
+            elif param_type == "integer":
+                example_params[param] = 1
+            elif param_type == "array":
+                example_params[param] = ["item1", "item2"]
+        
+        if example_params:
+            import json
+            example_json = json.dumps(example_params, indent=2)
+            message_parts.extend([
+                "💡 **Correct usage example:**",
+                f"```json",
+                example_json,
+                "```",
+                ""
+            ])
+        
+        message_parts.append("🔄 Please retry with the correct parameters.")
+        
+        return "\n".join(message_parts)
+
+    def _add_intelligent_defaults(self, tool_name: str, arguments: dict) -> dict:
+        """Add intelligent defaults for tools when reasonable."""
+        enhanced = dict(arguments)
+        
+        # For create_note, try to default to first notebook if no parent_id
+        if tool_name == "create_note" and not enhanced.get("parent_id"):
+            try:
+                notebooks = self.client.get_all_notebooks()
+                if notebooks:
+                    enhanced["parent_id"] = notebooks[0].id
+                    logger.info(f"Auto-selected default notebook: {notebooks[0].title}")
+            except Exception:
+                pass  # Will be caught by validation
+        
+        return enhanced
 
     async def handle_search_notes(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle search_notes MCP tool call.
@@ -1003,24 +1355,42 @@ class JoplinMCPServer:
         Raises:
             ValueError: If required parameters are missing or invalid
         """
-        # Extract and validate required parameters
+        # Extract and validate required parameters with aliases
         title = params.get("title", "").strip() if params.get("title") else ""
+        if not title:
+            title = params.get("name", "").strip() if params.get("name") else ""
+            
         parent_id = (
             params.get("parent_id", "").strip() if params.get("parent_id") else ""
         )
+        if not parent_id:
+            parent_id = (
+                params.get("notebook_id", "").strip() if params.get("notebook_id") else ""
+            )
 
         # Validate required fields
         if not title:
             raise ValueError("title parameter is required and cannot be empty")
 
+        # If no parent_id provided, try to use the first available notebook as default
         if not parent_id:
-            raise ValueError("parent_id parameter is required and cannot be empty")
+            try:
+                notebooks = self.client.get_all_notebooks()
+                if notebooks:
+                    parent_id = notebooks[0].id
+                    logger.info(f"No parent_id provided, using default notebook: {notebooks[0].title}")
+                else:
+                    raise ValueError("parent_id parameter is required and cannot be empty (no notebooks available)")
+            except Exception:
+                raise ValueError("parent_id parameter is required and cannot be empty")
 
         # Build validated parameters dictionary
         validated = {"title": title, "parent_id": parent_id}
 
         # Process optional parameters with type validation and defaults
         body = params.get("body")
+        if body is None:
+            body = params.get("content")  # Handle alias
         if body is not None:
             validated["body"] = str(body) if not isinstance(body, str) else body
         else:
@@ -1411,8 +1781,10 @@ class JoplinMCPServer:
             ValueError: If required parameters are missing or invalid
             Exception: Re-raises client exceptions for MCP framework to handle
         """
-        # Validate required parameter
+        # Handle parameter aliases (Ollama might send 'name' instead of 'title')
         title = params.get("title", "").strip()
+        if not title:
+            title = params.get("name", "").strip()
         if not title:
             raise ValueError("title parameter is required and cannot be empty")
 
@@ -1514,12 +1886,10 @@ class JoplinMCPServer:
             ValueError: If required parameters are missing or invalid
             Exception: Re-raises client exceptions for MCP framework to handle
         """
-        # Validate required parameter
-        title = params.get("title", "").strip()
-        if not title:
-            raise ValueError("title parameter is required and cannot be empty")
-
         try:
+            # Get title (parameter validation/enhancement handled centrally)
+            title = self._validate_string_input(params["title"], max_length=100)
+            
             # Call client create_tag method
             tag_id = self.client.create_tag(title=title)
 

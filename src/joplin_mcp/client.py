@@ -1141,7 +1141,7 @@ class JoplinMCPClient:
                         note_dicts.append(note_dict)
                     else:
                         # Skip entries we can't convert
-                        continue
+                            continue
 
                 return note_dicts[:limit]  # Ensure we don't exceed limit
 
