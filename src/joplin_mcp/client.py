@@ -1099,7 +1099,7 @@ class JoplinMCPClient:
                 fuzzy_matching=False,
                 include_related=False,
                 include_scores=False,
-                enable_boolean_operators=True,
+                enable_boolean_operators=False,  # Disabled to avoid filtering out valid results
                 enable_field_queries=False,
                 enable_date_queries=False,
                 stream_results=False,
@@ -1107,12 +1107,26 @@ class JoplinMCPClient:
             )
 
             # Convert MCPSearchResult to list of dictionaries
-            if hasattr(search_result, "notes") and search_result.notes:
-                # Convert MCPNote objects to dictionaries
+            if hasattr(search_result, "items") and search_result.items:
+                # Items are already dictionaries from enhanced_search
                 note_dicts = []
-                for note in search_result.notes:
-                    if hasattr(note, "__dict__"):
-                        # Convert MCPNote to dict
+                for note in search_result.items:
+                    if isinstance(note, dict):
+                        # Already a dictionary - just ensure all required fields are present
+                        note_dict = {
+                            "id": note.get("id", ""),
+                            "title": note.get("title", ""),
+                            "body": note.get("body", ""),
+                            "created_time": note.get("created_time", 0),
+                            "updated_time": note.get("updated_time", 0),
+                            "parent_id": note.get("parent_id", ""),
+                            "is_todo": note.get("is_todo", False),
+                            "todo_completed": note.get("todo_completed", False),
+                            "tags": note.get("tags", []),
+                        }
+                        note_dicts.append(note_dict)
+                    elif hasattr(note, "__dict__") or hasattr(note, "id"):
+                        # Convert MCPNote-like object to dict
                         note_dict = {
                             "id": getattr(note, "id", ""),
                             "title": getattr(note, "title", ""),
@@ -1125,31 +1139,9 @@ class JoplinMCPClient:
                             "tags": getattr(note, "tags", []),
                         }
                         note_dicts.append(note_dict)
-                    elif isinstance(note, dict):
-                        # Already a dictionary
-                        note_dicts.append(note)
                     else:
-                        # Convert other types to dict if possible
-                        try:
-                            note_dict = {
-                                "id": getattr(
-                                    note, "id", str(note) if hasattr(note, "id") else ""
-                                ),
-                                "title": getattr(note, "title", "Untitled"),
-                                "body": getattr(note, "body", ""),
-                                "created_time": getattr(note, "created_time", 0),
-                                "updated_time": getattr(note, "updated_time", 0),
-                                "parent_id": getattr(note, "parent_id", ""),
-                                "is_todo": getattr(note, "is_todo", False),
-                                "todo_completed": getattr(
-                                    note, "todo_completed", False
-                                ),
-                                "tags": getattr(note, "tags", []),
-                            }
-                            note_dicts.append(note_dict)
-                        except Exception:
-                            # Skip problematic entries
-                            continue
+                        # Skip entries we can't convert
+                        continue
 
                 return note_dicts[:limit]  # Ensure we don't exceed limit
 
