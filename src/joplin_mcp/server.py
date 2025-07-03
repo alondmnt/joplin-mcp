@@ -187,8 +187,12 @@ class JoplinMCPServer:
                     result = await self.handle_create_tag(arguments)
                 elif name == "tag_note":
                     result = await self.handle_tag_note(arguments)
+                elif name == "add_tag_to_note":
+                    result = await self.handle_tag_note(arguments)  # Same as tag_note
                 elif name == "untag_note":
                     result = await self.handle_untag_note(arguments)
+                elif name == "remove_tag_from_note":
+                    result = await self.handle_untag_note(arguments)  # Same as untag_note
                 elif name == "ping_joplin":
                     result = await self.handle_ping_joplin(arguments)
                 else:
@@ -262,7 +266,9 @@ class JoplinMCPServer:
             ("list_tags", "List all tags"),
             ("create_tag", "Create a new tag"),
             ("tag_note", "Add tag to note"),
+            ("add_tag_to_note", "Add tag to note"),
             ("untag_note", "Remove tag from note"),
+            ("remove_tag_from_note", "Remove tag from note"),
             ("ping_joplin", "Test Joplin server connection"),
         ]
 
@@ -439,6 +445,30 @@ class JoplinMCPServer:
                 }
                 schema["required"] = ["note_id", "tag_id"]
             elif name == "untag_note":
+                schema["properties"] = {
+                    "note_id": {
+                        "type": "string",
+                        "description": "ID of the note to untag (required)",
+                    },
+                    "tag_id": {
+                        "type": "string",
+                        "description": "ID of the tag to remove (required)",
+                    },
+                }
+                schema["required"] = ["note_id", "tag_id"]
+            elif name == "add_tag_to_note":
+                schema["properties"] = {
+                    "note_id": {
+                        "type": "string",
+                        "description": "ID of the note to tag (required)",
+                    },
+                    "tag_id": {
+                        "type": "string",
+                        "description": "ID of the tag to add (required)",
+                    },
+                }
+                schema["required"] = ["note_id", "tag_id"]
+            elif name == "remove_tag_from_note":
                 schema["properties"] = {
                     "note_id": {
                         "type": "string",
@@ -817,6 +847,37 @@ class JoplinMCPServer:
         }
         
         enhanced_args = dict(arguments)
+        
+        # Special handling for create_note tool when notebook_name is provided
+        if tool_name == "create_note" and "notebook_name" in arguments and "parent_id" not in arguments:
+            # Try to find notebook by name and convert to parent_id
+            notebook_name = str(arguments["notebook_name"]).strip()
+            if notebook_name:
+                try:
+                    notebooks = self.client.get_all_notebooks()
+                    matching_notebook = None
+                    for notebook in notebooks:
+                        if hasattr(notebook, 'title') and notebook.title == notebook_name:
+                            matching_notebook = notebook
+                            break
+                        elif isinstance(notebook, dict) and notebook.get('title') == notebook_name:
+                            matching_notebook = notebook
+                            break
+                    
+                    if matching_notebook:
+                        notebook_id = matching_notebook.id if hasattr(matching_notebook, 'id') else matching_notebook.get('id')
+                        if notebook_id:
+                            enhanced_args["parent_id"] = notebook_id
+                            logger.info(f"Auto-converted notebook_name '{notebook_name}' to parent_id: {notebook_id}")
+                        else:
+                            logger.warning(f"Found notebook '{notebook_name}' but couldn't extract ID")
+                    else:
+                        logger.warning(f"Notebook '{notebook_name}' not found, will use default notebook")
+                except Exception as e:
+                    logger.warning(f"Error looking up notebook '{notebook_name}': {e}")
+            
+            # Remove notebook_name from enhanced_args since it's not a valid parameter
+            enhanced_args.pop("notebook_name", None)
         missing_required = []
         found_alternatives = {}
         
@@ -956,15 +1017,27 @@ class JoplinMCPServer:
         """Add intelligent defaults for tools when reasonable."""
         enhanced = dict(arguments)
         
-        # For create_note, try to default to first notebook if no parent_id
+        # For create_note, try to default to most recently created notebook if no parent_id
         if tool_name == "create_note" and not enhanced.get("parent_id"):
             try:
                 notebooks = self.client.get_all_notebooks()
                 if notebooks:
-                    enhanced["parent_id"] = notebooks[0].id
-                    logger.info(f"Auto-selected default notebook: {notebooks[0].title}")
-            except Exception:
-                pass  # Will be caught by validation
+                    # Sort by created_time to get the most recently created notebook first
+                    # This is likely the notebook the user just created
+                    sorted_notebooks = sorted(
+                        notebooks, 
+                        key=lambda nb: getattr(nb, 'created_time', 0) if hasattr(nb, 'created_time') else nb.get('created_time', 0),
+                        reverse=True
+                    )
+                    
+                    selected_notebook = sorted_notebooks[0]
+                    notebook_id = selected_notebook.id if hasattr(selected_notebook, 'id') else selected_notebook.get('id')
+                    notebook_title = selected_notebook.title if hasattr(selected_notebook, 'title') else selected_notebook.get('title', 'Unknown')
+                    
+                    enhanced["parent_id"] = notebook_id
+                    logger.info(f"Auto-selected most recent notebook as default: {notebook_title} (ID: {notebook_id})")
+            except Exception as e:
+                logger.warning(f"Error selecting default notebook: {e}")
         
         return enhanced
 
@@ -1337,7 +1410,17 @@ class JoplinMCPServer:
                 todo_completed=validated_params.get("todo_completed", False),
             )
 
-            return {"content": [{"type": "text", "text": formatted_text}]}
+            # Add structured data for easier parsing by agents
+            response_content = [{"type": "text", "text": formatted_text}]
+            
+            # Add structured metadata that agents can easily extract
+            metadata = {
+                "type": "text",
+                "text": f"\n\n**STRUCTURED_DATA_FOR_AGENT:**\n```json\n{{\n  \"created_note_id\": \"{note_id}\",\n  \"note_title\": \"{validated_params['title']}\",\n  \"parent_notebook_id\": \"{validated_params['parent_id']}\",\n  \"operation\": \"create_note\",\n  \"success\": true\n}}\n```"
+            }
+            response_content.append(metadata)
+            
+            return {"content": response_content}
 
         except Exception as e:
             # Re-raise to be handled by MCP framework
@@ -1364,25 +1447,74 @@ class JoplinMCPServer:
             params.get("parent_id", "").strip() if params.get("parent_id") else ""
         )
         if not parent_id:
-            parent_id = (
-                params.get("notebook_id", "").strip() if params.get("notebook_id") else ""
-            )
+            # Handle notebook_id with type conversion (agent might send int instead of string)
+            notebook_id_param = params.get("notebook_id")
+            if notebook_id_param is not None:
+                parent_id = str(notebook_id_param).strip()
+                # If it's just a number like "1", it's likely invalid - provide helpful error
+                if parent_id.isdigit() and len(parent_id) < 10:
+                    logger.warning(f"Received suspicious notebook_id: {parent_id} - likely not a real Joplin notebook ID")
+                    raise ValueError(
+                        f"Invalid notebook_id '{parent_id}'. "
+                        f"Joplin notebook IDs are typically long alphanumeric strings (e.g., '3f80648342024c64bbb4a0e7adfcd538'). "
+                        f"Please use the actual notebook ID from a previous create_notebook response."
+                    )
 
         # Validate required fields
         if not title:
             raise ValueError("title parameter is required and cannot be empty")
 
-        # If no parent_id provided, try to use the first available notebook as default
+        # If no parent_id provided, try alternative approaches
         if not parent_id:
-            try:
-                notebooks = self.client.get_all_notebooks()
-                if notebooks:
-                    parent_id = notebooks[0].id
-                    logger.info(f"No parent_id provided, using default notebook: {notebooks[0].title}")
-                else:
-                    raise ValueError("parent_id parameter is required and cannot be empty (no notebooks available)")
-            except Exception:
-                raise ValueError("parent_id parameter is required and cannot be empty")
+            # First, check if notebook_name was provided
+            notebook_name = params.get("notebook_name", "").strip()
+            if notebook_name:
+                try:
+                    notebooks = self.client.get_all_notebooks()
+                    matching_notebook = None
+                    for notebook in notebooks:
+                        nb_title = getattr(notebook, 'title', None) or notebook.get('title', '') if isinstance(notebook, dict) else ''
+                        if nb_title == notebook_name:
+                            matching_notebook = notebook
+                            break
+                    
+                    if matching_notebook:
+                        nb_id = getattr(matching_notebook, 'id', None) or matching_notebook.get('id') if isinstance(matching_notebook, dict) else None
+                        if nb_id:
+                            parent_id = nb_id
+                            logger.info(f"Found notebook '{notebook_name}' with ID: {parent_id}")
+                        else:
+                            logger.warning(f"Found notebook '{notebook_name}' but couldn't extract ID")
+                    else:
+                        logger.warning(f"Notebook '{notebook_name}' not found")
+                except Exception as e:
+                    logger.warning(f"Error looking up notebook '{notebook_name}': {e}")
+            
+            # If still no parent_id, use most recently created notebook as default
+            if not parent_id:
+                try:
+                    notebooks = self.client.get_all_notebooks()
+                    if notebooks:
+                        # Sort by created_time to get the most recently created notebook first
+                        sorted_notebooks = sorted(
+                            notebooks, 
+                            key=lambda nb: getattr(nb, 'created_time', 0) if hasattr(nb, 'created_time') else nb.get('created_time', 0),
+                            reverse=True
+                        )
+                        
+                        selected_notebook = sorted_notebooks[0]
+                        parent_id = getattr(selected_notebook, 'id', None) or selected_notebook.get('id') if isinstance(selected_notebook, dict) else None
+                        nb_title = getattr(selected_notebook, 'title', 'Unknown') if hasattr(selected_notebook, 'title') else selected_notebook.get('title', 'Unknown')
+                        
+                        if parent_id:
+                            logger.info(f"No parent_id provided, using most recent notebook: {nb_title} (ID: {parent_id})")
+                        else:
+                            raise ValueError("parent_id parameter is required and cannot be empty (no notebooks available)")
+                    else:
+                        raise ValueError("parent_id parameter is required and cannot be empty (no notebooks available)")
+                except Exception as e:
+                    logger.error(f"Error selecting default notebook: {e}")
+                    raise ValueError("parent_id parameter is required and cannot be empty")
 
         # Build validated parameters dictionary
         validated = {"title": title, "parent_id": parent_id}
@@ -1471,18 +1603,23 @@ class JoplinMCPServer:
         success_message = self._build_success_message(is_todo, todo_completed)
         response_parts.append(success_message)
 
-        # Core note information
-        response_parts.extend(
-            [f"**Title:** {title}", f"**Note ID:** {note_id}", ""]  # Spacing line
-        )
+        # Core note information - make note ID very prominent
+        response_parts.extend([
+            f"**Title:** {title}", 
+            f"**📝 CREATED NOTE ID: {note_id} 📝**",  # Make this very prominent
+            ""  # Spacing line
+        ])
 
         # Todo-specific status information
         if is_todo:
             todo_status = self._build_todo_status(todo_completed)
             response_parts.append(todo_status)
 
-        # Confirmation message
-        response_parts.append("The note has been successfully created in Joplin.")
+        # Confirmation message with ID reminder
+        response_parts.extend([
+            "The note has been successfully created in Joplin.",
+            f"💡 **Remember: The note ID is `{note_id}` - you can use this to reference, update, or tag this note.**"
+        ])
 
         return "\n".join(response_parts)
 
@@ -1929,14 +2066,33 @@ class JoplinMCPServer:
             # Build custom response for tagging operation
             if success:
                 message = "✅ Successfully tagged note"
-                details = f"**Note ID:** {note_id}\n**Tag ID:** {tag_id}\n\nThe tag has been successfully added to the note."
+                details = (
+                    f"**📝 Note ID:** `{note_id}`\n"
+                    f"**🏷️ Tag ID:** `{tag_id}`\n\n"
+                    f"The tag has been successfully added to the note.\n"
+                    f"💡 **These IDs can be used for future operations:**\n"
+                    f"   • Use note ID `{note_id}` to get, update, or delete this note\n"
+                    f"   • Use tag ID `{tag_id}` to tag other notes with this same tag\n"
+                    f"   • Use both IDs together to untag this note later"
+                )
             else:
                 message = "❌ Failed to tag note"
-                details = f"**Note ID:** {note_id}\n**Tag ID:** {tag_id}\n\nThe tagging operation was not successful."
+                details = f"**📝 Note ID:** `{note_id}`\n**🏷️ Tag ID:** `{tag_id}`\n\nThe tagging operation was not successful."
 
             formatted_text = f"{message}\n\n{details}"
 
-            return {"content": [{"type": "text", "text": formatted_text}]}
+            # Add structured data for easier parsing by agents
+            response_content = [{"type": "text", "text": formatted_text}]
+            
+            if success:
+                # Add structured metadata that agents can easily extract
+                metadata = {
+                    "type": "text",
+                    "text": f"\n\n**STRUCTURED_DATA_FOR_AGENT:**\n```json\n{{\n  \"note_id\": \"{note_id}\",\n  \"tag_id\": \"{tag_id}\",\n  \"operation\": \"tag_note\",\n  \"success\": true\n}}\n```"
+                }
+                response_content.append(metadata)
+            
+            return {"content": response_content}
 
         except Exception as e:
             # Re-raise to be handled by MCP framework
@@ -1969,10 +2125,10 @@ class JoplinMCPServer:
             # Build custom response for untagging operation
             if success:
                 message = "✅ Successfully removed tag from note"
-                details = f"**Note ID:** {note_id}\n**Tag ID:** {tag_id}\n\nThe tag has been successfully removed from the note."
+                details = f"**📝 Note ID:** `{note_id}`\n**🏷️ Tag ID:** `{tag_id}`\n\nThe tag has been successfully removed from the note.\n💡 **Remember these IDs for future reference!**"
             else:
                 message = "❌ Failed to remove tag from note"
-                details = f"**Note ID:** {note_id}\n**Tag ID:** {tag_id}\n\nThe untagging operation was not successful."
+                details = f"**📝 Note ID:** `{note_id}`\n**🏷️ Tag ID:** `{tag_id}`\n\nThe untagging operation was not successful."
 
             formatted_text = f"{message}\n\n{details}"
 
@@ -1997,9 +2153,41 @@ class JoplinMCPServer:
         Raises:
             ValueError: If parameter is missing or empty
         """
-        param_value = params.get(param_name, "").strip()
+        param_raw = params.get(param_name)
+        if param_raw is None:
+            raise ValueError(f"{param_name} parameter is required and cannot be empty")
+        
+        param_value = str(param_raw).strip()
         if not param_value:
             raise ValueError(f"{param_name} parameter is required and cannot be empty")
+        
+        # Check for obviously invalid IDs (like generic placeholders)
+        invalid_placeholders = [
+            'test note', 'new tag', 'your_note_id_here', 'your_tag_id_here',
+            'note_id', 'tag_id', 'notebook_id', 'test', 'example', 'sample'
+        ]
+        if param_value.lower() in invalid_placeholders:
+            example_ids = []
+            try:
+                # Try to provide context-aware examples based on recent operations
+                if param_name == 'note_id':
+                    example_ids.append("Use the note ID from a recent create_note response")
+                elif param_name == 'tag_id':
+                    example_ids.append("Use the tag ID from a recent create_tag response")
+                elif param_name == 'notebook_id' or param_name == 'parent_id':
+                    example_ids.append("Use the notebook ID from a recent create_notebook response")
+            except:
+                pass
+            
+            context_help = " ".join(example_ids) if example_ids else "Use the actual ID from a previous create operation"
+            
+            raise ValueError(
+                f"Invalid {param_name} '{param_value}'. "
+                f"This appears to be a placeholder value. "
+                f"{context_help}. "
+                f"Joplin IDs are long alphanumeric strings like '3f80648342024c64bbb4a0e7adfcd538'."
+            )
+        
         return param_value
 
     def _validate_dual_id_parameters(
@@ -2084,18 +2272,38 @@ class JoplinMCPServer:
             Dict containing MCP-formatted response
         """
         message = f"✅ Successfully created {entity_type}"
+        
+        # Make the ID very prominent based on entity type
+        if entity_type == "notebook":
+            id_display = f"**📁 CREATED {entity_type.upper()} ID: {entity_id} 📁**"
+        elif entity_type == "tag":
+            id_display = f"**🏷️ CREATED {entity_type.upper()} ID: {entity_id} 🏷️**"
+        else:
+            id_display = f"**{entity_type.upper()} ID:** {entity_id}"
+            
         details_parts = [
             f"**Title:** {title}",
-            f"**{entity_type.title()} ID:** {entity_id}",
+            id_display,
             f"\nThe {entity_type} has been successfully created in Joplin.",
+            f"💡 **Remember: The {entity_type} ID is `{entity_id}` - you can use this to reference this {entity_type}.**"
         ]
 
         if additional_info:
-            details_parts.insert(-1, additional_info)
+            details_parts.insert(-2, additional_info)
 
-        formatted_text = f"{message}\n\n{''.join(details_parts)}"
+        formatted_text = f"{message}\n\n{chr(10).join(details_parts)}"
 
-        return {"content": [{"type": "text", "text": formatted_text}]}
+        # Add structured data for easier parsing by agents
+        response_content = [{"type": "text", "text": formatted_text}]
+        
+        # Add structured metadata that agents can easily extract
+        metadata = {
+            "type": "text",
+            "text": f"\n\n**STRUCTURED_DATA_FOR_AGENT:**\n```json\n{{\n  \"created_{entity_type}_id\": \"{entity_id}\",\n  \"{entity_type}_title\": \"{title}\",\n  \"operation\": \"create_{entity_type}\",\n  \"success\": true\n}}\n```"
+        }
+        response_content.append(metadata)
+        
+        return {"content": response_content}
 
     def _validate_update_note_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Validate and sanitize update_note parameters.

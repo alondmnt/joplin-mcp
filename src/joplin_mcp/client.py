@@ -6,6 +6,7 @@ import threading
 import time
 from datetime import datetime
 from typing import Any, Callable, Dict, Generator, List, Optional, Union
+import logging
 
 from joplin_mcp.config import JoplinMCPConfig
 from joplin_mcp.models import MCPNote, MCPNotebook, MCPSearchResult, MCPTag
@@ -1036,7 +1037,8 @@ class JoplinMCPClient:
 
         except Exception as e:
             # Log the error but don't fail completely
-            print(f"Warning: Search API error: {e}")
+            import logging
+            logging.warning(f"Search API error: {e}")
             return []
 
     def search_notes(
@@ -1048,7 +1050,7 @@ class JoplinMCPClient:
         sort_by: str = "updated_time",
         sort_order: str = "desc",
     ) -> List[Dict[str, Any]]:
-        """Simple search_notes method that wraps enhanced_search for MCP server compatibility.
+        """Simple search_notes method with direct joppy client usage.
 
         Args:
             query: Search query string
@@ -1061,123 +1063,73 @@ class JoplinMCPClient:
         Returns:
             List of note dictionaries
         """
-        # Input validation and sanitization
-        query = query.strip() if isinstance(query, str) else ""
-        if not query:
-            query = "*"  # Use wildcard for empty queries
-
-        # Validate and clamp limit
-        limit = max(1, min(limit, 100))
-
-        # Validate tags parameter
-        if tags and isinstance(tags, list):
-            tags = [tag for tag in tags if tag and str(tag).strip()]
-            if not tags:
-                tags = None
-        elif tags is not None:
-            tags = None
-
         try:
-            # Build filters for enhanced_search
-            filters = {}
-            if notebook_id and str(notebook_id).strip():
-                filters["notebook_id"] = notebook_id
-            if tags:
-                filters["tags"] = tags
+            # Input validation and sanitization
+            query = query.strip() if isinstance(query, str) else ""
+            if not query:
+                query = "*"  # Use wildcard for empty queries
 
-            # Call enhanced_search with simplified parameters
-            search_result = self.enhanced_search(
-                query=query,
-                limit=limit,
-                sort_by=sort_by,
-                sort_order=sort_order,
-                filters=filters if filters else None,
-                include_body=True,
-                return_pagination_info=False,
-                highlight_matches=False,
-                include_facets=False,
-                fuzzy_matching=False,
-                include_related=False,
-                include_scores=False,
-                enable_boolean_operators=False,  # Disabled to avoid filtering out valid results
-                enable_field_queries=False,
-                enable_date_queries=False,
-                stream_results=False,
-                enable_cache=False,
-            )
+            # Validate and clamp limit
+            limit = max(1, min(limit, 100))
 
-            # Convert MCPSearchResult to list of dictionaries
-            if hasattr(search_result, "items") and search_result.items:
-                # Items are already dictionaries from enhanced_search
-                note_dicts = []
-                for note in search_result.items:
-                    if isinstance(note, dict):
-                        # Already a dictionary - just ensure all required fields are present
-                        note_dict = {
-                            "id": note.get("id", ""),
-                            "title": note.get("title", ""),
-                            "body": note.get("body", ""),
-                            "created_time": note.get("created_time", 0),
-                            "updated_time": note.get("updated_time", 0),
-                            "parent_id": note.get("parent_id", ""),
-                            "is_todo": note.get("is_todo", False),
-                            "todo_completed": note.get("todo_completed", False),
-                            "tags": note.get("tags", []),
-                        }
-                        note_dicts.append(note_dict)
-                    elif hasattr(note, "__dict__") or hasattr(note, "id"):
-                        # Convert MCPNote-like object to dict
-                        note_dict = {
-                            "id": getattr(note, "id", ""),
-                            "title": getattr(note, "title", ""),
-                            "body": getattr(note, "body", ""),
-                            "created_time": getattr(note, "created_time", 0),
-                            "updated_time": getattr(note, "updated_time", 0),
-                            "parent_id": getattr(note, "parent_id", ""),
-                            "is_todo": getattr(note, "is_todo", False),
-                            "todo_completed": getattr(note, "todo_completed", False),
-                            "tags": getattr(note, "tags", []),
-                        }
-                        note_dicts.append(note_dict)
-                    else:
-                        # Skip entries we can't convert
+            # Use direct joppy search for simplicity and reliability
+            results = self._execute_joppy_search(query)
+            note_dicts = []
+
+            for result in results:
+                try:
+                    # Convert joppy result to dictionary
+                    note_dict = {
+                        "id": getattr(result, "id", ""),
+                        "title": getattr(result, "title", ""),
+                        "body": getattr(result, "body", ""),
+                        "created_time": getattr(result, "created_time", 0),
+                        "updated_time": getattr(result, "updated_time", 0),
+                        "parent_id": getattr(result, "parent_id", ""),
+                        "is_todo": getattr(result, "is_todo", False),
+                        "todo_completed": getattr(result, "todo_completed", False),
+                        "tags": getattr(result, "tags", []),
+                    }
+
+                    # Apply notebook filter if specified
+                    if notebook_id and note_dict["parent_id"] != notebook_id:
+                        continue
+
+                    # Apply tag filter if specified (simplified)
+                    if tags and isinstance(tags, list):
+                        note_tags = note_dict.get("tags", [])
+                        if not any(tag in note_tags for tag in tags):
                             continue
 
-                return note_dicts[:limit]  # Ensure we don't exceed limit
+                    note_dicts.append(note_dict)
 
-            return []
+                    # Stop if we have enough results
+                    if len(note_dicts) >= limit:
+                        break
+
+                except Exception:
+                    # Skip notes that can't be processed
+                    continue
+
+            # Sort results
+            if sort_by in ["created_time", "updated_time"]:
+                note_dicts.sort(
+                    key=lambda x: x.get(sort_by, 0),
+                    reverse=(sort_order.lower() == "desc")
+                )
+            elif sort_by == "title":
+                note_dicts.sort(
+                    key=lambda x: x.get("title", "").lower(),
+                    reverse=(sort_order.lower() == "desc")
+                )
+
+            return note_dicts[:limit]
 
         except Exception as e:
-            # Fallback: try direct joppy search if enhanced_search fails
-            try:
-                results = self._execute_joppy_search(query)
-                note_dicts = []
-
-                for result in results[:limit]:
-                    if hasattr(result, "__dict__"):
-                        # Convert to dict
-                        note_dict = {
-                            "id": getattr(result, "id", ""),
-                            "title": getattr(result, "title", ""),
-                            "body": getattr(result, "body", ""),
-                            "created_time": getattr(result, "created_time", 0),
-                            "updated_time": getattr(result, "updated_time", 0),
-                            "parent_id": getattr(result, "parent_id", ""),
-                            "is_todo": getattr(result, "is_todo", False),
-                            "todo_completed": getattr(result, "todo_completed", False),
-                            "tags": getattr(result, "tags", []),
-                        }
-                        note_dicts.append(note_dict)
-                    elif isinstance(result, dict):
-                        note_dicts.append(result)
-
-                return note_dicts
-
-            except Exception as fallback_error:
-                print(
-                    f"Warning: Both enhanced_search and fallback search failed: {e}, {fallback_error}"
-                )
-                return []
+            # Log the error but don't fail completely
+            import logging
+            logging.warning(f"Search failed: {e}")
+            return []
 
     def _apply_enhanced_filters(
         self, results: List[Any], query: str, **kwargs
@@ -2299,8 +2251,8 @@ class JoplinMCPClient:
             parent_id: Parent notebook ID (required)
             is_todo: Whether this is a todo item
             todo_completed: Whether the todo is completed
-            tags: List of tags to assign to the note
-            custom_metadata: Custom metadata dictionary
+            tags: List of tag names or IDs to assign to the note
+            custom_metadata: Custom metadata dictionary (not supported by joppy)
             **kwargs: Additional joppy-specific parameters
 
         Returns:
@@ -2330,13 +2282,13 @@ class JoplinMCPClient:
             if re.search(r"[\x00-\x1f\x7f]", title):
                 raise JoplinClientError("Title contains invalid characters")
 
-            # Validate parent_id format (should be alphanumeric, at least 8 chars)
+            # Validate parent_id format (should be alphanumeric with optional hyphens/underscores, at least 8 chars)
             if len(parent_id.strip()) < 8 or not re.match(
-                r"^[a-zA-Z0-9]+$", parent_id.strip()
+                r"^[a-zA-Z0-9_-]+$", parent_id.strip()
             ):
                 raise JoplinClientError("Invalid parent notebook ID format")
 
-            # Prepare note data for joppy
+            # Prepare note data for joppy (exclude tags and custom_metadata as joppy doesn't support them)
             note_data = {
                 "title": title.strip(),
                 "body": body,
@@ -2346,23 +2298,65 @@ class JoplinMCPClient:
                 **kwargs,
             }
 
-            # Handle tags if provided
-            if tags:
-                note_data["tags"] = tags
-
-            # Handle custom metadata if provided
-            if custom_metadata:
-                note_data["custom_metadata"] = custom_metadata
-
-            # Create note using joppy
+            # Create note using joppy (WITHOUT tags - joppy doesn't support tags during creation)
             note_id = self._joppy_client.add_note(**note_data)
+            note_id_str = str(note_id)
 
-            return str(note_id)
+            # Handle tags separately after note creation (joppy requires this workflow)
+            if tags:
+                tag_errors = []
+                for tag_identifier in tags:
+                    try:
+                        # Determine if this is a tag ID or tag name
+                        if self._is_likely_tag_id(tag_identifier):
+                            # It's probably a tag ID
+                            tag_id = tag_identifier.strip()
+                        else:
+                            # It's a tag name - find or create the tag
+                            tag_id = self._find_or_create_tag_by_name(tag_identifier.strip())
+                        
+                        # Add the tag to the note
+                        self.add_tag_to_note(note_id_str, tag_id)
+                    except Exception as tag_error:
+                        tag_errors.append(f"Failed to add tag '{tag_identifier}': {tag_error}")
+
+                # If there were tag errors, include them in a warning but don't fail the note creation
+                if tag_errors:
+                    # Note was created successfully, but some tags failed
+                    error_summary = "; ".join(tag_errors)
+                    # Log the warning but don't raise an exception since the note was created
+                    logging.warning(f"Note {note_id_str} created successfully, but tag errors occurred: {error_summary}")
+
+            # Handle custom metadata warning
+            if custom_metadata:
+                logging.warning("Custom metadata is not supported by joppy library and was ignored")
+
+            return note_id_str
 
         except Exception as e:
             if isinstance(e, JoplinClientError):
                 raise
             raise JoplinClientError(f"Failed to create note: {e}") from e
+
+    def _is_likely_tag_id(self, identifier: str) -> bool:
+        """Check if a string is likely a tag ID vs a tag name."""
+        # Tag IDs in Joplin are typically 32-character alphanumeric strings
+        import re
+        return len(identifier) >= 8 and re.match(r"^[a-zA-Z0-9]+$", identifier) and len(identifier) >= 20
+
+    def _find_or_create_tag_by_name(self, tag_name: str) -> str:
+        """Find an existing tag by name or create a new one. Returns tag ID."""
+        try:
+            # Search for existing tag by name
+            existing_tags = self.search_tags(tag_name)
+            for tag in existing_tags:
+                if tag.title.lower() == tag_name.lower():
+                    return tag.id
+            
+            # Tag doesn't exist, create it
+            return self.create_tag(tag_name)
+        except Exception as e:
+            raise JoplinClientError(f"Failed to find or create tag '{tag_name}': {e}") from e
 
     def update_note(
         self,
@@ -2435,7 +2429,7 @@ class JoplinMCPClient:
                 import re
 
                 if len(parent_id.strip()) < 8 or not re.match(
-                    r"^[a-zA-Z0-9]+$", parent_id.strip()
+                    r"^[a-zA-Z0-9_-]+$", parent_id.strip()
                 ):
                     raise JoplinClientError("Invalid parent notebook ID format")
                 update_data["parent_id"] = parent_id.strip()
@@ -2657,7 +2651,7 @@ class JoplinMCPClient:
             # Validate parent_id format if provided
             if parent_id is not None:
                 parent_id = parent_id.strip()
-                if len(parent_id) < 8 or not re.match(r"^[a-zA-Z0-9]+$", parent_id):
+                if len(parent_id) < 8 or not re.match(r"^[a-zA-Z0-9_-]+$", parent_id):
                     raise JoplinClientError("Invalid parent notebook ID format")
 
             # Prepare notebook data for joppy
@@ -2731,7 +2725,7 @@ class JoplinMCPClient:
                 import re
 
                 parent_id = parent_id.strip()
-                if len(parent_id) < 8 or not re.match(r"^[a-zA-Z0-9]+$", parent_id):
+                if len(parent_id) < 8 or not re.match(r"^[a-zA-Z0-9_-]+$", parent_id):
                     raise JoplinClientError("Invalid parent notebook ID format")
                 update_data["parent_id"] = parent_id
 
@@ -2950,20 +2944,20 @@ class JoplinMCPClient:
             if len(title) > 200:  # Reasonable title length limit for tags
                 raise JoplinClientError("Tag title too long (max 200 characters)")
 
-            # Normalize and validate tag title
-            normalized_title = title.strip().lower()
+            # Clean up tag title (preserve case, just trim whitespace)
+            clean_title = title.strip()
 
             # Check for invalid characters in title
             import re
 
-            if re.search(r"[\x00-\x1f\x7f]", normalized_title):
+            if re.search(r"[\x00-\x1f\x7f]", clean_title):
                 raise JoplinClientError("Title contains invalid characters")
 
-            # Check for existing tag with same title
+            # Check for existing tag with same title (case-insensitive comparison)
             try:
                 existing_tags = self.get_all_tags()
                 for tag in existing_tags:
-                    if tag.title.lower() == normalized_title:
+                    if tag.title.lower() == clean_title.lower():
                         return (
                             tag.id
                         )  # Return existing tag ID instead of creating duplicate
@@ -2971,7 +2965,7 @@ class JoplinMCPClient:
                 pass  # Ignore errors when checking for duplicates
 
             # Prepare tag data for joppy
-            tag_data = {"title": normalized_title, **kwargs}
+            tag_data = {"title": clean_title, **kwargs}
 
             # Create tag using joppy
             tag_id = self._joppy_client.add_tag(**tag_data)
@@ -3020,15 +3014,15 @@ class JoplinMCPClient:
                 if len(title) > 200:
                     raise JoplinClientError("Tag title too long (max 200 characters)")
 
-                # Normalize title
-                normalized_title = title.strip().lower()
+                # Clean up title (preserve case, just trim whitespace)
+                clean_title = title.strip()
 
                 # Check for invalid characters
                 import re
 
-                if re.search(r"[\x00-\x1f\x7f]", normalized_title):
+                if re.search(r"[\x00-\x1f\x7f]", clean_title):
                     raise JoplinClientError("Title contains invalid characters")
-                update_data["title"] = normalized_title
+                update_data["title"] = clean_title
 
             # Update tag using joppy
             self._joppy_client.modify_tag(tag_id.strip(), **update_data)
@@ -3097,6 +3091,21 @@ class JoplinMCPClient:
                 raise
             raise JoplinClientError(f"Failed to add tag to note: {e}") from e
 
+    def tag_note(self, note_id: str, tag_id: str) -> bool:
+        """Add a tag to a note (wrapper for add_tag_to_note for server compatibility).
+
+        Args:
+            note_id: The ID of the note
+            tag_id: The ID of the tag to add
+
+        Returns:
+            True if successful
+
+        Raises:
+            JoplinClientError: If operation fails
+        """
+        return self.add_tag_to_note(note_id, tag_id)
+
     def remove_tag_from_note(self, note_id: str, tag_id: str) -> bool:
         """Remove a tag from a note.
 
@@ -3126,6 +3135,21 @@ class JoplinMCPClient:
             if isinstance(e, JoplinClientError):
                 raise
             raise JoplinClientError(f"Failed to remove tag from note: {e}") from e
+
+    def untag_note(self, note_id: str, tag_id: str) -> bool:
+        """Remove a tag from a note (wrapper for remove_tag_from_note for server compatibility).
+
+        Args:
+            note_id: The ID of the note
+            tag_id: The ID of the tag to remove
+
+        Returns:
+            True if successful
+
+        Raises:
+            JoplinClientError: If operation fails
+        """
+        return self.remove_tag_from_note(note_id, tag_id)
 
     def add_tags_to_note(self, note_id: str, tag_ids: List[str]) -> Dict[str, bool]:
         """Add multiple tags to a note.
