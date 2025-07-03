@@ -181,10 +181,14 @@ class JoplinMCPServer:
                     result = await self.handle_get_notebook(arguments)
                 elif name == "create_notebook":
                     result = await self.handle_create_notebook(arguments)
+                elif name == "delete_notebook":
+                    result = await self.handle_delete_notebook(arguments)
                 elif name == "list_tags":
                     result = await self.handle_list_tags(arguments)
                 elif name == "create_tag":
                     result = await self.handle_create_tag(arguments)
+                elif name == "delete_tag":
+                    result = await self.handle_delete_tag(arguments)
                 elif name == "tag_note":
                     result = await self.handle_tag_note(arguments)
                 elif name == "add_tag_to_note":
@@ -263,8 +267,10 @@ class JoplinMCPServer:
             ("list_notebooks", "List all notebooks"),
             ("get_notebook", "Get notebook details"),
             ("create_notebook", "Create a new notebook"),
+            ("delete_notebook", "Delete a notebook"),
             ("list_tags", "List all tags"),
             ("create_tag", "Create a new tag"),
+            ("delete_tag", "Delete a tag"),
             ("tag_note", "Add tag to note"),
             ("add_tag_to_note", "Add tag to note"),
             ("untag_note", "Remove tag from note"),
@@ -429,9 +435,30 @@ class JoplinMCPServer:
                     },
                 }
                 schema["required"] = ["notebook_id"]
+            elif name == "delete_notebook":
+                schema["properties"] = {
+                    "notebook_id": {
+                        "type": "string",
+                        "description": "ID of the notebook to delete (required)",
+                    },
+                    "force": {
+                        "type": "boolean",
+                        "description": "Whether to force deletion even if notebook has children (optional)",
+                        "default": False,
+                    },
+                }
+                schema["required"] = ["notebook_id"]
             elif name == "list_tags":
                 # No required parameters for list_tags
                 schema["required"] = []
+            elif name == "delete_tag":
+                schema["properties"] = {
+                    "tag_id": {
+                        "type": "string",
+                        "description": "ID of the tag to delete (required)",
+                    },
+                }
+                schema["required"] = ["tag_id"]
             elif name == "tag_note":
                 schema["properties"] = {
                     "note_id": {
@@ -2360,3 +2387,85 @@ class JoplinMCPServer:
         formatted_text = formatter_method(items)
 
         return {"content": [{"type": "text", "text": formatted_text}]}
+
+    async def handle_delete_notebook(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle delete_notebook MCP tool call.
+
+        Deletes a notebook from Joplin.
+
+        Args:
+            params: Dictionary containing:
+                - notebook_id (str): ID of the notebook to delete (required)
+                - force (bool, optional): Whether to force deletion even if notebook has children (default: False)
+
+        Returns:
+            Dict containing MCP-formatted response with deletion confirmation
+
+        Raises:
+            ValueError: If required parameters are missing or invalid
+            Exception: Re-raises client exceptions for MCP framework to handle
+        """
+        # Validate required parameter
+        notebook_id = self._validate_required_id_parameter(params, "notebook_id")
+        force = params.get("force", False)
+
+        try:
+            # Call client delete_notebook method
+            success = self.client.delete_notebook(notebook_id=notebook_id, force=force)
+
+            # Build standardized response with custom details for deletion
+            return self._build_operation_response(
+                success=success,
+                operation="deleted",
+                entity_type="notebook",
+                entity_id=notebook_id,
+                details=(
+                    "The notebook has been permanently removed from Joplin."
+                    if success
+                    else None
+                ),
+            )
+
+        except Exception as e:
+            # Re-raise to be handled by MCP framework
+            raise e
+
+    async def handle_delete_tag(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle delete_tag MCP tool call.
+
+        Deletes a tag from Joplin.
+
+        Args:
+            params: Dictionary containing:
+                - tag_id (str): ID of the tag to delete (required)
+
+        Returns:
+            Dict containing MCP-formatted response with deletion confirmation
+
+        Raises:
+            ValueError: If required parameters are missing or invalid
+            Exception: Re-raises client exceptions for MCP framework to handle
+        """
+        # Validate required parameter
+        tag_id = self._validate_required_id_parameter(params, "tag_id")
+
+        try:
+            # Call client delete_tag method
+            success = self.client.delete_tag(tag_id=tag_id)
+
+            # Build standardized response with custom details for deletion
+            return self._build_operation_response(
+                success=success,
+                operation="deleted",
+                entity_type="tag",
+                entity_id=tag_id,
+                details=(
+                    "The tag has been permanently removed from Joplin."
+                    if success
+                    else None
+                ),
+            )
+
+        except Exception as e:
+            # Re-raise to be handled by MCP framework
+            raise e
