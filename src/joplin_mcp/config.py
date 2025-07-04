@@ -194,6 +194,53 @@ class JoplinMCPConfig:
         "JOPLIN_SSL_VERIFY": "JOPLIN_VERIFY_SSL",
     }
 
+    # Default tool configurations - all tools enabled by default
+    DEFAULT_TOOLS = {
+        # Note operations
+        "search_notes": True,
+        "get_note": True,
+        "create_note": True,
+        "update_note": True,
+        "delete_note": True,
+        
+        # Notebook operations
+        "list_notebooks": True,
+        "get_notebook": True,
+        "create_notebook": True,
+        "update_notebook": True,
+        "delete_notebook": True,
+        "search_notebooks": True,
+        "get_notes_by_notebook": True,
+        
+        # Tag operations
+        "list_tags": True,
+        "get_tag": True,
+        "create_tag": True,
+        "update_tag": True,
+        "delete_tag": True,
+        "search_tags": True,
+        "get_tags_by_note": True,
+        "get_notes_by_tag": True,
+        "tag_note": True,
+        "untag_note": True,
+        
+        # Utility operations
+        "ping_joplin": True,
+        
+        # Tool aliases (enabled by default but follow their main tool)
+        "add_tag_to_note": True,  # alias for tag_note
+        "remove_tag_from_note": True,  # alias for untag_note
+    }
+
+    # Tool categories for easier management
+    TOOL_CATEGORIES = {
+        "notes": ["search_notes", "get_note", "create_note", "update_note", "delete_note"],
+        "notebooks": ["list_notebooks", "get_notebook", "create_notebook", "update_notebook", "delete_notebook", "search_notebooks", "get_notes_by_notebook"],
+        "tags": ["list_tags", "get_tag", "create_tag", "update_tag", "delete_tag", "search_tags", "get_tags_by_note", "get_notes_by_tag", "tag_note", "untag_note"],
+        "aliases": ["add_tag_to_note", "remove_tag_from_note"],
+        "utilities": ["ping_joplin"],
+    }
+
     def __init__(
         self,
         host: str = "localhost",
@@ -201,6 +248,7 @@ class JoplinMCPConfig:
         token: Optional[str] = None,
         timeout: int = 60,
         verify_ssl: bool = True,
+        tools: Optional[Dict[str, bool]] = None,
     ):
         """Initialize configuration with default values."""
         self.host = host
@@ -208,6 +256,53 @@ class JoplinMCPConfig:
         self.token = token
         self.timeout = timeout
         self.verify_ssl = verify_ssl
+        
+        # Initialize tools configuration
+        self.tools = self.DEFAULT_TOOLS.copy()
+        if tools:
+            self.tools.update(tools)
+
+    def is_tool_enabled(self, tool_name: str) -> bool:
+        """Check if a specific tool is enabled."""
+        return self.tools.get(tool_name, False)
+
+    def enable_tool(self, tool_name: str) -> None:
+        """Enable a specific tool."""
+        if tool_name not in self.DEFAULT_TOOLS:
+            raise ConfigError(f"Unknown tool: {tool_name}")
+        self.tools[tool_name] = True
+
+    def disable_tool(self, tool_name: str) -> None:
+        """Disable a specific tool."""
+        if tool_name not in self.DEFAULT_TOOLS:
+            raise ConfigError(f"Unknown tool: {tool_name}")
+        self.tools[tool_name] = False
+
+    def enable_tool_category(self, category: str) -> None:
+        """Enable all tools in a category."""
+        if category not in self.TOOL_CATEGORIES:
+            raise ConfigError(f"Unknown tool category: {category}")
+        for tool_name in self.TOOL_CATEGORIES[category]:
+            self.tools[tool_name] = True
+
+    def disable_tool_category(self, category: str) -> None:
+        """Disable all tools in a category."""
+        if category not in self.TOOL_CATEGORIES:
+            raise ConfigError(f"Unknown tool category: {category}")
+        for tool_name in self.TOOL_CATEGORIES[category]:
+            self.tools[tool_name] = False
+
+    def get_enabled_tools(self) -> List[str]:
+        """Get list of enabled tool names."""
+        return [tool_name for tool_name, enabled in self.tools.items() if enabled]
+
+    def get_disabled_tools(self) -> List[str]:
+        """Get list of disabled tool names."""
+        return [tool_name for tool_name, enabled in self.tools.items() if not enabled]
+
+    def get_tool_categories(self) -> Dict[str, List[str]]:
+        """Get available tool categories."""
+        return self.TOOL_CATEGORIES.copy()
 
     @classmethod
     def from_environment(cls, prefix: str = "JOPLIN_") -> "JoplinMCPConfig":
@@ -226,8 +321,16 @@ class JoplinMCPConfig:
         verify_ssl_str = ConfigParser.get_env_var("VERIFY_SSL", prefix)
         verify_ssl = ConfigParser.parse_bool(verify_ssl_str) if verify_ssl_str else True
 
+        # Load tools configuration from environment
+        tools = {}
+        for tool_name in cls.DEFAULT_TOOLS:
+            env_var = f"{prefix}TOOL_{tool_name.upper()}"
+            tool_value = os.environ.get(env_var)
+            if tool_value is not None:
+                tools[tool_name] = ConfigParser.parse_bool(tool_value)
+
         return cls(
-            host=host, port=port, token=token, timeout=timeout, verify_ssl=verify_ssl
+            host=host, port=port, token=token, timeout=timeout, verify_ssl=verify_ssl, tools=tools
         )
 
     def validate(self) -> None:
@@ -235,6 +338,16 @@ class JoplinMCPConfig:
         ConfigValidator.validate_token_format(self.token)
         ConfigValidator.validate_port_range(self.port)
         ConfigValidator.validate_timeout_positive(self.timeout)
+        
+        # Validate tools configuration
+        if not isinstance(self.tools, dict):
+            raise ConfigError("Tools configuration must be a dictionary")
+        
+        for tool_name, enabled in self.tools.items():
+            if tool_name not in self.DEFAULT_TOOLS:
+                raise ConfigError(f"Unknown tool in configuration: {tool_name}")
+            if not isinstance(enabled, bool):
+                raise ConfigError(f"Tool configuration for '{tool_name}' must be boolean, got {type(enabled)}")
 
     @property
     def is_valid(self) -> bool:
@@ -260,15 +373,20 @@ class JoplinMCPConfig:
             "timeout": self.timeout,
             "verify_ssl": self.verify_ssl,
             "base_url": self.base_url,
+            "tools": self.tools.copy(),
+            "enabled_tools_count": len(self.get_enabled_tools()),
+            "disabled_tools_count": len(self.get_disabled_tools()),
         }
 
     def __repr__(self) -> str:
         """String representation, hiding sensitive data."""
         token_display = "***" if self.token else None
+        enabled_count = len(self.get_enabled_tools())
+        total_count = len(self.tools)
         return (
             f"JoplinMCPConfig(host='{self.host}', port={self.port}, "
             f"token={token_display}, timeout={self.timeout}, "
-            f"verify_ssl={self.verify_ssl})"
+            f"verify_ssl={self.verify_ssl}, tools={enabled_count}/{total_count} enabled)"
         )
 
     @classmethod
@@ -386,6 +504,33 @@ class JoplinMCPConfig:
                     f"Invalid data type for 'verify_ssl': expected boolean, got {type(data['verify_ssl'])}"
                 )
 
+        # Tools - must be dictionary with boolean values
+        if "tools" in data:
+            if data["tools"] is None:
+                # Use default for null values
+                pass  # Don't add to validated, will use default
+            elif isinstance(data["tools"], dict):
+                tools = {}
+                for tool_name, enabled in data["tools"].items():
+                    if not isinstance(tool_name, str):
+                        raise ConfigError(
+                            f"Invalid tool name in 'tools': expected string, got {type(tool_name)}"
+                        )
+                    if tool_name not in cls.DEFAULT_TOOLS:
+                        raise ConfigError(
+                            f"Unknown tool in 'tools' configuration: {tool_name}"
+                        )
+                    if not isinstance(enabled, bool):
+                        raise ConfigError(
+                            f"Invalid data type for tool '{tool_name}': expected boolean, got {type(enabled)}"
+                        )
+                    tools[tool_name] = enabled
+                validated["tools"] = tools
+            else:
+                raise ConfigError(
+                    f"Invalid data type for 'tools': expected dictionary, got {type(data['tools'])}"
+                )
+
         return validated
 
     @classmethod
@@ -418,6 +563,17 @@ class JoplinMCPConfig:
                 else:
                     return file_value
 
+        # Merge tools configuration specially
+        merged_tools = config.tools.copy()
+        # Override with environment tools
+        for tool_name, enabled in env_config.tools.items():
+            env_var_name = f"{prefix}TOOL_{tool_name.upper()}"
+            if env_var_name in os.environ:
+                merged_tools[tool_name] = enabled
+        # Override with direct tool overrides
+        if "tools" in overrides:
+            merged_tools.update(overrides["tools"])
+
         merged_data = {
             "host": get_value(
                 "host", "host_override", env_config.host, config.host, "localhost"
@@ -438,6 +594,7 @@ class JoplinMCPConfig:
                 config.verify_ssl,
                 True,
             ),
+            "tools": merged_tools,
         }
 
         return cls(**merged_data)
@@ -496,6 +653,16 @@ class JoplinMCPConfig:
             ConfigValidator.validate_token_format(self.token)
         except ConfigError as e:
             errors.append(e)
+
+        # Tools validation
+        if not isinstance(self.tools, dict):
+            errors.append(ConfigError("Tools configuration must be a dictionary"))
+        else:
+            for tool_name, enabled in self.tools.items():
+                if tool_name not in self.DEFAULT_TOOLS:
+                    errors.append(ConfigError(f"Unknown tool in configuration: {tool_name}"))
+                if not isinstance(enabled, bool):
+                    errors.append(ConfigError(f"Tool configuration for '{tool_name}' must be boolean, got {type(enabled)}"))
 
         return errors
 
@@ -601,6 +768,7 @@ class JoplinMCPConfig:
             "token": self.token,
             "timeout": self.timeout,
             "verify_ssl": self.verify_ssl,
+            "tools": self.tools.copy(),
         }
         current_values.update(overrides)
         return self.__class__(**current_values)
@@ -631,6 +799,7 @@ class JoplinMCPConfig:
             "port": self.port,
             "timeout": self.timeout,
             "verify_ssl": self.verify_ssl,
+            "tools": self.tools.copy(),
             # Note: token is intentionally excluded for security
         }
 
@@ -683,4 +852,9 @@ class JoplinMCPConfig:
             "timeout": self.timeout,
             "has_token": bool(self.token),
             "token_length": len(self.token) if self.token else 0,
+            "tools_summary": {
+                "enabled": len(self.get_enabled_tools()),
+                "disabled": len(self.get_disabled_tools()),
+                "total": len(self.tools),
+            },
         }

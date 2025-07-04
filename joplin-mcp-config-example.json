@@ -1,0 +1,33 @@
+{
+  "host": "localhost",
+  "port": 41184,
+  "timeout": 60,
+  "verify_ssl": true,
+  "tools": {
+    "search_notes": true,
+    "get_note": true,
+    "create_note": true,
+    "update_note": true,
+    "delete_note": false,
+    "list_notebooks": true,
+    "get_notebook": true,
+    "create_notebook": true,
+    "update_notebook": true,
+    "delete_notebook": false,
+    "search_notebooks": true,
+    "get_notes_by_notebook": true,
+    "list_tags": true,
+    "get_tag": true,
+    "create_tag": true,
+    "update_tag": true,
+    "delete_tag": false,
+    "search_tags": true,
+    "get_tags_by_note": true,
+    "get_notes_by_tag": true,
+    "tag_note": true,
+    "untag_note": true,
+    "ping_joplin": true,
+    "add_tag_to_note": true,
+    "remove_tag_from_note": true
+  }
+} 
