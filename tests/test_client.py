@@ -1708,7 +1708,7 @@ class TestJoplinMCPClientNotebookOperations:
 
         with patch.object(
             client._joppy_client,
-            "add_folder",
+            "add_notebook",
             return_value="notebook123456789012345678901234567890",
         ):
             result = client.create_notebook(**create_data)
@@ -1725,7 +1725,7 @@ class TestJoplinMCPClientNotebookOperations:
 
         with patch.object(
             client._joppy_client,
-            "add_folder",
+            "add_notebook",
             return_value="child123456789012345678901234567890",
         ):
             result = client.create_notebook(**create_data)
@@ -1766,7 +1766,7 @@ class TestJoplinMCPClientNotebookOperations:
         notebook_id = "notebook1234567890abcdef12345678"
         update_data = {"title": "Updated Notebook Title"}
 
-        with patch.object(client._joppy_client, "modify_folder", return_value=None):
+        with patch.object(client._joppy_client, "modify_notebook", return_value=None):
             result = client.update_notebook(notebook_id, **update_data)
 
             assert result  is True
@@ -1777,7 +1777,7 @@ class TestJoplinMCPClientNotebookOperations:
 
         with patch.object(
             client._joppy_client,
-            "modify_folder",
+            "modify_notebook",
             side_effect=Exception("Notebook not found"),
         ):
             with pytest.raises(JoplinClientError, match="Failed to update notebook"):
@@ -1797,7 +1797,7 @@ class TestJoplinMCPClientNotebookOperations:
         notebook_id = "notebook1234567890abcdef12345678"
         new_parent_id = "parent1234567890abcdef123456789"
 
-        with patch.object(client._joppy_client, "modify_folder", return_value=None):
+        with patch.object(client._joppy_client, "modify_notebook", return_value=None):
             result = client.update_notebook(notebook_id, parent_id=new_parent_id)
 
             assert result  is True
