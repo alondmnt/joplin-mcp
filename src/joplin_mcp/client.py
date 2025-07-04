@@ -1013,11 +1013,15 @@ class JoplinMCPClient:
 
     def _execute_joppy_search(self, query: str) -> List[Any]:
         """Execute the search with joppy and return raw note objects."""
-        if not query.strip():
-            # Use wildcard search for empty queries
-            query = "*"
-
         try:
+            if not query.strip():
+                # For empty queries, use get_notes() directly since "*" doesn't work
+                notes_result = self._joppy_client.get_notes()
+                if hasattr(notes_result, "items"):
+                    return notes_result.items or []
+                else:
+                    return []
+            
             # Use joppy search API directly
             search_results = self._joppy_client.search(query=query)
 
@@ -1066,9 +1070,7 @@ class JoplinMCPClient:
         try:
             # Input validation and sanitization
             query = query.strip() if isinstance(query, str) else ""
-            if not query:
-                query = "*"  # Use wildcard for empty queries
-
+            
             # Validate and clamp limit
             limit = max(1, min(limit, 100))
 
@@ -1111,15 +1113,15 @@ class JoplinMCPClient:
                     # Skip notes that can't be processed
                     continue
 
-            # Sort results
+            # Sort results with None-safe comparisons
             if sort_by in ["created_time", "updated_time"]:
                 note_dicts.sort(
-                    key=lambda x: x.get(sort_by, 0),
+                    key=lambda x: x.get(sort_by, 0) or 0,
                     reverse=(sort_order.lower() == "desc")
                 )
             elif sort_by == "title":
                 note_dicts.sort(
-                    key=lambda x: x.get("title", "").lower(),
+                    key=lambda x: (x.get("title") or "").lower(),
                     reverse=(sort_order.lower() == "desc")
                 )
 

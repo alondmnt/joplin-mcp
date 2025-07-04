@@ -181,14 +181,30 @@ class JoplinMCPServer:
                     result = await self.handle_get_notebook(arguments)
                 elif name == "create_notebook":
                     result = await self.handle_create_notebook(arguments)
+                elif name == "update_notebook":
+                    result = await self.handle_update_notebook(arguments)
                 elif name == "delete_notebook":
                     result = await self.handle_delete_notebook(arguments)
+                elif name == "search_notebooks":
+                    result = await self.handle_search_notebooks(arguments)
+                elif name == "get_notes_by_notebook":
+                    result = await self.handle_get_notes_by_notebook(arguments)
                 elif name == "list_tags":
                     result = await self.handle_list_tags(arguments)
+                elif name == "get_tag":
+                    result = await self.handle_get_tag(arguments)
                 elif name == "create_tag":
                     result = await self.handle_create_tag(arguments)
+                elif name == "update_tag":
+                    result = await self.handle_update_tag(arguments)
                 elif name == "delete_tag":
                     result = await self.handle_delete_tag(arguments)
+                elif name == "search_tags":
+                    result = await self.handle_search_tags(arguments)
+                elif name == "get_tags_by_note":
+                    result = await self.handle_get_tags_by_note(arguments)
+                elif name == "get_notes_by_tag":
+                    result = await self.handle_get_notes_by_tag(arguments)
                 elif name == "tag_note":
                     result = await self.handle_tag_note(arguments)
                 elif name == "add_tag_to_note":
@@ -267,10 +283,18 @@ class JoplinMCPServer:
             ("list_notebooks", "List all notebooks"),
             ("get_notebook", "Get notebook details"),
             ("create_notebook", "Create a new notebook"),
+            ("update_notebook", "Update an existing notebook"),
             ("delete_notebook", "Delete a notebook"),
+            ("search_notebooks", "Search notebooks by name"),
+            ("get_notes_by_notebook", "Get all notes in a specific notebook"),
             ("list_tags", "List all tags"),
+            ("get_tag", "Get a specific tag by ID"),
             ("create_tag", "Create a new tag"),
+            ("update_tag", "Update an existing tag"),
             ("delete_tag", "Delete a tag"),
+            ("search_tags", "Search tags by name"),
+            ("get_tags_by_note", "Get all tags for a specific note"),
+            ("get_notes_by_tag", "Get all notes with a specific tag"),
             ("tag_note", "Add tag to note"),
             ("add_tag_to_note", "Add tag to note"),
             ("untag_note", "Remove tag from note"),
@@ -309,7 +333,7 @@ class JoplinMCPServer:
                     "tags": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Optional list of tags to filter notes",
+                        "description": "Optional list of tag names or IDs to filter notes - will auto-convert tag names to IDs",
                     },
                     "sort_by": {
                         "type": "string",
@@ -448,9 +472,129 @@ class JoplinMCPServer:
                     },
                 }
                 schema["required"] = ["notebook_id"]
+            elif name == "update_notebook":
+                schema["properties"] = {
+                    "notebook_id": {
+                        "type": "string",
+                        "description": "ID of the notebook to update (required)",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "New title for the notebook (optional)",
+                    },
+                    "parent_id": {
+                        "type": "string",
+                        "description": "New parent notebook ID (optional)",
+                    },
+                }
+                schema["required"] = ["notebook_id"]
+            elif name == "search_notebooks":
+                schema["properties"] = {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query for notebook names (required)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default: 20)",
+                        "minimum": 1,
+                        "maximum": 100,
+                    },
+                }
+                schema["required"] = ["query"]
+            elif name == "get_notes_by_notebook":
+                schema["properties"] = {
+                    "notebook_id": {
+                        "type": "string",
+                        "description": "ID of the notebook to get notes from (required)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default: 20)",
+                        "minimum": 1,
+                        "maximum": 100,
+                    },
+                    "sort_by": {
+                        "type": "string",
+                        "description": "Field to sort results by",
+                        "enum": ["title", "created_time", "updated_time"],
+                    },
+                    "sort_order": {
+                        "type": "string",
+                        "description": "Sort order for results",
+                        "enum": ["asc", "desc"],
+                    },
+                }
+                schema["required"] = ["notebook_id"]
             elif name == "list_tags":
                 # No required parameters for list_tags
                 schema["required"] = []
+            elif name == "get_tag":
+                schema["properties"] = {
+                    "tag_id": {
+                        "type": "string",
+                        "description": "ID of the tag to retrieve (required)",
+                    },
+                }
+                schema["required"] = ["tag_id"]
+            elif name == "update_tag":
+                schema["properties"] = {
+                    "tag_id": {
+                        "type": "string",
+                        "description": "ID of the tag to update (required)",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "New title for the tag (required)",
+                    },
+                }
+                schema["required"] = ["tag_id", "title"]
+            elif name == "search_tags":
+                schema["properties"] = {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query for tag names (required)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default: 20)",
+                        "minimum": 1,
+                        "maximum": 100,
+                    },
+                }
+                schema["required"] = ["query"]
+            elif name == "get_tags_by_note":
+                schema["properties"] = {
+                    "note_id": {
+                        "type": "string",
+                        "description": "ID of the note to get tags from (required)",
+                    },
+                }
+                schema["required"] = ["note_id"]
+            elif name == "get_notes_by_tag":
+                schema["properties"] = {
+                    "tag_id": {
+                        "type": "string",
+                        "description": "ID or name of the tag to get notes from (required) - will auto-convert tag names to IDs",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default: 20)",
+                        "minimum": 1,
+                        "maximum": 100,
+                    },
+                    "sort_by": {
+                        "type": "string",
+                        "description": "Field to sort results by",
+                        "enum": ["title", "created_time", "updated_time"],
+                    },
+                    "sort_order": {
+                        "type": "string",
+                        "description": "Sort order for results",
+                        "enum": ["asc", "desc"],
+                    },
+                }
+                schema["required"] = ["tag_id"]
             elif name == "delete_tag":
                 schema["properties"] = {
                     "tag_id": {
@@ -1115,8 +1259,20 @@ class JoplinMCPServer:
             logger.warning("Invalid tags parameter type, ignoring", extra={"tags_type": type(tags)})
             tags = None
         elif tags:
-            # Sanitize tag values
-            tags = [self._validate_string_input(tag, max_length=100) for tag in tags if isinstance(tag, str)][:10]  # Limit to 10 tags
+            # Sanitize tag values and convert tag names to IDs
+            processed_tags = []
+            for tag in tags[:10]:  # Limit to 10 tags
+                if isinstance(tag, str):
+                    sanitized_tag = self._validate_string_input(tag, max_length=100)
+                    # Try to resolve tag name to ID
+                    try:
+                        resolved_tag_id = await self._resolve_tag_identifier(sanitized_tag)
+                        if resolved_tag_id:
+                            processed_tags.append(resolved_tag_id)
+                    except:
+                        # If resolution fails, use the original value
+                        processed_tags.append(sanitized_tag)
+            tags = processed_tags if processed_tags else None
 
         try:
             # Call client search method
@@ -1178,10 +1334,10 @@ class JoplinMCPServer:
         """
         title = note.get("title", "Untitled")
         note_id = note.get("id", "unknown")
-        body = note.get("body", "")
+        body = note.get("body") or ""  # Handle None explicitly
 
         # Efficiently truncate body for display
-        if len(body) > 200:
+        if body and len(body) > 200:
             body = body[:197] + "..."
 
         # Start building result
@@ -2469,3 +2625,512 @@ class JoplinMCPServer:
         except Exception as e:
             # Re-raise to be handled by MCP framework
             raise e
+
+    async def handle_update_notebook(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle update_notebook MCP tool call.
+
+        Updates a notebook in Joplin.
+
+        Args:
+            params: Dictionary containing:
+                - notebook_id (str): ID of the notebook to update (required)
+                - title (str, optional): New title for the notebook
+                - parent_id (str, optional): New parent notebook ID
+
+        Returns:
+            Dict containing MCP-formatted response with update confirmation
+        """
+        # Validate required parameter
+        notebook_id = self._validate_required_id_parameter(params, "notebook_id")
+        
+        # Build update parameters (only include provided fields)
+        update_params = {"notebook_id": notebook_id}
+        
+        if "title" in params:
+            update_params["title"] = str(params["title"]) if params["title"] is not None else ""
+        if "parent_id" in params:
+            update_params["parent_id"] = str(params["parent_id"]) if params["parent_id"] is not None else ""
+
+        if len(update_params) == 1:  # Only notebook_id provided
+            raise ValueError("At least one field (title or parent_id) must be provided for update")
+
+        try:
+            # Call client update_notebook method
+            success = self.client.update_notebook(**update_params)
+
+            # Build standardized response
+            return self._build_operation_response(
+                success=success,
+                operation="updated",
+                entity_type="notebook",
+                entity_id=notebook_id,
+            )
+
+        except Exception as e:
+            # Re-raise to be handled by MCP framework
+            raise e
+
+    async def handle_search_notebooks(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle search_notebooks MCP tool call.
+
+        Searches for notebooks by name.
+
+        Args:
+            params: Dictionary containing:
+                - query (str): Search query for notebook names (required)
+                - limit (int, optional): Maximum number of results (default: 20)
+
+        Returns:
+            Dict containing MCP-formatted response with search results
+        """
+        # Validate required parameter
+        query = self._validate_string_input(params.get("query", "").strip(), max_length=500)
+        if not query:
+            raise ValueError("Query parameter is required and cannot be empty")
+        
+        limit = max(1, min(params.get("limit", 20), 100))  # Clamp between 1-100
+
+        try:
+            # Get all notebooks and filter by name
+            all_notebooks = self.client.get_all_notebooks()
+            query_lower = query.lower()
+            
+            # Filter notebooks that contain the query in their title
+            matching_notebooks = [
+                {
+                    "id": nb.id,
+                    "title": nb.title,
+                    "created_time": nb.created_time,
+                    "updated_time": nb.updated_time,
+                    "parent_id": nb.parent_id,
+                }
+                for nb in all_notebooks
+                if query_lower in nb.title.lower()
+            ][:limit]
+
+            # Handle empty results
+            if not matching_notebooks:
+                return {
+                    "content": [
+                        {"type": "text", "text": f'No notebooks found for query: "{query}"'}
+                    ]
+                }
+
+            # Format results
+            formatted_text = self._format_search_notebooks_results(query, matching_notebooks)
+
+            return {"content": [{"type": "text", "text": formatted_text}]}
+
+        except Exception as e:
+            # Re-raise to be handled by MCP framework
+            raise e
+
+    def _format_search_notebooks_results(self, query: str, results: List[Dict[str, Any]]) -> str:
+        """Format notebook search results for display."""
+        result_count = len(results)
+        result_summary = f'Found {result_count} notebook(s) for query: "{query}"\n\n'
+
+        formatted_notebooks = []
+        for nb in results:
+            title = nb.get("title", "Untitled")
+            notebook_id = nb.get("id", "unknown")
+            parent_id = nb.get("parent_id", "")
+            
+            result_parts = [f"**{title}** (ID: {notebook_id})"]
+            
+            # Add parent info if present
+            if parent_id:
+                result_parts.append(f"Parent: {parent_id}")
+            
+            formatted_notebooks.append("\n".join(result_parts) + "\n")
+
+        return result_summary + "\n".join(formatted_notebooks)
+
+    async def handle_get_notes_by_notebook(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle get_notes_by_notebook MCP tool call.
+
+        Gets all notes in a specific notebook.
+
+        Args:
+            params: Dictionary containing:
+                - notebook_id (str): ID of the notebook to get notes from (required)
+                - limit (int, optional): Maximum number of results (default: 20)
+                - sort_by (str, optional): Field to sort by
+                - sort_order (str, optional): Sort order
+
+        Returns:
+            Dict containing MCP-formatted response with notes list
+        """
+        # Validate required parameter
+        notebook_id = self._validate_required_id_parameter(params, "notebook_id")
+        
+        limit = max(1, min(params.get("limit", 20), 100))
+        sort_by = params.get("sort_by", "updated_time")
+        sort_order = params.get("sort_order", "desc")
+
+        try:
+            # Use the search_notes method with notebook filter
+            results = self.client.search_notes(
+                query="*",  # Wildcard to get all notes
+                limit=limit,
+                notebook_id=notebook_id,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+
+            # Handle empty results
+            if not results:
+                return {
+                    "content": [
+                        {"type": "text", "text": f'No notes found in notebook: {notebook_id}'}
+                    ]
+                }
+
+            # Format results
+            formatted_text = self._format_notes_by_notebook_results(notebook_id, results)
+
+            return {"content": [{"type": "text", "text": formatted_text}]}
+
+        except Exception as e:
+            # Re-raise to be handled by MCP framework
+            raise e
+
+    def _format_notes_by_notebook_results(self, notebook_id: str, results: List[Dict[str, Any]]) -> str:
+        """Format notes by notebook results for display."""
+        result_count = len(results)
+        result_summary = f'Found {result_count} note(s) in notebook: {notebook_id}\n\n'
+
+        formatted_notes = []
+        for note in results:
+            formatted_note = self._format_single_search_result(note)
+            formatted_notes.append(formatted_note)
+
+        return result_summary + "\n".join(formatted_notes)
+
+    async def handle_get_tag(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle get_tag MCP tool call.
+
+        Gets a specific tag by ID.
+
+        Args:
+            params: Dictionary containing:
+                - tag_id (str): ID of the tag to retrieve (required)
+
+        Returns:
+            Dict containing MCP-formatted response with tag details
+        """
+        # Validate required parameter
+        tag_id = self._validate_required_id_parameter(params, "tag_id")
+
+        try:
+            # Call client get_tag method
+            tag = self.client.get_tag(tag_id)
+
+            # Format tag details
+            formatted_text = self._format_tag_details(tag)
+
+            return {"content": [{"type": "text", "text": formatted_text}]}
+
+        except Exception as e:
+            # Re-raise to be handled by MCP framework
+            raise e
+
+    def _format_tag_details(self, tag: Any) -> str:
+        """Format tag details for display."""
+        title = getattr(tag, "title", "Unknown")
+        tag_id = getattr(tag, "id", "unknown")
+        created_time = getattr(tag, "created_time", None)
+        updated_time = getattr(tag, "updated_time", None)
+
+        result_parts = [f"**Tag: {title}**", f"**ID:** {tag_id}"]
+
+        # Add timestamps if available
+        if created_time:
+            formatted_time = self._format_timestamp(created_time)
+            if formatted_time:
+                result_parts.append(f"**Created:** {formatted_time}")
+
+        if updated_time:
+            formatted_time = self._format_timestamp(updated_time)
+            if formatted_time:
+                result_parts.append(f"**Updated:** {formatted_time}")
+
+        return "\n".join(result_parts)
+
+    async def handle_update_tag(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle update_tag MCP tool call.
+
+        Updates a tag in Joplin.
+
+        Args:
+            params: Dictionary containing:
+                - tag_id (str): ID of the tag to update (required)
+                - title (str): New title for the tag (required)
+
+        Returns:
+            Dict containing MCP-formatted response with update confirmation
+        """
+        # Validate required parameters
+        tag_id = self._validate_required_id_parameter(params, "tag_id")
+        title = self._validate_string_input(params.get("title", "").strip(), max_length=200)
+        
+        if not title:
+            raise ValueError("Title parameter is required and cannot be empty")
+
+        try:
+            # Call client update_tag method
+            success = self.client.update_tag(tag_id=tag_id, title=title)
+
+            # Build standardized response
+            return self._build_operation_response(
+                success=success,
+                operation="updated",
+                entity_type="tag",
+                entity_id=tag_id,
+            )
+
+        except Exception as e:
+            # Re-raise to be handled by MCP framework
+            raise e
+
+    async def handle_search_tags(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle search_tags MCP tool call.
+
+        Searches for tags by name.
+
+        Args:
+            params: Dictionary containing:
+                - query (str): Search query for tag names (required)
+                - limit (int, optional): Maximum number of results (default: 20)
+
+        Returns:
+            Dict containing MCP-formatted response with search results
+        """
+        # Validate required parameter
+        query = self._validate_string_input(params.get("query", "").strip(), max_length=500)
+        if not query:
+            raise ValueError("Query parameter is required and cannot be empty")
+        
+        limit = max(1, min(params.get("limit", 20), 100))  # Clamp between 1-100
+
+        try:
+            # Call client search_tags method
+            matching_tags = self.client.search_tags(query)[:limit]
+
+            # Handle empty results
+            if not matching_tags:
+                return {
+                    "content": [
+                        {"type": "text", "text": f'No tags found for query: "{query}"'}
+                    ]
+                }
+
+            # Convert to dict format for formatting
+            tag_dicts = [
+                {
+                    "id": tag.id,
+                    "title": tag.title,
+                    "created_time": tag.created_time,
+                    "updated_time": tag.updated_time,
+                }
+                for tag in matching_tags
+            ]
+
+            # Format results
+            formatted_text = self._format_search_tags_results(query, tag_dicts)
+
+            return {"content": [{"type": "text", "text": formatted_text}]}
+
+        except Exception as e:
+            # Re-raise to be handled by MCP framework
+            raise e
+
+    def _format_search_tags_results(self, query: str, results: List[Dict[str, Any]]) -> str:
+        """Format tag search results for display."""
+        result_count = len(results)
+        result_summary = f'Found {result_count} tag(s) for query: "{query}"\n\n'
+
+        formatted_tags = []
+        for tag in results:
+            title = tag.get("title", "Untitled")
+            tag_id = tag.get("id", "unknown")
+            
+            result_parts = [f"**{title}** (ID: {tag_id})"]
+            formatted_tags.append("\n".join(result_parts) + "\n")
+
+        return result_summary + "\n".join(formatted_tags)
+
+    async def handle_get_tags_by_note(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle get_tags_by_note MCP tool call.
+
+        Gets all tags for a specific note.
+
+        Args:
+            params: Dictionary containing:
+                - note_id (str): ID of the note to get tags from (required)
+
+        Returns:
+            Dict containing MCP-formatted response with tags list
+        """
+        # Validate required parameter
+        note_id = self._validate_required_id_parameter(params, "note_id")
+
+        try:
+            # Call client get_tags_by_note method
+            tags = self.client.get_tags_by_note(note_id)
+
+            # Handle empty results
+            if not tags:
+                return {
+                    "content": [
+                        {"type": "text", "text": f'No tags found for note: {note_id}'}
+                    ]
+                }
+
+            # Convert to dict format for formatting
+            tag_dicts = [
+                {
+                    "id": tag.id,
+                    "title": tag.title,
+                    "created_time": tag.created_time,
+                    "updated_time": tag.updated_time,
+                }
+                for tag in tags
+            ]
+
+            # Format results
+            formatted_text = self._format_tags_by_note_results(note_id, tag_dicts)
+
+            return {"content": [{"type": "text", "text": formatted_text}]}
+
+        except Exception as e:
+            # Re-raise to be handled by MCP framework
+            raise e
+
+    def _format_tags_by_note_results(self, note_id: str, results: List[Dict[str, Any]]) -> str:
+        """Format tags by note results for display."""
+        result_count = len(results)
+        result_summary = f'Found {result_count} tag(s) for note: {note_id}\n\n'
+
+        formatted_tags = []
+        for tag in results:
+            title = tag.get("title", "Untitled")
+            tag_id = tag.get("id", "unknown")
+            
+            result_parts = [f"**{title}** (ID: {tag_id})"]
+            formatted_tags.append("\n".join(result_parts) + "\n")
+
+        return result_summary + "\n".join(formatted_tags)
+
+    async def handle_get_notes_by_tag(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle get_notes_by_tag MCP tool call.
+
+        Gets all notes with a specific tag.
+
+        Args:
+            params: Dictionary containing:
+                - tag_id (str): ID or name of the tag to get notes from (required)
+                - limit (int, optional): Maximum number of results (default: 20)
+                - sort_by (str, optional): Field to sort by
+                - sort_order (str, optional): Sort order
+
+        Returns:
+            Dict containing MCP-formatted response with notes list
+        """
+        # Validate required parameter
+        tag_identifier = self._validate_required_id_parameter(params, "tag_id")
+        
+        limit = max(1, min(params.get("limit", 20), 100))
+        sort_by = params.get("sort_by", "updated_time")
+        sort_order = params.get("sort_order", "desc")
+
+        try:
+            # Convert tag name to tag ID if necessary
+            actual_tag_id = await self._resolve_tag_identifier(tag_identifier)
+            
+            if not actual_tag_id:
+                return {
+                    "content": [
+                        {"type": "text", "text": f'No tag found matching: "{tag_identifier}"'}
+                    ]
+                }
+
+            # Since joppy doesn't have direct tag-to-notes API, search by tag name
+            # Get the tag details to search by tag name
+            try:
+                tag = self.client.get_tag(actual_tag_id)
+                tag_name = tag.title
+                
+                # Search for notes containing the tag name
+                results = self.client.search_notes(
+                    query=tag_name,  # Search by tag name instead of using "*"
+                    limit=limit,
+                    sort_by=sort_by,
+                    sort_order=sort_order,
+                )
+                
+            except Exception as fallback_error:
+                # Fallback to empty results if tag lookup fails
+                results = []
+
+            # Handle empty results
+            if not results:
+                return {
+                    "content": [
+                        {"type": "text", "text": f'No notes found with tag: "{tag_identifier}" (ID: {actual_tag_id})'}
+                    ]
+                }
+
+            # Format results
+            formatted_text = self._format_notes_by_tag_results(f"{tag_identifier} (ID: {actual_tag_id})", results)
+
+            return {"content": [{"type": "text", "text": formatted_text}]}
+
+        except Exception as e:
+            # Re-raise to be handled by MCP framework
+            raise e
+
+    async def _resolve_tag_identifier(self, tag_identifier: str) -> Optional[str]:
+        """Convert tag name to tag ID if necessary.
+        
+        Args:
+            tag_identifier: Either a tag ID or tag name
+            
+        Returns:
+            Tag ID if found, None if not found
+        """
+        try:
+            # First, try to use it as-is (might already be a tag ID)
+            try:
+                tag = self.client.get_tag(tag_identifier)
+                return tag_identifier  # It's already a valid tag ID
+            except:
+                pass  # Not a valid tag ID, try as tag name
+            
+            # Search for tag by name
+            matching_tags = self.client.search_tags(tag_identifier)
+            
+            # Look for exact match first
+            for tag in matching_tags:
+                if tag.title.lower() == tag_identifier.lower():
+                    return tag.id
+            
+            # If no exact match, return the first partial match
+            if matching_tags:
+                return matching_tags[0].id
+                
+            return None
+        except:
+            return None
+
+    def _format_notes_by_tag_results(self, tag_info: str, results: List[Dict[str, Any]]) -> str:
+        """Format notes by tag results for display."""
+        result_count = len(results)
+        result_summary = f'Found {result_count} note(s) with tag: {tag_info}\n\n'
+
+        formatted_notes = []
+        for note in results:
+            formatted_note = self._format_single_search_result(note)
+            formatted_notes.append(formatted_note)
+
+        return result_summary + "\n".join(formatted_notes)
