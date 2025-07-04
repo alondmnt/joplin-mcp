@@ -111,7 +111,112 @@ Create `joplin-mcp.json` in your project directory:
 }
 ```
 
-#### 4. Test the Connection
+#### 4. Tool Configuration (Optional)
+
+You can **enable or disable individual tools** to customize which operations are available to AI assistants. This is useful for:
+- **Security**: Disable destructive operations like `delete_note`, `delete_notebook`, `delete_tag`
+- **Simplicity**: Enable only the tools you need
+- **Development**: Test specific functionality
+
+##### Basic Tool Configuration
+
+Add a `tools` section to your configuration file:
+
+```json
+{
+  "token": "your_api_token_here",
+  "host": "localhost",
+  "port": 41184,
+  "tools": {
+    "delete_note": false,
+    "delete_notebook": false,
+    "delete_tag": false
+  }
+}
+```
+
+##### Environment Variables
+
+You can also configure tools via environment variables:
+
+```bash
+export JOPLIN_TOOL_DELETE_NOTE=false
+export JOPLIN_TOOL_DELETE_NOTEBOOK=false
+export JOPLIN_TOOL_DELETE_TAG=false
+```
+
+##### Available Tools
+
+All tools are **enabled by default**. Here's the complete list:
+
+| Tool | Category | Description | Default |
+|------|----------|-------------|---------|
+| `search_notes` | Notes | Search notes with full-text query | ✅ |
+| `get_note` | Notes | Retrieve a specific note by ID | ✅ |
+| `create_note` | Notes | Create a new note | ✅ |
+| `update_note` | Notes | Update an existing note | ✅ |
+| `delete_note` | Notes | Delete a note | ✅ |
+| `list_notebooks` | Notebooks | List all notebooks | ✅ |
+| `get_notebook` | Notebooks | Get notebook details | ✅ |
+| `create_notebook` | Notebooks | Create a new notebook | ✅ |
+| `update_notebook` | Notebooks | Update an existing notebook | ✅ |
+| `delete_notebook` | Notebooks | Delete a notebook | ✅ |
+| `search_notebooks` | Notebooks | Search notebooks by name | ✅ |
+| `get_notes_by_notebook` | Notebooks | Get all notes in a notebook | ✅ |
+| `list_tags` | Tags | List all tags | ✅ |
+| `get_tag` | Tags | Get a specific tag by ID | ✅ |
+| `create_tag` | Tags | Create a new tag | ✅ |
+| `update_tag` | Tags | Update an existing tag | ✅ |
+| `delete_tag` | Tags | Delete a tag | ✅ |
+| `search_tags` | Tags | Search tags by name | ✅ |
+| `get_tags_by_note` | Tags | Get all tags for a note | ✅ |
+| `get_notes_by_tag` | Tags | Get all notes with a tag | ✅ |
+| `tag_note` | Tags | Add tag to note | ✅ |
+| `untag_note` | Tags | Remove tag from note | ✅ |
+| `ping_joplin` | Utilities | Test server connection | ✅ |
+
+##### Configuration Examples
+
+**Minimal (disable dangerous operations):**
+```json
+{
+  "host": "localhost",
+  "port": 41184,
+  "tools": {
+    "delete_note": false,
+    "delete_notebook": false,
+    "delete_tag": false
+  }
+}
+```
+
+**Read-only mode:**
+```json
+{
+  "host": "localhost",
+  "port": 41184,
+  "tools": {
+    "create_note": false,
+    "update_note": false,
+    "delete_note": false,
+    "create_notebook": false,
+    "update_notebook": false,
+    "delete_notebook": false,
+    "create_tag": false,
+    "update_tag": false,
+    "delete_tag": false,
+    "tag_note": false,
+    "untag_note": false
+  }
+}
+```
+
+**Test your configuration:**
+```bash
+python test_tool_config.py
+```
+
+#### 5. Test the Connection
 ```bash
 # Test basic connectivity
 python test_connection.py
