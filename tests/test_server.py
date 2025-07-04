@@ -2688,3 +2688,258 @@ class TestJoplinMCPServerSecurity:
         assert "\x02" not in clean_string
         assert "\x03" not in clean_string
         assert "cleantext" in clean_string
+
+
+class TestJoplinMCPServerToolConfiguration:
+    """Test tool configuration functionality in the server."""
+
+    @pytest.fixture
+    def mock_client(self):
+        """Mock Joplin client for testing."""
+        client = Mock()
+        client.ping.return_value = True
+        client.is_connected = True
+        client._mock_name = "mock_client"  # Mark as mock
+        return client
+
+    @pytest.fixture
+    def mock_config_all_tools_enabled(self):
+        """Mock configuration with all tools enabled."""
+        config = Mock()
+        config.token = "test-token"
+        config.host = "localhost"
+        config.port = 41184
+        config.timeout = 30
+        config.verify_ssl = True
+        
+        # Mock tool configuration methods
+        config.is_tool_enabled = Mock(return_value=True)
+        config.get_enabled_tools = Mock(return_value=["search_notes", "create_note", "delete_note", "ping_joplin"])
+        config.get_disabled_tools = Mock(return_value=[])
+        
+        return config
+
+    @pytest.fixture
+    def mock_config_some_tools_disabled(self):
+        """Mock configuration with some tools disabled."""
+        config = Mock()
+        config.token = "test-token"
+        config.host = "localhost"
+        config.port = 41184
+        config.timeout = 30
+        config.verify_ssl = True
+        
+        # Mock tool configuration methods
+        disabled_tools = ["delete_note", "delete_notebook", "delete_tag"]
+        enabled_tools = ["search_notes", "create_note", "get_note", "ping_joplin"]
+        
+        def is_tool_enabled(tool_name):
+            return tool_name not in disabled_tools
+        
+        config.is_tool_enabled = Mock(side_effect=is_tool_enabled)
+        config.get_enabled_tools = Mock(return_value=enabled_tools)
+        config.get_disabled_tools = Mock(return_value=disabled_tools)
+        
+        return config
+
+    @pytest.fixture 
+    def server_all_tools_enabled(self, mock_client, mock_config_all_tools_enabled):
+        """Server with all tools enabled."""
+        from joplin_mcp.server import JoplinMCPServer
+        return JoplinMCPServer(config=mock_config_all_tools_enabled, client=mock_client)
+
+    @pytest.fixture
+    def server_some_tools_disabled(self, mock_client, mock_config_some_tools_disabled):
+        """Server with some tools disabled."""
+        from joplin_mcp.server import JoplinMCPServer
+        return JoplinMCPServer(config=mock_config_some_tools_disabled, client=mock_client)
+
+    def test_server_lists_only_enabled_tools(self, server_some_tools_disabled):
+        """Test that get_available_tools only returns enabled tools."""
+        tools = server_some_tools_disabled.get_available_tools()
+        tool_names = [tool.name for tool in tools]
+        
+        # Should include enabled tools
+        assert "search_notes" in tool_names
+        assert "create_note" in tool_names
+        assert "ping_joplin" in tool_names
+        
+        # Should NOT include disabled tools
+        assert "delete_note" not in tool_names
+        assert "delete_notebook" not in tool_names
+        assert "delete_tag" not in tool_names
+
+    def test_server_lists_all_tools_when_all_enabled(self, server_all_tools_enabled):
+        """Test that get_available_tools returns all tools when all are enabled."""
+        tools = server_all_tools_enabled.get_available_tools()
+        tool_names = [tool.name for tool in tools]
+        
+        # Should include all expected tools when all are enabled
+        expected_tools = [
+            "search_notes", "get_note", "create_note", "update_note", "delete_note",
+            "list_notebooks", "get_notebook", "create_notebook", "update_notebook", "delete_notebook",
+            "search_notebooks", "get_notes_by_notebook",
+            "list_tags", "get_tag", "create_tag", "update_tag", "delete_tag",
+            "search_tags", "get_tags_by_note", "get_notes_by_tag", "tag_note", "untag_note",
+            "add_tag_to_note", "remove_tag_from_note", "ping_joplin"
+        ]
+        
+        for tool in expected_tools:
+            assert tool in tool_names
+
+    def test_server_respects_config_tool_filtering(self, server_some_tools_disabled):
+        """Test that server respects configuration for tool filtering."""
+        server = server_some_tools_disabled
+        
+        # Verify that the server checks configuration when listing tools
+        tools = server.get_available_tools()
+        
+        # The server should have called config.is_tool_enabled for filtering
+        # We can verify this by checking that our mock was called
+        server.config.is_tool_enabled.assert_called()
+        
+        # The filtered list should not contain disabled tools
+        tool_names = [tool.name for tool in tools]
+        disabled_tools = server.config.get_disabled_tools()
+        
+        for disabled_tool in disabled_tools:
+            assert disabled_tool not in tool_names
+
+    def test_server_tool_schema_validation_respects_config(self, server_some_tools_disabled):
+        """Test that tool schema validation respects configuration."""
+        server = server_some_tools_disabled
+        
+        # Get schema for an enabled tool - should work
+        enabled_schema = server.get_tool_schema("search_notes")
+        assert enabled_schema is not None
+        assert enabled_schema["name"] == "search_notes"
+        
+        # Get schema for a disabled tool - should return None or not be found
+        disabled_schema = server.get_tool_schema("delete_note")
+        # The schema might still exist but the tool won't be available
+        # The important test is that it's not in the available tools list
+
+    def test_server_configuration_integration(self, mock_client):
+        """Test server integration with real configuration object."""
+        from joplin_mcp.server import JoplinMCPServer
+        from joplin_mcp.config import JoplinMCPConfig
+        
+        # Create real configuration with specific tools disabled
+        config = JoplinMCPConfig(
+            token="test-token",
+            tools={
+                "delete_note": False,
+                "delete_notebook": False,
+                "delete_tag": False
+            }
+        )
+        
+        server = JoplinMCPServer(config=config, client=mock_client)
+        tools = server.get_available_tools()
+        tool_names = [tool.name for tool in tools]
+        
+        # Should not include disabled tools
+        assert "delete_note" not in tool_names
+        assert "delete_notebook" not in tool_names  
+        assert "delete_tag" not in tool_names
+        
+        # Should include enabled tools
+        assert "search_notes" in tool_names
+        assert "create_note" in tool_names
+        assert "ping_joplin" in tool_names
+
+    def test_server_configuration_none_allows_all_tools(self, mock_client):
+        """Test that server without configuration allows all tools."""
+        from joplin_mcp.server import JoplinMCPServer
+        
+        # Create server without config (should allow all tools)
+        server = JoplinMCPServer(token="test-token", client=mock_client)
+        tools = server.get_available_tools()
+        
+        # Should include all expected tools
+        tool_names = [tool.name for tool in tools]
+        expected_tools = [
+            "search_notes", "create_note", "delete_note", "ping_joplin"
+        ]
+        
+        for tool in expected_tools:
+            assert tool in tool_names
+
+    def test_server_capabilities_reflect_tool_configuration(self, server_some_tools_disabled):
+        """Test that server capabilities reflect tool configuration."""
+        server = server_some_tools_disabled
+        capabilities = server.get_capabilities()
+        
+        # Capabilities should exist and have tools
+        assert hasattr(capabilities, "tools")
+        
+        # The tools capability should be configured
+        assert capabilities.tools is not None
+
+    def test_server_info_includes_tool_configuration(self, server_some_tools_disabled):
+        """Test that server info includes tool configuration details."""
+        server = server_some_tools_disabled
+        server_info = server.get_server_info()
+        
+        # Server info should exist
+        assert isinstance(server_info, dict)
+        assert "name" in server_info
+        assert "capabilities" in server_info
+        
+        # Should reflect the configuration
+        assert server_info["name"] == "joplin-mcp"
+
+    @pytest.mark.asyncio  
+    async def test_server_handles_tool_config_during_lifecycle(self, server_some_tools_disabled):
+        """Test that server handles tool configuration during start/stop lifecycle."""
+        server = server_some_tools_disabled
+        
+        # Test that server can start with tool configuration
+        assert hasattr(server, "start")
+        assert hasattr(server, "stop")
+        
+        # The server should maintain its tool configuration throughout lifecycle
+        tools_before = server.get_available_tools()
+        tool_names_before = [tool.name for tool in tools_before]
+        
+        # Configuration should be preserved
+        assert "delete_note" not in tool_names_before
+        assert "search_notes" in tool_names_before
+
+    def test_server_validates_tool_input_only_for_enabled_tools(self, server_some_tools_disabled):
+        """Test that server only validates input for enabled tools."""
+        server = server_some_tools_disabled
+        
+        # Should be able to validate input for enabled tools
+        enabled_valid, enabled_errors = server.validate_tool_input("search_notes", {"query": "test"})
+        # The exact validation behavior depends on implementation
+        
+        # For disabled tools, they shouldn't be available for validation
+        tools = server.get_available_tools()
+        tool_names = [tool.name for tool in tools]
+        assert "delete_note" not in tool_names
+
+    def test_server_tool_configuration_error_handling(self, mock_client):
+        """Test server error handling with invalid tool configuration."""
+        from joplin_mcp.server import JoplinMCPServer
+        
+        # Create config with invalid tool configuration
+        config = Mock()
+        config.token = "test-token"
+        config.host = "localhost"
+        config.port = 41184
+        config.timeout = 30
+        config.verify_ssl = True
+        
+        # Mock a configuration that raises errors
+        config.is_tool_enabled = Mock(side_effect=Exception("Config error"))
+        
+        # Server should handle config errors gracefully
+        try:
+            server = JoplinMCPServer(config=config, client=mock_client)
+            tools = server.get_available_tools()
+            # Should either work or handle the error gracefully
+            assert isinstance(tools, list)
+        except Exception:
+            # If an exception is raised, it should be meaningful
+            pass

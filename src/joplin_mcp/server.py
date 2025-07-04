@@ -159,6 +159,10 @@ class JoplinMCPServer:
             try:
                 self._check_rate_limit()
                 
+                # Check if tool is enabled in configuration
+                if self.config and hasattr(self.config, 'is_tool_enabled') and not self.config.is_tool_enabled(name):
+                    return [{"type": "text", "text": f"Tool '{name}' is disabled in configuration"}]
+                
                 # Pre-validate parameters and provide hints if needed
                 validation_result = self._validate_and_enhance_parameters(name, arguments)
                 if validation_result["enhanced_params"] is not None:
@@ -303,6 +307,9 @@ class JoplinMCPServer:
         ]
 
         for name, description in tool_definitions:
+            # Check if tool is enabled in configuration
+            if self.config and hasattr(self.config, 'is_tool_enabled') and not self.config.is_tool_enabled(name):
+                continue  # Skip disabled tools
             # Use proper Tool object if MCP is available, otherwise Mock
             if MCP_AVAILABLE:
                 tool = Tool(name=name, description=description, inputSchema={})

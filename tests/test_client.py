@@ -1549,10 +1549,9 @@ class TestJoplinMCPClientNoteOperations:
             assert result == "note123456789012345678901234567890"
             mock_add_note.assert_called_once()
 
-            # Verify custom metadata was passed through
-            call_args = mock_add_note.call_args[1]
-            assert "custom_metadata" in call_args
-        assert call_args["custom_metadata"]["project"] == "important"
+                    # Verify custom metadata was filtered out (it's not supported by joppy)
+        call_args = mock_add_note.call_args[1]
+        assert "custom_metadata" not in call_args
 
     def test_create_note_with_invalid_parent_id(self, client):
         """Test error handling when creating note with invalid parent ID."""
@@ -1660,7 +1659,7 @@ class TestJoplinMCPClientNotebookOperations:
             mock_notebooks.append(mock_notebook)
 
         with patch.object(
-            client._joppy_client, "get_all_folders", return_value=mock_notebooks
+            client._joppy_client, "get_all_notebooks", return_value=mock_notebooks
         ):
             result = client.get_all_notebooks()
 
@@ -1691,7 +1690,7 @@ class TestJoplinMCPClientNotebookOperations:
         mock_notebooks.append(child_notebook)
 
         with patch.object(
-            client._joppy_client, "get_all_folders", return_value=mock_notebooks
+            client._joppy_client, "get_all_notebooks", return_value=mock_notebooks
         ):
             result = client.get_notebooks_with_hierarchy()
 
