@@ -2,54 +2,44 @@
 
 A **Model Context Protocol (MCP) server** for [Joplin](https://joplinapp.org/) note-taking application, enabling AI assistants to interact with your Joplin notes, notebooks, and tags through a standardized interface.
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-385%20passing-green.svg)](https://github.com/your-org/joplin-mcp)
-[![Type Checking](https://img.shields.io/badge/mypy-passing-green.svg)](https://mypy.readthedocs.io/)
-
 ## 🎯 Overview
 
-This MCP server provides AI assistants with comprehensive access to your Joplin notes through 13 powerful tools:
+This MCP server provides AI assistants with comprehensive access to your Joplin notes through **23 tools** with complete CRUD operations:
 
-### 📝 Note Management
+## 🔧 Complete Tool Reference
+
+### 📝 Note Management (5 tools)
 - **search_notes** - Full-text search across all notes with advanced filtering
 - **get_note** - Retrieve specific notes with metadata and content
 - **create_note** - Create new notes with support for todos, tags, and notebooks
 - **update_note** - Modify existing notes with flexible parameter support
 - **delete_note** - Remove notes with confirmation
 
-### 📁 Notebook Management
+### 📁 Notebook Management (7 tools)
 - **list_notebooks** - Browse all notebooks with hierarchical structure
 - **get_notebook** - Get detailed notebook information
 - **create_notebook** - Create new notebooks with parent-child relationships
+- **update_notebook** - Modify notebook titles and organization
+- **delete_notebook** - Remove notebooks with confirmation
+- **search_notebooks** - Find notebooks by name or content
+- **get_notes_by_notebook** - List all notes within a specific notebook
 
-### 🏷️ Tag Management
+### 🏷️ Tag Management (7 tools)
 - **list_tags** - View all available tags
+- **get_tag** - Retrieve specific tag information
 - **create_tag** - Create new tags for organization
-- **tag_note** - Add tags to notes
-- **untag_note** - Remove tags from notes
+- **update_tag** - Modify tag names and properties
+- **delete_tag** - Remove tags with confirmation
+- **search_tags** - Find tags by name or pattern
+- **get_tags_by_note** - List all tags assigned to a specific note
 
-### 🔧 System Tools
+### 🔗 Relationship Management (3 tools)
+- **tag_note** - Add tags to notes (create relationships)
+- **untag_note** - Remove tags from notes (remove relationships)
+- **get_notes_by_tag** - Find all notes with a specific tag
+
+### 🔧 System Tools (1 tool)
 - **ping_joplin** - Test server connectivity and health
-
-## ✨ Key Features
-
-### 🦙 **Direct Ollama Integration**
-- **Interactive chat client** - Talk to your notes in plain English
-- **Zero-config setup** - Just run two commands and start chatting
-- **Intelligent tool usage** - Ollama automatically decides when to use Joplin tools
-- **Real-time feedback** - See exactly what's happening with your notes
-
-### 🚀 **Production Ready**
-- **13 comprehensive tools** for complete note management
-- **Rate limiting & security** - Safe for production use
-- **300+ tests** - Thoroughly tested and reliable
-- **Type-safe** - Full TypeScript compatibility
-
-### 🔌 **MCP Compliant**
-- **Industry standard** - Works with any MCP-compatible client
-- **Extensible** - Easy to add new tools and capabilities
-- **Well-documented** - Comprehensive API documentation
 
 ## 🚀 Quick Start
 
@@ -154,8 +144,8 @@ You should see:
 
 ### Source Code
 - **`src/joplin_mcp/`** - Main package directory
-  - `server.py` - MCP server implementation
-  - `client.py` - Joplin API client
+  - `server.py` - MCP server implementation (23 tools, protocol handling)
+  - `client.py` - Joplin API client (HTTP communication, business logic)
   - `models.py` - Data models and schemas
   - `config.py` - Configuration management
   - `exceptions.py` - Custom exceptions
@@ -210,7 +200,7 @@ Our custom Ollama client (`ollama_mcp_client.py`) provides the best experience:
 - 🔍 **Automatic tool detection** - Ollama decides when to use Joplin tools
 - 📝 **Smart JSON parsing** - Handles Ollama's various response formats
 - 🎯 **Real-time feedback** - See exactly what tools are being executed
-- 🛠️ **All 13 tools** supported seamlessly
+- 🛠️ **All 23 tools** supported seamlessly
 
 #### Usage Examples:
 
@@ -448,3 +438,326 @@ search_params = {
 
 results = await server.handle_search_notes(search_params)
 ```
+
+## 📖 Detailed Tool Reference
+
+### 📝 Note Operations
+
+#### `search_notes`
+Full-text search across all notes with advanced filtering options.
+```python
+{
+    "query": "meeting notes",           # Search query (required)
+    "limit": 10,                       # Max results (1-100, default: 10)
+    "notebook_id": "notebook_123",     # Filter by notebook (optional)
+    "tags": ["important", "work"],     # Filter by tags (optional)
+    "sort_by": "updated_time",         # Sort field (optional)
+    "sort_order": "desc"               # Sort direction (optional)
+}
+```
+
+#### `get_note`
+Retrieve a specific note with full metadata and content.
+```python
+{
+    "note_id": "note_123",             # Note ID (required)
+    "include_body": true               # Include note content (default: true)
+}
+```
+
+#### `create_note`
+Create a new note with support for todos, tags, and notebooks.
+```python
+{
+    "title": "Meeting Notes",          # Note title (required)
+    "body": "Meeting content...",      # Note content (optional)
+    "parent_id": "notebook_123",       # Parent notebook ID (required)
+    "is_todo": false,                  # Is this a todo item (default: false)
+    "todo_completed": false,           # Todo completion status (default: false)
+    "tags": ["work", "meeting"]        # Tags to assign (optional)
+}
+```
+
+#### `update_note`
+Modify existing notes with flexible parameter support.
+```python
+{
+    "note_id": "note_123",             # Note ID (required)
+    "title": "Updated Title",          # New title (optional)
+    "body": "Updated content...",      # New content (optional)
+    "is_todo": true,                   # Update todo status (optional)
+    "todo_completed": true             # Update completion (optional)
+}
+```
+
+#### `delete_note`
+Remove a note permanently.
+```python
+{
+    "note_id": "note_123"              # Note ID (required)
+}
+```
+
+### 📁 Notebook Operations
+
+#### `list_notebooks`
+Browse all notebooks with hierarchical structure.
+```python
+{
+    "limit": 50,                       # Max results (1-100, default: 50)
+    "sort_by": "title",                # Sort field (optional)
+    "sort_order": "asc"                # Sort direction (optional)
+}
+```
+
+#### `get_notebook`
+Get detailed information about a specific notebook.
+```python
+{
+    "notebook_id": "notebook_123"      # Notebook ID (required)
+}
+```
+
+#### `create_notebook`
+Create a new notebook with parent-child relationships.
+```python
+{
+    "title": "Work Projects",          # Notebook title (required)
+    "parent_id": "parent_notebook_id"  # Parent notebook ID (optional)
+}
+```
+
+#### `update_notebook`
+Modify notebook titles and organization.
+```python
+{
+    "notebook_id": "notebook_123",     # Notebook ID (required)
+    "title": "Updated Title",          # New title (optional)
+    "parent_id": "new_parent_id"       # New parent ID (optional)
+}
+```
+
+#### `delete_notebook`
+Remove a notebook permanently.
+```python
+{
+    "notebook_id": "notebook_123"      # Notebook ID (required)
+}
+```
+
+#### `search_notebooks`
+Find notebooks by name or content.
+```python
+{
+    "query": "work",                   # Search query (required)
+    "limit": 20                        # Max results (1-100, default: 20)
+}
+```
+
+#### `get_notes_by_notebook`
+List all notes within a specific notebook.
+```python
+{
+    "notebook_id": "notebook_123",     # Notebook ID (required)
+    "limit": 20,                       # Max results (1-100, default: 20)
+    "sort_by": "updated_time",         # Sort field (optional)
+    "sort_order": "desc"               # Sort direction (optional)
+}
+```
+
+### 🏷️ Tag Operations
+
+#### `list_tags`
+View all available tags.
+```python
+{
+    "limit": 50,                       # Max results (1-100, default: 50)
+    "sort_by": "title",                # Sort field (optional)
+    "sort_order": "asc"                # Sort direction (optional)
+}
+```
+
+#### `get_tag`
+Retrieve specific tag information.
+```python
+{
+    "tag_id": "tag_123"                # Tag ID (required)
+}
+```
+
+#### `create_tag`
+Create a new tag for organization.
+```python
+{
+    "title": "important"               # Tag name (required)
+}
+```
+
+#### `update_tag`
+Modify tag names and properties.
+```python
+{
+    "tag_id": "tag_123",               # Tag ID (required)
+    "title": "very-important"          # New tag name (required)
+}
+```
+
+#### `delete_tag`
+Remove a tag permanently.
+```python
+{
+    "tag_id": "tag_123"                # Tag ID (required)
+}
+```
+
+#### `search_tags`
+Find tags by name or pattern.
+```python
+{
+    "query": "work",                   # Search query (required)
+    "limit": 20                        # Max results (1-100, default: 20)
+}
+```
+
+#### `get_tags_by_note`
+List all tags assigned to a specific note.
+```python
+{
+    "note_id": "note_123",             # Note ID (required)
+    "limit": 20                        # Max results (1-100, default: 20)
+}
+```
+
+### 🔗 Relationship Operations
+
+#### `tag_note`
+Add tags to notes (create relationships).
+```python
+{
+    "note_id": "note_123",             # Note ID (required)
+    "tag_id": "tag_123"                # Tag ID (required)
+}
+```
+
+#### `untag_note`
+Remove tags from notes (remove relationships).
+```python
+{
+    "note_id": "note_123",             # Note ID (required)
+    "tag_id": "tag_123"                # Tag ID (required)
+}
+```
+
+#### `get_notes_by_tag`
+Find all notes with a specific tag.
+```python
+{
+    "tag_id": "important",             # Tag ID or name (required)
+    "limit": 20,                       # Max results (1-100, default: 20)
+    "sort_by": "updated_time",         # Sort field (optional)
+    "sort_order": "desc"               # Sort direction (optional)
+}
+```
+
+### 🔧 System Operations
+
+#### `ping_joplin`
+Test server connectivity and health.
+```python
+{}                                     # No parameters required
+```
+
+## 🏗️ Architecture
+
+Our MCP implementation follows a clean three-layer architecture that separates concerns for maintainability and flexibility:
+
+```mermaid
+graph TB
+    subgraph "MCP Client Layer"
+        AI["🤖 AI Assistant<br/>(Claude Desktop)"]
+    end
+    
+    subgraph "MCP Server Layer"
+        SERVER["🔧 MCP Server<br/>(server.py)<br/>• 23 Tools<br/>• Protocol Handling<br/>• Parameter Validation<br/>• Response Formatting"]
+        CLIENT["🌐 Joplin Client<br/>(client.py)<br/>• HTTP Communication<br/>• Business Logic<br/>• Data Transformation<br/>• Error Handling"]
+    end
+    
+    subgraph "External Service Layer"
+        JOPLIN["📚 Joplin App<br/>(Note Storage)<br/>• Web Clipper API<br/>• Data Persistence<br/>• Note Management"]
+    end
+    
+    AI <-->|"MCP Protocol<br/>JSON-RPC"| SERVER
+    SERVER -->|"Uses"| CLIENT
+    CLIENT <-->|"Joplin API<br/>HTTP/REST"| JOPLIN
+    
+    style AI fill:#e1f5fe
+    style SERVER fill:#f3e5f5
+    style CLIENT fill:#e8f5e8
+    style JOPLIN fill:#fff3e0
+```
+
+### Component Roles
+
+**🔧 MCP Server (`server.py`)**
+- Speaks MCP protocol with AI assistants
+- Defines and validates all 23 tools
+- Handles parameter validation and intelligent corrections
+- Formats responses for optimal AI comprehension
+- Manages error handling and user feedback
+
+**🌐 Joplin Client (`client.py`)**
+- Communicates with Joplin's Web Clipper API
+- Handles HTTP requests and connection management
+- Implements business logic for complex operations
+- Manages data transformation and caching
+- Provides error resilience and retry logic
+
+**🤖 AI Assistant (External)**
+- Sends MCP requests to our server
+- Receives structured, human-readable responses
+- Integrates Joplin capabilities into conversations
+
+### Request Flow Example
+
+When you ask Claude to "search for notes with template tag":
+
+1. **Claude Desktop** (MCP Client) sends MCP request:
+   ```json
+   {
+     "tool": "get_notes_by_tag",
+     "arguments": {"tag_id": "template"}
+   }
+   ```
+
+2. **Server** (`server.py`) receives request:
+   - Validates parameters
+   - Resolves "template" → actual tag ID
+   - Calls the client layer
+
+3. **Client** (`client.py`) executes:
+   - Makes HTTP request to Joplin API
+   - Processes the response
+   - Returns structured data
+
+4. **Server** formats response:
+   - Converts to human-readable format
+   - Adds metadata and context
+   - Returns MCP-compliant response
+
+5. **Claude Desktop** receives formatted results and shows them to you
+
+### Architecture Benefits
+
+**Separation of Concerns**:
+- **Server**: Handles MCP protocol and user experience
+- **Client**: Handles Joplin API specifics and data management
+
+**Flexibility**:
+- Can swap out the client to support other note-taking apps
+- Can reuse the client in non-MCP contexts
+- Server can be enhanced without touching API logic
+
+**Maintainability**:
+- Clear boundaries between protocol handling and business logic
+- Easier to debug and test individual components
+- Cleaner code organization
