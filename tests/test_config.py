@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+import uuid
 from unittest.mock import patch
 
 import pytest
@@ -649,23 +650,27 @@ class TestConfigValidationAndEdgeCases:
         config_data1 = {"host": "json-host", "token": "json-token"}
         config_data2 = {"host": "yaml-host", "token": "yaml-token"}
 
-        # Create multiple config files
-        json_file = "joplin-mcp.json"
-        yaml_file = "joplin-mcp.yaml"
-
-        with open(json_file, "w") as f:
-            json.dump(config_data1, f)
-
-        with open(yaml_file, "w") as f:
-            yaml.dump(config_data2, f)
+        # Create unique temporary file names in current directory 
+        unique_id = str(uuid.uuid4())[:8]
+        json_file = f"test-joplin-mcp-{unique_id}.json"
+        yaml_file = f"test-joplin-mcp-{unique_id}.yaml"
 
         try:
-            config = JoplinMCPConfig.auto_discover()
+            # Write config data to temp files in current directory
+            with open(json_file, "w") as f:
+                json.dump(config_data1, f)
+            
+            with open(yaml_file, "w") as f:
+                yaml.dump(config_data2, f)
+
+            # Test auto discovery with specific filenames
+            config = JoplinMCPConfig.auto_discover(search_filenames=[json_file, yaml_file])
 
             # Should find the first file in the search order (JSON comes first)
             assert config.host == "json-host"
             assert config.token == "json-token"
         finally:
+            # Clean up temp files
             if os.path.exists(json_file):
                 os.unlink(json_file)
             if os.path.exists(yaml_file):

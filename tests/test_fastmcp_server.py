@@ -8,6 +8,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+import pytest
 
 # Add src directory to path so we can import our modules
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -15,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from fastmcp import Client
 from joplin_mcp.fastmcp_server import mcp
 
+@pytest.mark.asyncio
 async def test_basic_functionality():
     """Test basic FastMCP server functionality."""
     print("🧪 Testing FastMCP Joplin Server...")
@@ -58,6 +60,7 @@ async def test_basic_functionality():
         print(f"❌ Test failed: {e}")
         raise
 
+@pytest.mark.asyncio
 async def test_tool_schemas():
     """Test that tool schemas are generated correctly."""
     print("\n🔍 Testing tool schemas...")
