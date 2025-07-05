@@ -45,9 +45,9 @@ from .models import (
     JoplinTimestamp,
 )
 
-# Import client and server
-from .client import JoplinMCPClient
-from .server import JoplinMCPServer
+# Legacy client and server removed - using FastMCP implementation
+# from .client import JoplinMCPClient  # REMOVED
+# from .server import JoplinMCPServer  # REMOVED
 
 __version__ = "0.1.0"
 __author__ = "Joplin MCP Contributors"
@@ -56,9 +56,9 @@ __description__ = "Model Context Protocol server for Joplin note-taking applicat
 
 # Public API exports - these will be available when importing the package
 __all__ = [
-    # Core server and client classes
-    "JoplinMCPServer",
-    "JoplinMCPClient",
+    # Core classes (legacy server/client removed - use FastMCP implementation)
+    # "JoplinMCPServer",  # REMOVED - use run_fastmcp_server.py
+    # "JoplinMCPClient",  # REMOVED - use FastMCP directly
     # Configuration and models
     "JoplinMCPConfig",
     "MCPNote",
@@ -93,9 +93,10 @@ def get_server_info() -> dict:
     return {
         "name": "joplin-mcp",
         "version": __version__,
-        "description": __description__,
+        "description": "FastMCP-based " + __description__,
         "author": __author__,
         "license": __license__,
+        "implementation": "FastMCP",
         "supported_tools": [
             "search_notes",
             "get_note",
