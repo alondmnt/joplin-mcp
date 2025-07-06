@@ -113,12 +113,17 @@ def validate_limit(limit: int) -> int:
         raise ValueError("Limit must be between 1 and 100")
     return limit
 
-def format_timestamp(timestamp: Optional[int], format_str: str = "%Y-%m-%d %H:%M:%S") -> Optional[str]:
+def format_timestamp(timestamp: Optional[Union[int, datetime.datetime]], format_str: str = "%Y-%m-%d %H:%M:%S") -> Optional[str]:
     """Format a timestamp safely."""
     if not timestamp:
         return None
     try:
-        return datetime.datetime.fromtimestamp(timestamp / 1000).strftime(format_str)
+        if isinstance(timestamp, datetime.datetime):
+            return timestamp.strftime(format_str)
+        elif isinstance(timestamp, int):
+            return datetime.datetime.fromtimestamp(timestamp / 1000).strftime(format_str)
+        else:
+            return None
     except:
         return None
 
@@ -345,6 +350,24 @@ def format_search_results(query: str, results: List[Any]) -> str:
         result_parts.append(f"**{title}** (ID: {note_id})")
         if body:
             result_parts.append(body)
+        
+        # Add creation and modification dates
+        dates = []
+        created_time = getattr(note, 'created_time', None)
+        if created_time:
+            created_date = format_timestamp(created_time, "%Y-%m-%d %H:%M")
+            if created_date:
+                dates.append(f"Created: {created_date}")
+        
+        updated_time = getattr(note, 'updated_time', None)
+        if updated_time:
+            updated_date = format_timestamp(updated_time, "%Y-%m-%d %H:%M")
+            if updated_date:
+                dates.append(f"Updated: {updated_date}")
+        
+        if dates:
+            result_parts.append(f"   {' | '.join(dates)}")
+        
         result_parts.append("")
     
     return "\n".join(result_parts)
@@ -365,7 +388,8 @@ def format_tag_list_with_counts(tags: List[Any], client: Any) -> str:
         
         # Get note count for this tag
         try:
-            notes_result = client.get_notes(tag_id=tag_id)
+            fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
+            notes_result = client.get_notes(tag_id=tag_id, fields=fields_list)
             notes = process_search_results(notes_result)
             note_count = len(notes)
         except Exception:
@@ -415,11 +439,9 @@ async def get_note(note_id: str, include_body: bool = True) -> str:
     note_id = validate_required_param(note_id, "note_id")
     client = get_joplin_client()
     
-    # Explicitly request body field if needed
-    if include_body:
-        note = client.get_note(note_id, fields="id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed")
-    else:
-        note = client.get_note(note_id, fields="id,title,created_time,updated_time,parent_id,is_todo,todo_completed")
+    # Use string format for fields (list format causes SQL errors)
+    fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
+    note = client.get_note(note_id, fields=fields_list)
     
     return format_note_details(note, include_body)
 
@@ -470,11 +492,12 @@ async def search_notes(query: str, limit: int = 20, notebook_id: Optional[str] =
     
     client = get_joplin_client()
     
-    # Get notes based on query
+    # Get notes based on query with timestamp fields
+    fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
     if query == "*":
-        results = client.get_notes()
+        results = client.get_notes(fields=fields_list)
     else:
-        results = client.search(query=query)
+        results = client.search(query=query, fields=fields_list)
     
     notes = process_search_results(results)
     
@@ -496,7 +519,8 @@ async def search_notes(query: str, limit: int = 20, notebook_id: Optional[str] =
 async def list_notebooks() -> str:
     """List all notebooks."""
     client = get_joplin_client()
-    notebooks = client.get_all_notebooks()
+    fields_list = "id,title,created_time,updated_time,parent_id"
+    notebooks = client.get_all_notebooks(fields=fields_list)
     return format_item_list(notebooks, ItemType.notebook)
 
 @create_tool("get_notebook", "Get notebook")
@@ -504,7 +528,8 @@ async def get_notebook(notebook_id: str) -> str:
     """Get a specific notebook by ID."""
     notebook_id = validate_required_param(notebook_id, "notebook_id")
     client = get_joplin_client()
-    notebook = client.get_notebook(notebook_id)
+    fields_list = "id,title,created_time,updated_time,parent_id"
+    notebook = client.get_notebook(notebook_id, fields=fields_list)
     return format_item_details(notebook, ItemType.notebook)
 
 @create_tool("create_notebook", "Create notebook")
@@ -545,7 +570,8 @@ async def search_notebooks(query: str, limit: int = 20) -> str:
     limit = validate_limit(limit)
     
     client = get_joplin_client()
-    all_notebooks = client.get_all_notebooks()
+    fields_list = "id,title,created_time,updated_time,parent_id"
+    all_notebooks = client.get_all_notebooks(fields=fields_list)
     matching_notebooks = filter_items_by_title(all_notebooks, query)[:limit]
     
     if not matching_notebooks:
@@ -560,7 +586,8 @@ async def get_notes_by_notebook(notebook_id: str, limit: int = 20) -> str:
     limit = validate_limit(limit)
     
     client = get_joplin_client()
-    notes_result = client.get_notes(notebook_id=notebook_id)
+    fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
+    notes_result = client.get_notes(notebook_id=notebook_id, fields=fields_list)
     notes = process_search_results(notes_result)[:limit]
     
     if not notes:
@@ -574,7 +601,8 @@ async def get_notes_by_notebook(notebook_id: str, limit: int = 20) -> str:
 async def list_tags() -> str:
     """List all tags."""
     client = get_joplin_client()
-    tags = client.get_all_tags()
+    fields_list = "id,title,created_time,updated_time"
+    tags = client.get_all_tags(fields=fields_list)
     return format_tag_list_with_counts(tags, client)
 
 @create_tool("get_tag", "Get tag")
@@ -582,7 +610,8 @@ async def get_tag(tag_id: str) -> str:
     """Get a specific tag by ID."""
     tag_id = validate_required_param(tag_id, "tag_id")
     client = get_joplin_client()
-    tag = client.get_tag(tag_id)
+    fields_list = "id,title,created_time,updated_time"
+    tag = client.get_tag(tag_id, fields=fields_list)
     return format_item_details(tag, ItemType.tag)
 
 @create_tool("create_tag", "Create tag")
@@ -618,7 +647,8 @@ async def search_tags(query: str, limit: int = 20) -> str:
     limit = validate_limit(limit)
     
     client = get_joplin_client()
-    all_tags = client.get_all_tags()
+    fields_list = "id,title,created_time,updated_time"
+    all_tags = client.get_all_tags(fields=fields_list)
     matching_tags = filter_items_by_title(all_tags, query)[:limit]
     
     if not matching_tags:
@@ -632,7 +662,8 @@ async def get_tags_by_note(note_id: str) -> str:
     note_id = validate_required_param(note_id, "note_id")
     
     client = get_joplin_client()
-    tags_result = client.get_tags(note_id=note_id)
+    fields_list = "id,title,created_time,updated_time"
+    tags_result = client.get_tags(note_id=note_id, fields=fields_list)
     tags = process_search_results(tags_result)
     
     if not tags:
@@ -647,7 +678,8 @@ async def get_notes_by_tag(tag_id: str, limit: int = 20) -> str:
     limit = validate_limit(limit)
     
     client = get_joplin_client()
-    notes_result = client.get_notes(tag_id=tag_id)
+    fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
+    notes_result = client.get_notes(tag_id=tag_id, fields=fields_list)
     notes = process_search_results(notes_result)[:limit]
     
     if not notes:
