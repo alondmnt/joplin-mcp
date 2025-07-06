@@ -1,0 +1,39 @@
+{
+  "host": "localhost",
+  "port": 41184,
+  "timeout": 30,
+  "verify_ssl": false,
+  "tools": {
+    "ping_joplin": true,
+    "search_notes": true,
+    "get_note": true,
+    "list_notebooks": true,
+    "get_notebook": true,
+    "search_notebooks": true,
+    "get_notes_by_notebook": true,
+    "list_tags": true,
+    "get_tag": true,
+    "search_tags": true,
+    "get_tags_by_note": true,
+    "get_notes_by_tag": true,
+    "create_note": false,
+    "update_note": false,
+    "delete_note": false,
+    "create_notebook": false,
+    "update_notebook": false,
+    "delete_notebook": false,
+    "create_tag": false,
+    "update_tag": false,
+    "delete_tag": false,
+    "tag_note": false,
+    "untag_note": false,
+    "add_tag_to_note": false,
+    "remove_tag_from_note": false
+  },
+  "content_exposure": {
+    "search_results": "preview",
+    "individual_notes": "full",
+    "listings": "none",
+    "max_preview_length": 200
+  }
+} 

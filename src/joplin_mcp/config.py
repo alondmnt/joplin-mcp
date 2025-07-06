@@ -241,6 +241,21 @@ class JoplinMCPConfig:
         "utilities": ["ping_joplin"],
     }
 
+    # Content exposure levels for privacy control
+    CONTENT_EXPOSURE_LEVELS = {
+        "none": "No content shown - titles and metadata only",
+        "preview": "Short preview snippets (200 characters)",
+        "full": "Full content access"
+    }
+
+    # Default content exposure settings
+    DEFAULT_CONTENT_EXPOSURE = {
+        "search_results": "preview",  # Search results show previews
+        "individual_notes": "full",   # Individual note retrieval shows full content
+        "listings": "none",           # Note listings show no content
+        "max_preview_length": 200     # Maximum preview length in characters
+    }
+
     def __init__(
         self,
         host: str = "localhost",
@@ -249,6 +264,7 @@ class JoplinMCPConfig:
         timeout: int = 60,
         verify_ssl: bool = True,
         tools: Optional[Dict[str, bool]] = None,
+        content_exposure: Optional[Dict[str, Union[str, int]]] = None,
     ):
         """Initialize configuration with default values."""
         self.host = host
@@ -261,6 +277,11 @@ class JoplinMCPConfig:
         self.tools = self.DEFAULT_TOOLS.copy()
         if tools:
             self.tools.update(tools)
+        
+        # Initialize content exposure configuration
+        self.content_exposure = self.DEFAULT_CONTENT_EXPOSURE.copy()
+        if content_exposure:
+            self.content_exposure.update(content_exposure)
 
     def is_tool_enabled(self, tool_name: str) -> bool:
         """Check if a specific tool is enabled."""
@@ -277,6 +298,30 @@ class JoplinMCPConfig:
         if tool_name not in self.DEFAULT_TOOLS:
             raise ConfigError(f"Unknown tool: {tool_name}")
         self.tools[tool_name] = False
+
+    def get_content_exposure_level(self, context: str) -> str:
+        """Get content exposure level for a specific context."""
+        return self.content_exposure.get(context, "none")
+
+    def set_content_exposure_level(self, context: str, level: str) -> None:
+        """Set content exposure level for a specific context."""
+        if level not in self.CONTENT_EXPOSURE_LEVELS:
+            raise ConfigError(f"Invalid content exposure level: {level}. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}")
+        self.content_exposure[context] = level
+
+    def get_max_preview_length(self) -> int:
+        """Get maximum preview length for content snippets."""
+        return self.content_exposure.get("max_preview_length", 200)
+
+    def should_show_content(self, context: str) -> bool:
+        """Check if content should be shown for a specific context."""
+        level = self.get_content_exposure_level(context)
+        return level in ["preview", "full"]
+
+    def should_show_full_content(self, context: str) -> bool:
+        """Check if full content should be shown for a specific context."""
+        level = self.get_content_exposure_level(context)
+        return level == "full"
 
     def enable_tool_category(self, category: str) -> None:
         """Enable all tools in a category."""
@@ -329,8 +374,21 @@ class JoplinMCPConfig:
             if tool_value is not None:
                 tools[tool_name] = ConfigParser.parse_bool(tool_value)
 
+        # Load content exposure configuration from environment
+        content_exposure = {}
+        for context in ["search_results", "individual_notes", "listings"]:
+            env_var = f"{prefix}CONTENT_{context.upper()}"
+            content_value = os.environ.get(env_var)
+            if content_value is not None:
+                content_exposure[context] = content_value
+
+        # Load max preview length from environment
+        max_preview_env = os.environ.get(f"{prefix}MAX_PREVIEW_LENGTH")
+        if max_preview_env is not None:
+            content_exposure["max_preview_length"] = ConfigParser.parse_int(max_preview_env, "max_preview_length")
+
         return cls(
-            host=host, port=port, token=token, timeout=timeout, verify_ssl=verify_ssl, tools=tools
+            host=host, port=port, token=token, timeout=timeout, verify_ssl=verify_ssl, tools=tools, content_exposure=content_exposure
         )
 
     def validate(self) -> None:
@@ -348,6 +406,20 @@ class JoplinMCPConfig:
                 raise ConfigError(f"Unknown tool in configuration: {tool_name}")
             if not isinstance(enabled, bool):
                 raise ConfigError(f"Tool configuration for '{tool_name}' must be boolean, got {type(enabled)}")
+        
+        # Validate content exposure configuration
+        if not isinstance(self.content_exposure, dict):
+            raise ConfigError("Content exposure configuration must be a dictionary")
+        
+        for key, value in self.content_exposure.items():
+            if key == "max_preview_length":
+                if not isinstance(value, int) or value < 0:
+                    raise ConfigError(f"max_preview_length must be a non-negative integer, got {type(value)}")
+            elif key in ["search_results", "individual_notes", "listings"]:
+                if value not in self.CONTENT_EXPOSURE_LEVELS:
+                    raise ConfigError(f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}")
+            else:
+                raise ConfigError(f"Unknown content exposure setting: {key}")
 
     @property
     def is_valid(self) -> bool:
@@ -376,6 +448,7 @@ class JoplinMCPConfig:
             "tools": self.tools.copy(),
             "enabled_tools_count": len(self.get_enabled_tools()),
             "disabled_tools_count": len(self.get_disabled_tools()),
+            "content_exposure": self.content_exposure.copy(),
         }
 
     def __repr__(self) -> str:
@@ -383,10 +456,12 @@ class JoplinMCPConfig:
         token_display = "***" if self.token else None
         enabled_count = len(self.get_enabled_tools())
         total_count = len(self.tools)
+        content_levels = {k: v for k, v in self.content_exposure.items() if k != "max_preview_length"}
         return (
             f"JoplinMCPConfig(host='{self.host}', port={self.port}, "
             f"token={token_display}, timeout={self.timeout}, "
-            f"verify_ssl={self.verify_ssl}, tools={enabled_count}/{total_count} enabled)"
+            f"verify_ssl={self.verify_ssl}, tools={enabled_count}/{total_count} enabled, "
+            f"content_exposure={content_levels})"
         )
 
     @classmethod
@@ -531,6 +606,43 @@ class JoplinMCPConfig:
                     f"Invalid data type for 'tools': expected dictionary, got {type(data['tools'])}"
                 )
 
+        # Content exposure - must be dictionary with string/int values
+        if "content_exposure" in data:
+            if data["content_exposure"] is None:
+                # Use default for null values
+                pass  # Don't add to validated, will use default
+            elif isinstance(data["content_exposure"], dict):
+                content_exposure = {}
+                for key, value in data["content_exposure"].items():
+                    if not isinstance(key, str):
+                        raise ConfigError(
+                            f"Invalid content exposure key: expected string, got {type(key)}"
+                        )
+                    if key == "max_preview_length":
+                        if not isinstance(value, int) or value < 0:
+                            raise ConfigError(
+                                f"Invalid value for 'max_preview_length': expected non-negative integer, got {type(value)}"
+                            )
+                    elif key in ["search_results", "individual_notes", "listings"]:
+                        if not isinstance(value, str):
+                            raise ConfigError(
+                                f"Invalid value for '{key}': expected string, got {type(value)}"
+                            )
+                        if value not in cls.CONTENT_EXPOSURE_LEVELS:
+                            raise ConfigError(
+                                f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(cls.CONTENT_EXPOSURE_LEVELS.keys())}"
+                            )
+                    else:
+                        raise ConfigError(
+                            f"Unknown content exposure setting: {key}"
+                        )
+                    content_exposure[key] = value
+                validated["content_exposure"] = content_exposure
+            else:
+                raise ConfigError(
+                    f"Invalid data type for 'content_exposure': expected dictionary, got {type(data['content_exposure'])}"
+                )
+
         return validated
 
     @classmethod
@@ -574,6 +686,17 @@ class JoplinMCPConfig:
         if "tools" in overrides:
             merged_tools.update(overrides["tools"])
 
+        # Merge content exposure configuration specially
+        merged_content_exposure = config.content_exposure.copy()
+        # Override with environment content exposure
+        for key, value in env_config.content_exposure.items():
+            env_var_name = f"{prefix}CONTENT_{key.upper()}" if key != "max_preview_length" else f"{prefix}MAX_PREVIEW_LENGTH"
+            if env_var_name in os.environ:
+                merged_content_exposure[key] = value
+        # Override with direct content exposure overrides
+        if "content_exposure" in overrides:
+            merged_content_exposure.update(overrides["content_exposure"])
+
         merged_data = {
             "host": get_value(
                 "host", "host_override", env_config.host, config.host, "localhost"
@@ -595,6 +718,7 @@ class JoplinMCPConfig:
                 True,
             ),
             "tools": merged_tools,
+            "content_exposure": merged_content_exposure,
         }
 
         return cls(**merged_data)
@@ -663,6 +787,20 @@ class JoplinMCPConfig:
                     errors.append(ConfigError(f"Unknown tool in configuration: {tool_name}"))
                 if not isinstance(enabled, bool):
                     errors.append(ConfigError(f"Tool configuration for '{tool_name}' must be boolean, got {type(enabled)}"))
+
+        # Content exposure validation
+        if not isinstance(self.content_exposure, dict):
+            errors.append(ConfigError("Content exposure configuration must be a dictionary"))
+        else:
+            for key, value in self.content_exposure.items():
+                if key == "max_preview_length":
+                    if not isinstance(value, int) or value < 0:
+                        errors.append(ConfigError(f"max_preview_length must be a non-negative integer, got {type(value)}"))
+                elif key in ["search_results", "individual_notes", "listings"]:
+                    if value not in self.CONTENT_EXPOSURE_LEVELS:
+                        errors.append(ConfigError(f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}"))
+                else:
+                    errors.append(ConfigError(f"Unknown content exposure setting: {key}"))
 
         return errors
 
@@ -769,6 +907,7 @@ class JoplinMCPConfig:
             "timeout": self.timeout,
             "verify_ssl": self.verify_ssl,
             "tools": self.tools.copy(),
+            "content_exposure": self.content_exposure.copy(),
         }
         current_values.update(overrides)
         return self.__class__(**current_values)
@@ -800,6 +939,7 @@ class JoplinMCPConfig:
             "timeout": self.timeout,
             "verify_ssl": self.verify_ssl,
             "tools": self.tools.copy(),
+            "content_exposure": self.content_exposure.copy(),
             # Note: token is intentionally excluded for security
         }
 
@@ -857,6 +997,7 @@ class JoplinMCPConfig:
                 "disabled": len(self.get_disabled_tools()),
                 "total": len(self.tools),
             },
+            "content_exposure": self.content_exposure.copy(),
         }
 
     # === INTERACTIVE CONFIGURATION ===
@@ -927,7 +1068,8 @@ class JoplinMCPConfig:
             "port": self.port,
             "timeout": self.timeout,
             "verify_ssl": self.verify_ssl,
-            "tools": self.tools.copy()
+            "tools": self.tools.copy(),
+            "content_exposure": self.content_exposure.copy()
         }
         
         if include_token and self.token:

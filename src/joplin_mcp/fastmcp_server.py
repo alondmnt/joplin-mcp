@@ -294,17 +294,30 @@ def format_item_details(item: Any, item_type: ItemType) -> str:
     
     return "\n".join(result_parts)
 
-def format_note_details(note: Any, include_body: bool = True) -> str:
+def format_note_details(note: Any, include_body: bool = True, context: str = "individual_notes") -> str:
     """Format a note for detailed display."""
     title = getattr(note, 'title', 'Untitled')
     note_id = getattr(note, 'id', 'unknown')
     
     result_parts = [f"**{title}**", f"ID: {note_id}", ""]
     
-    if include_body:
+    # Check content exposure settings
+    config = _module_config
+    should_show_content = config.should_show_content(context)
+    should_show_full_content = config.should_show_full_content(context)
+    
+    if include_body and should_show_content:
         body = getattr(note, 'body', '')
         if body:
-            result_parts.extend(["**Content:**", body, ""])
+            if should_show_full_content:
+                result_parts.extend(["**Content:**", body, ""])
+            else:
+                # Show preview only
+                max_length = config.get_max_preview_length()
+                preview = body[:max_length]
+                if len(body) > max_length:
+                    preview += "..."
+                result_parts.extend(["**Content Preview:**", preview, ""])
     
     # Add metadata
     metadata = []
@@ -333,23 +346,35 @@ def format_note_details(note: Any, include_body: bool = True) -> str:
     
     return "\n".join(result_parts)
 
-def format_search_results(query: str, results: List[Any]) -> str:
+def format_search_results(query: str, results: List[Any], context: str = "search_results") -> str:
     """Format search results for display."""
     count = len(results)
     result_parts = [f'Found {count} note(s) for query: "{query}"', ""]
+    
+    # Check content exposure settings
+    config = _module_config
+    should_show_content = config.should_show_content(context)
+    should_show_full_content = config.should_show_full_content(context)
+    max_preview_length = config.get_max_preview_length()
     
     for note in results:
         title = getattr(note, 'title', 'Untitled')
         note_id = getattr(note, 'id', 'unknown')
         
-        # Truncate body for search results
-        body = getattr(note, 'body', '')
-        if body and len(body) > 200:
-            body = body[:197] + "..."
-        
         result_parts.append(f"**{title}** (ID: {note_id})")
-        if body:
-            result_parts.append(body)
+        
+        # Handle content based on exposure settings
+        if should_show_content:
+            body = getattr(note, 'body', '')
+            if body:
+                if should_show_full_content:
+                    result_parts.append(body)
+                else:
+                    # Show preview only
+                    preview = body[:max_preview_length]
+                    if len(body) > max_preview_length:
+                        preview += "..."
+                    result_parts.append(preview)
         
         # Add creation and modification dates
         dates = []
@@ -443,7 +468,7 @@ async def get_note(note_id: str, include_body: bool = True) -> str:
     fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
     note = client.get_note(note_id, fields=fields_list)
     
-    return format_note_details(note, include_body)
+    return format_note_details(note, include_body, "individual_notes")
 
 @create_tool("create_note", "Create note")
 async def create_note(title: str, parent_id: str, body: str = "", is_todo: bool = False, todo_completed: bool = False) -> str:
@@ -511,7 +536,7 @@ async def search_notes(query: str, limit: int = 20, notebook_id: Optional[str] =
     if not notes:
         return format_no_results_message("note", f'for query: "{query}"')
     
-    return format_search_results(query, notes)
+    return format_search_results(query, notes, "search_results")
 
 # === NOTEBOOK OPERATIONS ===
 
@@ -593,7 +618,7 @@ async def get_notes_by_notebook(notebook_id: str, limit: int = 20) -> str:
     if not notes:
         return format_no_results_message("note", f"in notebook: {notebook_id}")
     
-    return format_search_results(f"notebook {notebook_id}", notes)
+    return format_search_results(f"notebook {notebook_id}", notes, "listings")
 
 # === TAG OPERATIONS ===
 
@@ -685,7 +710,7 @@ async def get_notes_by_tag(tag_id: str, limit: int = 20) -> str:
     if not notes:
         return format_no_results_message("note", f"with tag: {tag_id}")
     
-    return format_search_results(f"tag {tag_id}", notes)
+    return format_search_results(f"tag {tag_id}", notes, "listings")
 
 # === TAG-NOTE RELATIONSHIP OPERATIONS ===
 
