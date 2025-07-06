@@ -20,7 +20,10 @@ You can configure different exposure levels for different contexts:
 
 ### `search_results`
 Controls content visibility in search operations:
-- `search_notes`
+- `find_notes`
+- `find_notes_with_tag`
+- `find_notes_in_notebook`
+- `get_all_notes`
 - Search results from other operations
 
 **Default:** `preview`
@@ -33,8 +36,8 @@ Controls content visibility when retrieving specific notes:
 
 ### `listings`
 Controls content visibility in note listings:
-- `get_notes_by_notebook`
-- `get_notes_by_tag`
+- `find_notes_in_notebook`
+- `find_notes_with_tag`
 
 **Default:** `none`
 

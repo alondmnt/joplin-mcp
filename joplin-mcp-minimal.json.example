@@ -1,0 +1,45 @@
+{
+  "host": "localhost",
+  "port": 41184,
+  "token": "your_joplin_api_token_here",
+  "timeout": 30,
+  "verify_ssl": false,
+  "tools": {
+    "_comment": "MINIMAL CORE TOOLS - Ultra-simple for small LLMs (9 tools only)",
+    
+    "_comment_essential": "ABSOLUTE ESSENTIALS ONLY",
+    "find_notes": true,
+    "find_notes_with_tag": true,
+    "find_notes_in_notebook": true,
+    "get_all_notes": true,
+    "create_note": true,
+    "list_tags": true,
+    "list_notebooks": true,
+    "tag_note": true,
+    "untag_note": true,
+    
+    "_comment_disabled": "EVERYTHING ELSE DISABLED",
+    "get_note": false,
+    "create_notebook": false,
+    "create_tag": false,
+    "update_note": false,
+    "update_notebook": false,
+    "update_tag": false,
+    "delete_note": false,
+    "delete_notebook": false,
+    "delete_tag": false,
+    "ping_joplin": false
+  },
+  "content_exposure": {
+    "search_results": {
+      "show_content": true,
+      "show_full_content": false,
+      "max_preview_length": 150
+    },
+    "individual_notes": {
+      "show_content": true,
+      "show_full_content": false,
+      "max_preview_length": 300
+    }
+  }
+} 

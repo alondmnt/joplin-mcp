@@ -198,7 +198,7 @@ def get_content_privacy_settings() -> Dict[str, Union[str, int]]:
     # 1. Search Results
     print_colored("1. 🔍 SEARCH RESULTS", Colors.BLUE + Colors.BOLD)
     print_info("   When searching notes, what content should be visible?")
-    print_info("   Contexts: search_notes, search results from other operations")
+    print_info("   Contexts: find_notes, find_notes_with_tag, find_notes_in_notebook, get_all_notes")
     print()
     
     while True:
@@ -234,7 +234,7 @@ def get_content_privacy_settings() -> Dict[str, Union[str, int]]:
     print()
     print_colored("3. 📂 NOTE LISTINGS", Colors.MAGENTA + Colors.BOLD)
     print_info("   When listing notes by notebook/tag, what content should be visible?")
-    print_info("   Contexts: get_notes_by_notebook, get_notes_by_tag")
+    print_info("   Contexts: find_notes_in_notebook, find_notes_with_tag")
     print()
     
     while True:
@@ -665,8 +665,8 @@ def print_final_instructions(config_path: Path, claude_updated: bool, is_develop
         # Fallback to showing all tools if config loading fails
         print_warning(f"Could not load tool configuration: {e}")
         tools = [
-            "search_notes", "get_note", "list_notebooks", "search_notebooks",
-            "list_tags", "get_tags_by_note", "get_notes_by_tag", "ping_joplin"
+            "find_notes", "find_notes_with_tag", "find_notes_in_notebook", "get_all_notes",
+            "get_note", "list_notebooks", "list_tags", "get_tags_by_note", "ping_joplin"
         ]
         print_info("Showing default read-only tools:")
         for tool in tools:

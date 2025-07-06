@@ -4,38 +4,35 @@ A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://jop
 
 ## 🎯 Overview
 
-This FastMCP server provides AI assistants with comprehensive access to your Joplin notes through **23 tools** with complete CRUD operations:
+This FastMCP server provides AI assistants with comprehensive access to your Joplin notes through **18 optimized tools** with complete CRUD operations:
 
 ## 🔧 Complete Tool Reference
 
-**23 tools** organized by category and permission level:
+**18 tools** organized by category and permission level, optimized for LLM performance:
 
 | Tool | Category | Permission Level | Description |
 |------|----------|------------------|-------------|
-| **📝 Note Management** | | | |
-| `search_notes` | Notes | 🔍 Read | Full-text search across all notes with advanced filtering |
+| **📝 Finding Notes** | | | |
+| `find_notes` | Notes | 🔍 Read | Full-text search across all notes with advanced filtering |
+| `find_notes_with_tag` | Notes | 🔍 Read | Find all notes with a specific tag ⭐ MAIN TAG SEARCH |
+| `find_notes_in_notebook` | Notes | 🔍 Read | Find all notes within a specific notebook ⭐ MAIN NOTEBOOK SEARCH |
+| `get_all_notes` | Notes | 🔍 Read | Get all notes, most recent first |
 | `get_note` | Notes | 🔍 Read | Retrieve specific notes with metadata and content |
+| **📝 Managing Notes** | | | |
 | `create_note` | Notes | 📝 Write | Create new notes with support for todos, tags, and notebooks |
 | `update_note` | Notes | ✏️ Update | Modify existing notes with flexible parameter support |
 | `delete_note` | Notes | 🗑️ Delete | Remove notes with confirmation |
-| **📁 Notebook Management** | | | |
+| **📁 Managing Notebooks** | | | |
 | `list_notebooks` | Notebooks | 🔍 Read | Browse all notebooks with hierarchical structure |
-| `get_notebook` | Notebooks | 🔍 Read | Get detailed notebook information |
 | `create_notebook` | Notebooks | 📝 Write | Create new notebooks with parent-child relationships |
 | `update_notebook` | Notebooks | ✏️ Update | Modify notebook titles and organization |
 | `delete_notebook` | Notebooks | 🗑️ Delete | Remove notebooks with confirmation |
-| `search_notebooks` | Notebooks | 🔍 Read | Find notebooks by name or content |
-| `get_notes_by_notebook` | Notebooks | 🔍 Read | List all notes within a specific notebook |
-| **🏷️ Tag Management** | | | |
+| **🏷️ Managing Tags** | | | |
 | `list_tags` | Tags | 🔍 Read | View all available tags |
-| `get_tag` | Tags | 🔍 Read | Retrieve specific tag information |
 | `create_tag` | Tags | 📝 Write | Create new tags for organization |
-| `update_tag` | Tags | ✏️ Update | Modify tag names and properties |
 | `delete_tag` | Tags | 🗑️ Delete | Remove tags with confirmation |
-| `search_tags` | Tags | 🔍 Read | Find tags by name or pattern |
 | `get_tags_by_note` | Tags | 🔍 Read | List all tags assigned to a specific note |
-| `get_notes_by_tag` | Tags | 🔍 Read | Find all notes with a specific tag |
-| **🔗 Relationship Management** | | | |
+| **🔗 Tag-Note Relationships** | | | |
 | `tag_note` | Tags | ✏️ Update | Add tags to notes (create relationships) |
 | `untag_note` | Tags | ✏️ Update | Remove tags from notes (remove relationships) |
 | **🔧 System Tools** | | | |

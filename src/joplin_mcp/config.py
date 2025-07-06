@@ -194,50 +194,51 @@ class JoplinMCPConfig:
         "JOPLIN_SSL_VERIFY": "JOPLIN_VERIFY_SSL",
     }
 
-    # Default tool configurations - all tools enabled by default
+    # Default tool configurations - optimized for LLMs (18 tools total)
     DEFAULT_TOOLS = {
-        # Note operations
-        "search_notes": True,
-        "get_note": True,
-        "create_note": True,
-        "update_note": True,
-        "delete_note": True,
+        # Finding notes (5 tools)
+        "find_notes": True,              # Find notes by text content
+        "find_notes_with_tag": True,     # Find notes by tag
+        "find_notes_in_notebook": True,  # Find notes by notebook
+        "get_all_notes": True,           # Get all notes
+        "get_note": True,                # Get specific note by ID
         
-        # Notebook operations
-        "list_notebooks": True,
-        "get_notebook": True,
-        "create_notebook": True,
-        "update_notebook": True,
-        "delete_notebook": True,
-        "search_notebooks": True,
-        "get_notes_by_notebook": True,
+        # Managing notes (3 tools)
+        "create_note": True,             # Create new note
+        "update_note": True,             # Update existing note
+        "delete_note": True,             # Delete note
         
-        # Tag operations
-        "list_tags": True,
-        "get_tag": True,
-        "create_tag": True,
-        "update_tag": True,
-        "delete_tag": True,
-        "search_tags": True,
-        "get_tags_by_note": True,
-        "get_notes_by_tag": True,
-        "tag_note": True,
-        "untag_note": True,
+        # Managing notebooks (4 tools)
+        "list_notebooks": True,          # List all notebooks
+        "create_notebook": True,         # Create new notebook
+        "update_notebook": False,        # Update notebook (disabled by default)
+        "delete_notebook": True,         # Delete notebook
         
-        # Utility operations
-        "ping_joplin": True,
+        # Managing tags (5 tools)
+        "list_tags": True,               # List all tags
+        "create_tag": True,              # Create new tag
+        "update_tag": False,             # Update tag (disabled by default)
+        "delete_tag": True,              # Delete tag
+        "get_tags_by_note": True,        # Get tags for a note
         
-        # Tool aliases (enabled by default but follow their main tool)
-        "add_tag_to_note": True,  # alias for tag_note
-        "remove_tag_from_note": True,  # alias for untag_note
+        # Tag-note relationships (2 tools)
+        "tag_note": True,                # Add tag to note
+        "untag_note": True,              # Remove tag from note
+        
+        # Utility operations (1 tool)
+        "ping_joplin": True,             # Test connection
+        
+        # Note: Redundant tools removed (search_notes, get_notebook, search_notebooks, 
+        # get_notes_by_notebook, get_tag, search_tags, get_notes_by_tag)
+        # update_tag and update_notebook are disabled by default but available if needed
     }
 
     # Tool categories for easier management
     TOOL_CATEGORIES = {
-        "notes": ["search_notes", "get_note", "create_note", "update_note", "delete_note"],
-        "notebooks": ["list_notebooks", "get_notebook", "create_notebook", "update_notebook", "delete_notebook", "search_notebooks", "get_notes_by_notebook"],
-        "tags": ["list_tags", "get_tag", "create_tag", "update_tag", "delete_tag", "search_tags", "get_tags_by_note", "get_notes_by_tag", "tag_note", "untag_note"],
-        "aliases": ["add_tag_to_note", "remove_tag_from_note"],
+        "finding": ["find_notes", "find_notes_with_tag", "find_notes_in_notebook", "get_all_notes", "get_note"],
+        "notes": ["create_note", "update_note", "delete_note"],
+        "notebooks": ["list_notebooks", "create_notebook", "update_notebook", "delete_notebook"],
+        "tags": ["list_tags", "create_tag", "update_tag", "delete_tag", "get_tags_by_note", "tag_note", "untag_note"],
         "utilities": ["ping_joplin"],
     }
 
