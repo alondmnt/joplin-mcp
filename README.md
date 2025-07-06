@@ -1,338 +1,148 @@
 # Joplin MCP Server
 
-A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://joplinapp.org/) note-taking application via its Pythohn API [joppy](https://github.com/marph91/joppy), enabling AI assistants to interact with your Joplin notes, notebooks, and tags through a standardized interface.
+A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://joplinapp.org/) note-taking application via its Python API [joppy](https://github.com/marph91/joppy), enabling AI assistants to interact with your Joplin notes, notebooks, and tags through a standardized interface.
 
-## 🎯 Overview
+## Table of Contents
 
-This FastMCP server provides AI assistants with comprehensive access to your Joplin notes through **18 optimized tools** with complete CRUD operations:
+- [What You Can Do](#what-you-can-do)
+- [Quick Start](#quick-start)
+- [Example Usage](#example-usage)
+- [Tool Permissions](#tool-permissions)
+- [Advanced Configuration](#advanced-configuration)
+- [Project Structure](#project-structure)
+- [Testing](#testing)
+- [Complete Tool Reference](#complete-tool-reference)
 
-## 🔧 Complete Tool Reference
+## What You Can Do
 
-**18 tools** organized by category and permission level, optimized for LLM performance:
+This MCP server provides **18 optimized tools** for comprehensive Joplin integration:
 
-| Tool | Category | Permission Level | Description |
-|------|----------|------------------|-------------|
-| **📝 Finding Notes** | | | |
-| `find_notes` | Notes | 🔍 Read | Full-text search across all notes with advanced filtering |
-| `find_notes_with_tag` | Notes | 🔍 Read | Find all notes with a specific tag ⭐ MAIN TAG SEARCH |
-| `find_notes_in_notebook` | Notes | 🔍 Read | Find all notes within a specific notebook ⭐ MAIN NOTEBOOK SEARCH |
-| `get_all_notes` | Notes | 🔍 Read | Get all notes, most recent first |
-| `get_note` | Notes | 🔍 Read | Retrieve specific notes with metadata and content |
-| **📝 Managing Notes** | | | |
-| `create_note` | Notes | 📝 Write | Create new notes with support for todos, tags, and notebooks |
-| `update_note` | Notes | ✏️ Update | Modify existing notes with flexible parameter support |
-| `delete_note` | Notes | 🗑️ Delete | Remove notes with confirmation |
-| **📁 Managing Notebooks** | | | |
-| `list_notebooks` | Notebooks | 🔍 Read | Browse all notebooks with hierarchical structure |
-| `create_notebook` | Notebooks | 📝 Write | Create new notebooks with parent-child relationships |
-| `update_notebook` | Notebooks | ✏️ Update | Modify notebook titles and organization |
-| `delete_notebook` | Notebooks | 🗑️ Delete | Remove notebooks with confirmation |
-| **🏷️ Managing Tags** | | | |
-| `list_tags` | Tags | 🔍 Read | View all available tags |
-| `create_tag` | Tags | 📝 Write | Create new tags for organization |
-| `delete_tag` | Tags | 🗑️ Delete | Remove tags with confirmation |
-| `get_tags_by_note` | Tags | 🔍 Read | List all tags assigned to a specific note |
-| **🔗 Tag-Note Relationships** | | | |
-| `tag_note` | Tags | ✏️ Update | Add tags to notes (create relationships) |
-| `untag_note` | Tags | ✏️ Update | Remove tags from notes (remove relationships) |
-| **🔧 System Tools** | | | |
-| `ping_joplin` | Utilities | 🔍 Read | Test server connectivity and health |
+### **Note Management**
+- **Find & Search**: `find_notes`, `find_notes_with_tag`, `find_notes_in_notebook`, `get_all_notes`
+- **CRUD Operations**: `get_note`, `create_note`, `update_note`, `delete_note`
 
-**Permission Levels:**
-- 🔍 **Read**: Always enabled - safe operations for browsing and searching
-- 📝 **Write**: Create new objects (configurable during installation)
-- ✏️ **Update**: Modify existing objects (configurable during installation)  
-- 🗑️ **Delete**: Remove objects permanently (configurable during installation)
+### **Notebook Management** 
+- **Organize**: `list_notebooks`, `create_notebook`, `update_notebook`, `delete_notebook`
 
-## 🚀 Quick Start
+### **Tag Management**
+- **Categorize**: `list_tags`, `create_tag`, `delete_tag`, `get_tags_by_note`
+- **Link**: `tag_note`, `untag_note`
 
-### Option 1: Pip Install (Recommended for most users)
+### **System**
+- **Health**: `ping_joplin`
 
-The simplest way to install for end users:
+## Quick Start
+
+### 1. Install the Package
 
 ```bash
-# Install the package
 pip install joplin-mcp
-
-# Run the configuration script (any of these work):
-joplin-mcp-install           # Console command (recommended)
-python -m joplin_mcp.install # Module command
 ```
 
-**Available commands after pip install:**
-- `joplin-mcp-install` - Interactive configuration script
-- `joplin-mcp-server` - Run the MCP server  
-- `joplin-mcp` - Run the MCP server (alias)
+### 2. Configure Joplin
 
-This approach:
-- ✅ Handles all dependencies automatically
-- ✅ Works in any Python environment
-- ✅ Provides the same configuration experience
-- ✅ Installs the package globally or in your current environment
-- ✅ Provides convenient console commands
+1. Open **Joplin Desktop** → **Tools** → **Options** → **Web Clipper**
+2. **Enable** the Web Clipper service
+3. **Copy** the Authorization token
 
-### Option 2: Development Install
+### 3. Run Setup Script
+
+```bash
+joplin-mcp-install
+```
+
+This interactive script will:
+- Configure your Joplin API token
+- Set tool permissions (Create/Update/Delete)
+- Set up Claude Desktop automatically
+- Test the connection
+
+### 4. Choose Your AI Client
+
+#### Option A: Claude Desktop
+After running the setup script, restart Claude Desktop and you're ready to go!
+
+```
+"List my notebooks" or "Create a note about today's meeting"
+```
+
+#### Option B: OllMCP (Local AI Models)
+
+If Claude Desktop was configured above, you can run the following to detect joplin-mcp automatically by OllMCP (Ollama served agents).
+
+```bash
+# Install ollmcp
+pip install ollmcp
+
+# Run with auto-discovery and your preferred Ollama model, such as:
+ollmcp --auto-discovery --model qwen3:4b
+```
+
+## Example Usage
+
+Once configured, you can ask your AI assistant:
+
+- **"List all my notebooks"** - See your Joplin organization
+- **"Find notes about Python programming"** - Search your knowledge base  
+- **"Create a meeting note for today's standup"** - Quick note creation
+- **"Tag my recent AI notes as 'important'"** - Organize with tags
+- **"Show me my todos"** - Find task items
+
+## Tool Permissions
+
+The setup script offers **3 security levels**:
+
+- **Read** (always enabled): Browse and search your notes safely
+- **Write** (optional): Create new notes, notebooks, and tags  
+- **Update** (optional): Modify existing content
+- **Delete** (optional): Remove content permanently
+
+Choose the level that matches your comfort and use case.
+
+---
+
+## Advanced Configuration
+
+### Alternative Installation (Development)
 
 For developers or users who want the latest features:
 
-#### For macOS/Linux users:
+#### macOS/Linux:
 ```bash
-# Clone the repository
 git clone https://github.com/alondmnt/joplin-mcp.git
 cd joplin-mcp
-
-# Run the installation script (includes virtual environment setup)
 ./install.sh
 ```
 
-#### For Windows users:
+#### Windows:
 ```batch
-REM Clone the repository
 git clone https://github.com/alondmnt/joplin-mcp.git
 cd joplin-mcp
-
-REM Run the installation script
 install.bat
 ```
 
-#### Or run the Python script directly:
-```bash
-python install.py
-```
+### Manual Configuration
 
-**Both approaches provide:**
-1. ✅ Prompt you for your Joplin API token
-2. ✅ Configure tool permissions (3 levels: Write, Update, Delete)
-3. ✅ Create the `joplin-mcp.json` configuration file
-4. ✅ Find and update your Claude Desktop configuration
-5. ✅ Test the connection to Joplin
-6. ✅ Provide detailed setup instructions
+If you prefer manual setup or the script doesn't work:
 
-### Manual Installation
+#### 1. Create Configuration File
 
-If you prefer to set up manually or the automated script doesn't work for your setup:
-
-### Prerequisites
-
-- **Python 3.8+**
-- **Joplin Desktop** with Web Clipper service enabled
-- **Joplin API token** (generated in Joplin settings)
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/alondmnt/joplin-mcp.git
-cd joplin-mcp
-
-# Install the package
-pip install -e .
-```
-
-### Configuration
-
-#### 1. Enable Joplin Web Clipper
-- Open Joplin Desktop
-- Go to **Tools → Options → Web Clipper**
-- Enable the Web Clipper service
-- Note the port (default: 41184)
-
-#### 2. Get Your API Token
-- In Web Clipper settings, copy the **Authorization token**
-- Or click **"Advanced options"** to generate a new token
-
-#### 3. Create Configuration File
 Create `joplin-mcp.json` in your project directory:
 
 ```json
 {
   "token": "your_api_token_here",
-  "host": "localhost",
+  "host": "localhost", 
   "port": 41184,
   "timeout": 30,
   "verify_ssl": false
 }
 ```
 
-#### 4. Tool Permission Configuration
+#### 2. Claude Desktop Configuration
 
-The installation script provides **3 levels of permission control** for enhanced security:
+Add to your `claude_desktop_config.json`:
 
-##### 📝 **Write Permission** (Creating new objects)
-- `create_note` - Create new notes
-- `create_notebook` - Create new notebooks  
-- `create_tag` - Create new tags
-
-##### ✏️ **Update Permission** (Modifying existing objects)
-- `update_note` - Update existing notes
-- `update_notebook` - Update existing notebooks
-- `update_tag` - Update existing tags
-- `tag_note` - Add tags to notes
-- `untag_note` - Remove tags from notes
-
-##### 🗑️ **Delete Permission** (Permanently removing objects)
-- `delete_note` - Delete notes
-- `delete_notebook` - Delete notebooks
-- `delete_tag` - Delete tags
-
-The installation script will prompt you for each permission level and configure the tools accordingly. This provides fine-grained control over what operations the AI assistant can perform.
-
-##### Manual Tool Configuration
-
-If you need to modify permissions later, edit the `tools` section in your configuration file:
-
-```json
-{
-  "token": "your_api_token_here",
-  "host": "localhost",
-  "port": 41184,
-  "tools": {
-    "create_note": true,
-    "create_notebook": true,
-    "create_tag": true,
-    "update_note": true,
-    "update_notebook": true,
-    "update_tag": true,
-    "tag_note": true,
-    "untag_note": true,
-    "delete_note": false,
-    "delete_notebook": false,
-    "delete_tag": false
-  }
-}
-```
-
-##### Environment Variables
-
-You can also configure tools via environment variables:
-
-```bash
-export JOPLIN_TOOL_DELETE_NOTE=false
-export JOPLIN_TOOL_DELETE_NOTEBOOK=false
-export JOPLIN_TOOL_DELETE_TAG=false
-```
-
-
-
-##### Configuration Examples
-
-**Recommended (Write + Update, no Delete):**
-```json
-{
-  "host": "localhost",
-  "port": 41184,
-  "tools": {
-    "create_note": true,
-    "create_notebook": true,
-    "create_tag": true,
-    "update_note": true,
-    "update_notebook": true,
-    "update_tag": true,
-    "tag_note": true,
-    "untag_note": true,
-    "delete_note": false,
-    "delete_notebook": false,
-    "delete_tag": false
-  }
-}
-```
-
-**Conservative (Write only):**
-```json
-{
-  "host": "localhost",
-  "port": 41184,
-  "tools": {
-    "create_note": true,
-    "create_notebook": true,
-    "create_tag": true,
-    "update_note": false,
-    "update_notebook": false,
-    "update_tag": false,
-    "tag_note": false,
-    "untag_note": false,
-    "delete_note": false,
-    "delete_notebook": false,
-    "delete_tag": false
-  }
-}
-```
-
-**Read-only mode:**
-```json
-{
-  "host": "localhost",
-  "port": 41184,
-  "tools": {
-    "create_note": false,
-    "create_notebook": false,
-    "create_tag": false,
-    "update_note": false,
-    "update_notebook": false,
-    "update_tag": false,
-    "tag_note": false,
-    "untag_note": false,
-    "delete_note": false,
-    "delete_notebook": false,
-    "delete_tag": false
-  }
-}
-```
-
-#### 5. Test the Connection
-
-**For pip install:**
-```bash
-# Run the FastMCP server (any of these work):
-joplin-mcp-server            # Console command (recommended)
-joplin-mcp                   # Alias command
-python -m joplin_mcp.server  # Module command
-```
-
-**For development install:**
-```bash
-# Run the FastMCP server
-python run_fastmcp_server.py
-```
-
-You should see:
-```
-🚀 Starting Joplin FastMCP Server...
-✅ Successfully connected to Joplin!
-📚 Found X notebooks, Y notes, Z tags
-🎯 FastMCP server starting...
-📋 Available tools: 23 tools ready
-```
-
-## 📁 Project Structure
-
-### Core Files
-- **`run_fastmcp_server.py`** - FastMCP server launcher script
-- **`joplin-mcp.json`** - Configuration file (you create this)
-
-### Configuration Files
-- **`pyproject.toml`** - Python package configuration
-- **`requirements.txt`** - Python dependencies
-
-### Source Code
-- **`src/joplin_mcp/`** - Main package directory
-  - `fastmcp_server.py` - FastMCP server implementation (23 tools, protocol handling)
-  - `models.py` - Data models and schemas
-  - `config.py` - Configuration management
-  - `exceptions.py` - Custom exceptions
-
-### Documentation & Testing
-- **`docs/`** - API documentation and guides
-- **`tests/`** - FastMCP test suite
-- **`README.md`** - This documentation
-
-## 🔧 Claude Desktop Integration
-
-### Claude Desktop Configuration
-
-The configuration depends on your installation method:
-
-#### For Pip Install:
 ```json
 {
   "mcpServers": {
@@ -346,69 +156,37 @@ The configuration depends on your installation method:
 }
 ```
 
-*Alternative commands that also work:*
+#### 3. OllMCP Manual Configuration
+
+```bash
+# Set environment variable
+export JOPLIN_TOKEN="your_token_here"
+
+# Run with manual server configuration
+ollmcp --server "joplin:joplin-mcp-server" --model qwen3:4b
+```
+
+### Tool Permission Configuration
+
+Fine-tune which operations the AI can perform by editing your config:
+
 ```json
 {
-  "mcpServers": {
-    "joplin": {
-      "command": "joplin-mcp",
-      "env": {
-        "JOPLIN_TOKEN": "your_token_here"
-      }
-    }
+  "tools": {
+    "create_note": true,
+    "update_note": true, 
+    "delete_note": false,
+    "create_notebook": true,
+    "delete_notebook": false,
+    "create_tag": true,
+    "delete_tag": false
   }
 }
 ```
 
-*Or using Python module:*
-```json
-{
-  "mcpServers": {
-    "joplin": {
-      "command": "python",
-      "args": ["-m", "joplin_mcp.server"],
-      "env": {
-        "JOPLIN_TOKEN": "your_token_here"
-      }
-    }
-  }
-}
-```
+### Environment Variables
 
-#### For Development Install:
-```json
-{
-  "mcpServers": {
-    "joplin": {
-      "command": "python",
-      "args": ["/path/to/your/joplin-mcp/run_fastmcp_server.py"],
-      "env": {
-        "PYTHONPATH": "/path/to/your/joplin-mcp",
-        "JOPLIN_TOKEN": "your_token_here"
-      }
-    }
-  }
-}
-```
-
-Replace `/path/to/your/joplin-mcp` with your actual project path.
-
-**Note:** The installation commands (`joplin-mcp-install`, `./install.sh`, or `install.py`) automatically configure this for you!
-
-### Usage with Claude Desktop
-
-Once configured, you can:
-
-- **📚 Manage Notebooks**: "List all my notebooks" or "Create a new notebook called 'AI Projects'"
-- **🔍 Search Notes**: "Find all notes about Python programming" or "Show me my recent todo items"
-- **✍️ Create Content**: "Create a meeting note for today's standup" or "Make a todo for 'Review MCP integration'"
-- **🏷️ Organize**: "What tags do I have available?" or "Tag my recent notes about AI with 'important'"
-
-## 🔧 Advanced Configuration
-
-### Environment Variables (Alternative)
-
-Instead of the JSON config file, you can use environment variables:
+Alternative to JSON configuration:
 
 ```bash
 export JOPLIN_TOKEN="your_api_token_here"
@@ -417,73 +195,19 @@ export JOPLIN_PORT="41184"
 export JOPLIN_TIMEOUT="30"
 ```
 
-### Configuration Options
+### HTTP Transport Support
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `token` | *required* | Joplin API authentication token |
-| `host` | `localhost` | Joplin server hostname |
-| `port` | `41184` | Joplin Web Clipper port |
-| `timeout` | `30` | Request timeout in seconds |
-| `verify_ssl` | `false` | SSL certificate verification |
+The server supports both STDIO and HTTP transports:
 
-### Programmatic Usage
-
-```python
-from joplin_mcp.config import JoplinMCPConfig
-from joplin_mcp.fastmcp_server import app
-
-# Create configuration
-config = JoplinMCPConfig(
-    token="your_token",
-    host="localhost",
-    port=41184,
-    timeout=30,
-    verify_ssl=False
-)
-
-# Configuration is loaded automatically from joplin-mcp.json
-# or you can set environment variables:
-# export JOPLIN_TOKEN="your_token"
-# export JOPLIN_HOST="localhost"
-# export JOPLIN_PORT="41184"
-
-# The FastMCP server can be run with:
-# pip install: joplin-mcp-server  
-# development: python run_fastmcp_server.py
-
-# HTTP Transport Support (NEW)
-The server now supports both STDIO and HTTP transports:
-
-## STDIO Transport (Default)
 ```bash
-# Standard STDIO transport (default)
-python run_fastmcp_server.py
+# STDIO (default)
+joplin-mcp-server
 
-# With custom config
-python run_fastmcp_server.py --config my-config.json
+# HTTP transport 
+python run_fastmcp_server.py --transport http --port 8000
 ```
 
-## HTTP Transport
-```bash
-# HTTP transport on default port 8000
-python run_fastmcp_server.py --transport http
-
-# HTTP transport on custom port and host
-python run_fastmcp_server.py --transport http --port 9000 --host 0.0.0.0
-
-# HTTP transport with custom path
-python run_fastmcp_server.py --transport http --port 8000 --path /joplin-mcp
-```
-
-## HTTP Transport Configuration
-When using HTTP transport, you can access the server at:
-- **Default**: `http://localhost:8000/mcp`
-- **Custom**: `http://your-host:your-port/your-path`
-
-### For Claude Desktop with HTTP Transport
-Use the HTTP configuration in your `claude_desktop_config.json`:
-
+# Claude Desktop HTTP config
 ```json
 {
   "mcpServers": {
@@ -495,4 +219,106 @@ Use the HTTP configuration in your `claude_desktop_config.json`:
 }
 ```
 
-**Note**: When using HTTP transport, you must run the server separately before connecting clients.
+### Configuration Reference
+
+#### Basic Settings
+| Option | Default | Description |
+|--------|---------|-------------|
+| `token` | *required* | Joplin API authentication token |
+| `host` | `localhost` | Joplin server hostname |
+| `port` | `41184` | Joplin Web Clipper port |
+| `timeout` | `30` | Request timeout in seconds |
+| `verify_ssl` | `false` | SSL certificate verification |
+
+#### Tool Permissions
+| Option | Default | Description |
+|--------|---------|-------------|
+| `tools.create_note` | `true` | Allow creating new notes |
+| `tools.update_note` | `true` | Allow modifying existing notes |
+| `tools.delete_note` | `true` | Allow deleting notes |
+| `tools.create_notebook` | `true` | Allow creating new notebooks |
+| `tools.update_notebook` | `false` | Allow modifying notebook titles |
+| `tools.delete_notebook` | `true` | Allow deleting notebooks |
+| `tools.create_tag` | `true` | Allow creating new tags |
+| `tools.update_tag` | `false` | Allow modifying tag titles |
+| `tools.delete_tag` | `true` | Allow deleting tags |
+| `tools.tag_note` | `true` | Allow adding tags to notes |
+| `tools.untag_note` | `true` | Allow removing tags from notes |
+| `tools.find_notes` | `true` | Allow text search across notes |
+| `tools.find_notes_with_tag` | `true` | Allow finding notes by tag |
+| `tools.find_notes_in_notebook` | `true` | Allow finding notes by notebook |
+| `tools.get_all_notes` | `true` | Allow getting all notes |
+| `tools.get_note` | `true` | Allow getting specific notes |
+| `tools.list_notebooks` | `true` | Allow listing all notebooks |
+| `tools.list_tags` | `true` | Allow listing all tags |
+| `tools.get_tags_by_note` | `true` | Allow getting tags for specific notes |
+| `tools.ping_joplin` | `true` | Allow testing server connectivity |
+
+#### Content Exposure (Privacy Settings)
+| Option | Default | Description |
+|--------|---------|-------------|
+| `content_exposure.search_results` | `"preview"` | Content visibility in search results: `"none"`, `"preview"`, `"full"` |
+| `content_exposure.individual_notes` | `"full"` | Content visibility for individual notes: `"none"`, `"preview"`, `"full"` |
+| `content_exposure.listings` | `"none"` | Content visibility in note listings: `"none"`, `"preview"`, `"full"` |
+| `content_exposure.max_preview_length` | `200` | Maximum length of content previews (characters) |
+
+## Project Structure
+
+- **`run_fastmcp_server.py`** - FastMCP server launcher
+- **`src/joplin_mcp/`** - Main package directory
+  - `fastmcp_server.py` - Server implementation with 18 tools
+  - `models.py` - Data models and schemas
+  - `config.py` - Configuration management
+- **`docs/`** - API documentation
+- **`tests/`** - Test suite
+
+## Testing
+
+Test your connection:
+
+```bash
+# For pip install
+joplin-mcp-server
+
+# For development  
+python run_fastmcp_server.py
+```
+
+You should see:
+```
+Starting Joplin FastMCP Server...
+Successfully connected to Joplin!
+Found X notebooks, Y notes, Z tags
+FastMCP server starting...
+Available tools: 18 tools ready
+```
+
+## Complete Tool Reference
+
+| Tool | Permission | Description |
+|------|------------|-------------|
+| **Finding Notes** | | |
+| `find_notes` | Read | Full-text search across all notes |
+| `find_notes_with_tag` | Read | Find notes with specific tag |
+| `find_notes_in_notebook` | Read | Find notes in specific notebook |
+| `get_all_notes` | Read | Get all notes, most recent first |
+| `get_note` | Read | Get specific note by ID |
+| **Managing Notes** | | |
+| `create_note` | Write | Create new notes |
+| `update_note` | Update | Modify existing notes |
+| `delete_note` | Delete | Remove notes |
+| **Managing Notebooks** | | |
+| `list_notebooks` | Read | Browse all notebooks |
+| `create_notebook` | Write | Create new notebooks |
+| `update_notebook` | Update | Modify notebook titles |
+| `delete_notebook` | Delete | Remove notebooks |
+| **Managing Tags** | | |
+| `list_tags` | Read | View all available tags |
+| `create_tag` | Write | Create new tags |
+| `delete_tag` | Delete | Remove tags |
+| `get_tags_by_note` | Read | List tags on specific note |
+| **Tag-Note Relationships** | | |
+| `tag_note` | Update | Add tags to notes |
+| `untag_note` | Update | Remove tags from notes |
+| **System Tools** | | |
+| `ping_joplin` | Read | Test connectivity |
