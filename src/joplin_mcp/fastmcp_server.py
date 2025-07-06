@@ -723,9 +723,9 @@ async def find_notes(
     
     client = get_joplin_client()
     
-    # Simple text search
+    # Use search_all for full pagination support
     fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-    results = client.search(query=query, fields=fields_list)
+    results = client.search_all(query=query, fields=fields_list)
     notes = process_search_results(results)
     
     # Apply limit
@@ -759,7 +759,7 @@ async def get_all_notes(
     
     client = get_joplin_client()
     fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-    results = client.get_notes(fields=fields_list)
+    results = client.get_all_notes(fields=fields_list)
     notes = process_search_results(results)
     
     # Sort by updated time, newest first
@@ -798,12 +798,12 @@ async def find_notes_with_tag(
     tag_name = validate_required_param(tag_name, "tag_name")
     limit = validate_limit(limit)
     
-    # Use search API with tag constraint - simpler and more efficient
+    # Use search_all API with tag constraint for full pagination support
     client = get_joplin_client()
     search_query = f"tag:{tag_name.strip()}"
     
     fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-    results = client.search(query=search_query, fields=fields_list)
+    results = client.search_all(query=search_query, fields=fields_list)
     notes = process_search_results(results)
     
     # Apply limit
@@ -838,12 +838,12 @@ async def find_notes_in_notebook(
     notebook_name = validate_required_param(notebook_name, "notebook_name")
     limit = validate_limit(limit)
     
-    # Use search API with notebook constraint - simpler and more efficient
+    # Use search_all API with notebook constraint for full pagination support
     client = get_joplin_client()
     search_query = f"notebook:{notebook_name.strip()}"
     
     fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-    results = client.search(query=search_query, fields=fields_list)
+    results = client.search_all(query=search_query, fields=fields_list)
     notes = process_search_results(results)
     
     # Apply limit
