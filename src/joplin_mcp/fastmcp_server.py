@@ -4,7 +4,7 @@
 import os
 import logging
 import datetime
-from typing import Optional, List, Dict, Any, Callable, TypeVar
+from typing import Optional, List, Dict, Any, Callable, TypeVar, Union
 from enum import Enum
 from functools import wraps
 
@@ -52,52 +52,15 @@ def _load_module_config() -> JoplinMCPConfig:
             try:
                 logger.info(f"Loading configuration from: {config_path}")
                 config = JoplinMCPConfig.from_file(config_path)
-                logger.info(f"Successfully loaded config from {config_path} - delete_notebook: {config.tools.get('delete_notebook', 'Not found')}")
+                logger.info(f"Successfully loaded config from {config_path}")
                 return config
             except Exception as e:
                 logger.warning(f"Failed to load config from {config_path}: {e}")
                 continue
     
-    # If no config file found, create a safe default with delete tools disabled
-    logger.warning("No configuration file found. Creating safe default configuration with delete tools disabled.")
-    fallback_config = JoplinMCPConfig(tools={
-        # Note operations
-        "search_notes": True,
-        "get_note": True,
-        "create_note": True,
-        "update_note": True,
-        "delete_note": True,
-        
-        # Notebook operations
-        "list_notebooks": True,
-        "get_notebook": True,
-        "create_notebook": True,
-        "update_notebook": True,
-        "delete_notebook": True,
-        "search_notebooks": True,
-        "get_notes_by_notebook": True,
-        
-        # Tag operations
-        "list_tags": True,
-        "get_tag": True,
-        "create_tag": True,
-        "update_tag": True,
-        "delete_tag": True,
-        "search_tags": True,
-        "get_tags_by_note": True,
-        "get_notes_by_tag": True,
-        "tag_note": True,
-        "untag_note": True,
-        
-        # Utility operations
-        "ping_joplin": True,
-        
-        # Tool aliases
-        "add_tag_to_note": True,
-        "remove_tag_from_note": True,
-    })
-    logger.info(f"Using fallback configuration - delete_notebook: {fallback_config.tools.get('delete_notebook', 'Not found')}")
-    return fallback_config
+    # If no config file found, use defaults from config module
+    logger.warning("No configuration file found. Using safe default configuration.")
+    return JoplinMCPConfig()
 
 # Load config for tool registration filtering
 _module_config = _load_module_config()
@@ -113,6 +76,10 @@ class SortOrder(str, Enum):
     asc = "asc"
     desc = "desc"
 
+class ItemType(str, Enum):
+    note = "note"
+    notebook = "notebook"
+    tag = "tag"
 
 # === UTILITY FUNCTIONS ===
 
@@ -134,20 +101,17 @@ def get_joplin_client() -> ClientApi:
         url = os.getenv("JOPLIN_URL", "http://localhost:41184")
         return ClientApi(token=token, url=url)
 
-
 def validate_required_param(value: str, param_name: str) -> str:
     """Validate that a parameter is provided and not empty."""
     if not value or not value.strip():
         raise ValueError(f"{param_name} parameter is required and cannot be empty")
     return value.strip()
 
-
 def validate_limit(limit: int) -> int:
     """Validate limit parameter."""
     if not (1 <= limit <= 100):
         raise ValueError("Limit must be between 1 and 100")
     return limit
-
 
 def format_timestamp(timestamp: Optional[int], format_str: str = "%Y-%m-%d %H:%M:%S") -> Optional[str]:
     """Format a timestamp safely."""
@@ -158,46 +122,6 @@ def format_timestamp(timestamp: Optional[int], format_str: str = "%Y-%m-%d %H:%M
     except:
         return None
 
-
-def format_creation_success(item_type: str, title: str, item_id: str, emoji: str) -> str:
-    """Format a standardized success message for creation operations."""
-    return f"""✅ Successfully created {item_type}
-
-**Title:** {title}
-**{emoji} CREATED {item_type.upper()} ID: {item_id} {emoji}**
-
-The {item_type} has been successfully created in Joplin.
-💡 **Remember: The {item_type} ID is `{item_id}` - you can use this to reference this {item_type}.**"""
-
-
-def format_update_success(item_type: str, item_id: str, emoji: str) -> str:
-    """Format a standardized success message for update operations."""
-    return f"""✅ Successfully updated {item_type}
-
-**{emoji} UPDATED {item_type.upper()} ID: {item_id} {emoji}**
-
-The {item_type} has been successfully updated in Joplin."""
-
-
-def format_delete_success(item_type: str, item_id: str, emoji: str) -> str:
-    """Format a standardized success message for delete operations."""
-    return f"""✅ Successfully deleted {item_type}
-
-**{emoji} DELETED {item_type.upper()} ID: {item_id} {emoji}**
-
-The {item_type} has been permanently removed from Joplin."""
-
-
-def format_relation_success(operation: str, item1_type: str, item1_id: str, item2_type: str, item2_id: str, emoji1: str, emoji2: str) -> str:
-    """Format a standardized success message for relationship operations."""
-    return f"""✅ Successfully {operation}
-
-**{emoji1} {item1_type.title()} ID:** `{item1_id}`
-**{emoji2} {item2_type.title()} ID:** `{item2_id}`
-
-The {operation} operation has been completed successfully."""
-
-
 def process_search_results(results: Any) -> List[Any]:
     """Process search results from joppy client into a consistent list format."""
     if hasattr(results, 'items'):
@@ -207,7 +131,6 @@ def process_search_results(results: Any) -> List[Any]:
     else:
         return [results] if results else []
 
-
 def filter_items_by_title(items: List[Any], query: str) -> List[Any]:
     """Filter items by title using case-insensitive search."""
     return [
@@ -215,12 +138,10 @@ def filter_items_by_title(items: List[Any], query: str) -> List[Any]:
         if query.lower() in getattr(item, 'title', '').lower()
     ]
 
-
 def format_no_results_message(item_type: str, context: str = "") -> str:
     """Format a standardized no results message."""
     context_part = f" {context}" if context else ""
     return f"No {item_type}s found{context_part}"
-
 
 def with_client_error_handling(operation_name: str):
     """Decorator to handle client operations with standardized error handling."""
@@ -236,7 +157,6 @@ def with_client_error_handling(operation_name: str):
         return wrapper
     return decorator
 
-
 def conditional_tool(tool_name: str):
     """Decorator to conditionally register tools based on configuration."""
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
@@ -250,14 +170,66 @@ def conditional_tool(tool_name: str):
             return func
     return decorator
 
+# === FORMATTING UTILITIES ===
 
-def format_item_list(items: List[Any], item_type: str, emoji: str) -> str:
+def get_item_emoji(item_type: ItemType) -> str:
+    """Get emoji for item type."""
+    emoji_map = {
+        ItemType.note: "📝",
+        ItemType.notebook: "📁",
+        ItemType.tag: "🏷️"
+    }
+    return emoji_map.get(item_type, "📄")
+
+def format_creation_success(item_type: ItemType, title: str, item_id: str) -> str:
+    """Format a standardized success message for creation operations."""
+    emoji = get_item_emoji(item_type)
+    return f"""✅ Successfully created {item_type.value}
+
+**Title:** {title}
+**{emoji} CREATED {item_type.value.upper()} ID: {item_id} {emoji}**
+
+The {item_type.value} has been successfully created in Joplin.
+💡 **Remember: The {item_type.value} ID is `{item_id}` - you can use this to reference this {item_type.value}.**"""
+
+def format_update_success(item_type: ItemType, item_id: str) -> str:
+    """Format a standardized success message for update operations."""
+    emoji = get_item_emoji(item_type)
+    return f"""✅ Successfully updated {item_type.value}
+
+**{emoji} UPDATED {item_type.value.upper()} ID: {item_id} {emoji}**
+
+The {item_type.value} has been successfully updated in Joplin."""
+
+def format_delete_success(item_type: ItemType, item_id: str) -> str:
+    """Format a standardized success message for delete operations."""
+    emoji = get_item_emoji(item_type)
+    return f"""✅ Successfully deleted {item_type.value}
+
+**{emoji} DELETED {item_type.value.upper()} ID: {item_id} {emoji}**
+
+The {item_type.value} has been permanently removed from Joplin."""
+
+def format_relation_success(operation: str, item1_type: ItemType, item1_id: str, item2_type: ItemType, item2_id: str) -> str:
+    """Format a standardized success message for relationship operations."""
+    emoji1 = get_item_emoji(item1_type)
+    emoji2 = get_item_emoji(item2_type)
+    return f"""✅ Successfully {operation}
+
+**{emoji1} {item1_type.value.title()} ID:** `{item1_id}`
+**{emoji2} {item2_type.value.title()} ID:** `{item2_id}`
+
+The {operation} operation has been completed successfully."""
+
+def format_item_list(items: List[Any], item_type: ItemType) -> str:
     """Format a list of items (notebooks, tags, etc.) for display."""
+    emoji = get_item_emoji(item_type)
+    
     if not items:
-        return f"{emoji} No {item_type}s found\n\nYour Joplin instance doesn't contain any {item_type}s yet."
+        return f"{emoji} No {item_type.value}s found\n\nYour Joplin instance doesn't contain any {item_type.value}s yet."
     
     count = len(items)
-    result_parts = [f"{emoji} Found {count} {item_type}{'s' if count != 1 else ''}", ""]
+    result_parts = [f"{emoji} Found {count} {item_type.value}{'s' if count != 1 else ''}", ""]
     
     for i, item in enumerate(items, 1):
         title = getattr(item, 'title', 'Untitled')
@@ -277,9 +249,9 @@ def format_item_list(items: List[Any], item_type: str, emoji: str) -> str:
     
     return "\n".join(result_parts)
 
-
-def format_item_details(item: Any, item_type: str, emoji: str) -> str:
+def format_item_details(item: Any, item_type: ItemType) -> str:
     """Format a single item (notebook, tag, etc.) for detailed display."""
+    emoji = get_item_emoji(item_type)
     title = getattr(item, 'title', 'Untitled')
     item_id = getattr(item, 'id', 'unknown')
     
@@ -311,356 +283,6 @@ def format_item_details(item: Any, item_type: str, emoji: str) -> str:
         result_parts.extend(f"- {m}" for m in metadata)
     
     return "\n".join(result_parts)
-
-
-# === CORE TOOLS ===
-
-@conditional_tool("ping_joplin")
-async def ping_joplin() -> str:
-    """Test connection to Joplin server."""
-    try:
-        client = get_joplin_client()
-        client.ping()
-        return "✅ Joplin server connection successful\n\nThe Joplin server is responding and accessible."
-    except Exception as e:
-        return f"❌ Joplin server connection failed\n\nUnable to reach the Joplin server. Please check your connection settings.\n\nError: {str(e)}"
-
-
-# === NOTE OPERATIONS ===
-
-@conditional_tool("get_note")
-@with_client_error_handling("Get note")
-async def get_note(note_id: str, include_body: bool = True) -> str:
-    """Get a specific note by ID."""
-    note_id = validate_required_param(note_id, "note_id")
-    client = get_joplin_client()
-    note = client.get_note(note_id)
-    return format_note_details(note, include_body)
-
-
-@conditional_tool("create_note")
-@with_client_error_handling("Create note")
-async def create_note(title: str, parent_id: str, body: str = "", is_todo: bool = False, todo_completed: bool = False) -> str:
-    """Create a new note in Joplin."""
-    title = validate_required_param(title, "title")
-    parent_id = validate_required_param(parent_id, "parent_id")
-    
-    client = get_joplin_client()
-    note = client.add_note(
-        title=title, body=body, parent_id=parent_id,
-        is_todo=1 if is_todo else 0, todo_completed=1 if todo_completed else 0
-    )
-    return format_creation_success("note", title, str(note), "📝")
-
-
-@conditional_tool("update_note")
-@with_client_error_handling("Update note")
-async def update_note(note_id: str, title: Optional[str] = None, body: Optional[str] = None, is_todo: Optional[bool] = None, todo_completed: Optional[bool] = None) -> str:
-    """Update an existing note in Joplin."""
-    note_id = validate_required_param(note_id, "note_id")
-    
-    update_data = {}
-    if title is not None: update_data["title"] = title
-    if body is not None: update_data["body"] = body
-    if is_todo is not None: update_data["is_todo"] = 1 if is_todo else 0
-    if todo_completed is not None: update_data["todo_completed"] = 1 if todo_completed else 0
-    
-    if not update_data:
-        raise ValueError("At least one field must be provided for update")
-    
-    client = get_joplin_client()
-    client.modify_note(note_id, **update_data)
-    return format_update_success("note", note_id, "📝")
-
-
-@conditional_tool("delete_note")
-@with_client_error_handling("Delete note")
-async def delete_note(note_id: str) -> str:
-    """Delete a note from Joplin."""
-    note_id = validate_required_param(note_id, "note_id")
-    client = get_joplin_client()
-    client.delete_note(note_id)
-    return format_delete_success("note", note_id, "📝")
-
-
-@conditional_tool("search_notes")
-@with_client_error_handling("Search notes")
-async def search_notes(query: str, limit: int = 20, notebook_id: Optional[str] = None, sort_by: SortBy = SortBy.updated_time, sort_order: SortOrder = SortOrder.desc) -> str:
-    """Search notes with full-text query."""
-    query = validate_required_param(query, "query")
-    limit = validate_limit(limit)
-    
-    client = get_joplin_client()
-    
-    # Get notes based on query
-    if query == "*":
-        results = client.get_notes()
-    else:
-        results = client.search(query=query)
-    
-    notes = process_search_results(results)
-    
-    # Filter by notebook if specified
-    if notebook_id:
-        notes = [n for n in notes if getattr(n, 'parent_id', None) == notebook_id]
-    
-    # Apply limit
-    notes = notes[:limit]
-    
-    if not notes:
-        return format_no_results_message("note", f'for query: "{query}"')
-    
-    return format_search_results(query, notes)
-
-
-# === NOTEBOOK OPERATIONS ===
-
-@conditional_tool("list_notebooks")
-@with_client_error_handling("List notebooks")
-async def list_notebooks() -> str:
-    """List all notebooks."""
-    client = get_joplin_client()
-    notebooks = client.get_all_notebooks()
-    return format_item_list(notebooks, "notebook", "📁")
-
-
-@conditional_tool("get_notebook")
-@with_client_error_handling("Get notebook")
-async def get_notebook(notebook_id: str) -> str:
-    """Get a specific notebook by ID."""
-    notebook_id = validate_required_param(notebook_id, "notebook_id")
-    client = get_joplin_client()
-    notebook = client.get_notebook(notebook_id)
-    return format_item_details(notebook, "notebook", "📁")
-
-
-@conditional_tool("create_notebook")
-@with_client_error_handling("Create notebook")
-async def create_notebook(title: str, parent_id: Optional[str] = None) -> str:
-    """Create a new notebook."""
-    title = validate_required_param(title, "title")
-    
-    client = get_joplin_client()
-    notebook_kwargs = {"title": title}
-    if parent_id:
-        notebook_kwargs["parent_id"] = parent_id.strip()
-    
-    notebook = client.add_notebook(**notebook_kwargs)
-    return format_creation_success("notebook", title, str(notebook), "📁")
-
-
-@conditional_tool("update_notebook")
-@with_client_error_handling("Update notebook")
-async def update_notebook(notebook_id: str, title: str) -> str:
-    """Update an existing notebook."""
-    notebook_id = validate_required_param(notebook_id, "notebook_id")
-    title = validate_required_param(title, "title")
-    
-    client = get_joplin_client()
-    client.modify_notebook(notebook_id, title=title)
-    return format_update_success("notebook", notebook_id, "📁")
-
-
-@conditional_tool("delete_notebook")
-@with_client_error_handling("Delete notebook")
-async def delete_notebook(notebook_id: str) -> str:
-    """Delete a notebook from Joplin."""
-    notebook_id = validate_required_param(notebook_id, "notebook_id")
-    client = get_joplin_client()
-    client.delete_notebook(notebook_id)
-    return format_delete_success("notebook", notebook_id, "📁")
-
-
-@conditional_tool("search_notebooks")
-@with_client_error_handling("Search notebooks")
-async def search_notebooks(query: str, limit: int = 20) -> str:
-    """Search notebooks by title."""
-    query = validate_required_param(query, "query")
-    limit = validate_limit(limit)
-    
-    client = get_joplin_client()
-    all_notebooks = client.get_all_notebooks()
-    matching_notebooks = filter_items_by_title(all_notebooks, query)[:limit]
-    
-    if not matching_notebooks:
-        return format_no_results_message("notebook", f'for query: "{query}"')
-    
-    return format_item_list(matching_notebooks, "notebook", "📁")
-
-
-@conditional_tool("get_notes_by_notebook")
-@with_client_error_handling("Get notes by notebook")
-async def get_notes_by_notebook(notebook_id: str, limit: int = 20) -> str:
-    """Get all notes in a specific notebook."""
-    notebook_id = validate_required_param(notebook_id, "notebook_id")
-    limit = validate_limit(limit)
-    
-    client = get_joplin_client()
-    notes_result = client.get_notes(notebook_id=notebook_id)
-    notes = process_search_results(notes_result)[:limit]
-    
-    if not notes:
-        return format_no_results_message("note", f"in notebook: {notebook_id}")
-    
-    return format_search_results(f"notebook {notebook_id}", notes)
-
-
-# === TAG OPERATIONS ===
-
-@conditional_tool("list_tags")
-@with_client_error_handling("List tags")
-async def list_tags() -> str:
-    """List all tags."""
-    client = get_joplin_client()
-    tags = client.get_all_tags()
-    return format_item_list(tags, "tag", "🏷️")
-
-
-@conditional_tool("get_tag")
-@with_client_error_handling("Get tag")
-async def get_tag(tag_id: str) -> str:
-    """Get a specific tag by ID."""
-    tag_id = validate_required_param(tag_id, "tag_id")
-    client = get_joplin_client()
-    tag = client.get_tag(tag_id)
-    return format_item_details(tag, "tag", "🏷️")
-
-
-@conditional_tool("create_tag")
-@with_client_error_handling("Create tag")
-async def create_tag(title: str) -> str:
-    """Create a new tag."""
-    title = validate_required_param(title, "title")
-    client = get_joplin_client()
-    tag = client.add_tag(title=title)
-    return format_creation_success("tag", title, str(tag), "🏷️")
-
-
-@conditional_tool("update_tag")
-@with_client_error_handling("Update tag")
-async def update_tag(tag_id: str, title: str) -> str:
-    """Update an existing tag."""
-    tag_id = validate_required_param(tag_id, "tag_id")
-    title = validate_required_param(title, "title")
-    
-    client = get_joplin_client()
-    client.modify_tag(tag_id, title=title)
-    return format_update_success("tag", tag_id, "🏷️")
-
-
-@conditional_tool("delete_tag")
-@with_client_error_handling("Delete tag")
-async def delete_tag(tag_id: str) -> str:
-    """Delete a tag from Joplin."""
-    tag_id = validate_required_param(tag_id, "tag_id")
-    client = get_joplin_client()
-    client.delete_tag(tag_id)
-    return format_delete_success("tag", tag_id, "🏷️")
-
-
-@conditional_tool("search_tags")
-@with_client_error_handling("Search tags")
-async def search_tags(query: str, limit: int = 20) -> str:
-    """Search tags by title."""
-    query = validate_required_param(query, "query")
-    limit = validate_limit(limit)
-    
-    client = get_joplin_client()
-    all_tags = client.get_all_tags()
-    matching_tags = filter_items_by_title(all_tags, query)[:limit]
-    
-    if not matching_tags:
-        return format_no_results_message("tag", f'for query: "{query}"')
-    
-    return format_item_list(matching_tags, "tag", "🏷️")
-
-
-@conditional_tool("tag_note")
-@with_client_error_handling("Tag note")
-async def tag_note(note_id: str, tag_id: str) -> str:
-    """Add a tag to a note."""
-    return await _add_tag_to_note_impl(note_id, tag_id)
-
-
-@conditional_tool("untag_note")
-@with_client_error_handling("Untag note")
-async def untag_note(note_id: str, tag_id: str) -> str:
-    """Remove a tag from a note."""
-    return await _remove_tag_from_note_impl(note_id, tag_id)
-
-
-@conditional_tool("get_tags_by_note")
-@with_client_error_handling("Get tags by note")
-async def get_tags_by_note(note_id: str) -> str:
-    """Get all tags for a specific note."""
-    note_id = validate_required_param(note_id, "note_id")
-    
-    client = get_joplin_client()
-    tags_result = client.get_tags(note_id=note_id)
-    tags = process_search_results(tags_result)
-    
-    if not tags:
-        return format_no_results_message("tag", f"for note: {note_id}")
-    
-    return format_item_list(tags, "tag", "🏷️")
-
-
-@conditional_tool("get_notes_by_tag")
-@with_client_error_handling("Get notes by tag")
-async def get_notes_by_tag(tag_id: str, limit: int = 20) -> str:
-    """Get all notes with a specific tag."""
-    tag_id = validate_required_param(tag_id, "tag_id")
-    limit = validate_limit(limit)
-    
-    client = get_joplin_client()
-    notes_result = client.get_notes(tag_id=tag_id)
-    notes = process_search_results(notes_result)[:limit]
-    
-    if not notes:
-        return format_no_results_message("note", f"with tag: {tag_id}")
-    
-    return format_search_results(f"tag {tag_id}", notes)
-
-
-# === SHARED IMPLEMENTATIONS ===
-
-async def _add_tag_to_note_impl(note_id: str, tag_id: str) -> str:
-    """Shared implementation for adding a tag to a note."""
-    note_id = validate_required_param(note_id, "note_id")
-    tag_id = validate_required_param(tag_id, "tag_id")
-    
-    client = get_joplin_client()
-    client.add_tag_to_note(tag_id, note_id)
-    return format_relation_success("tagged note", "note", note_id, "tag", tag_id, "📝", "🏷️")
-
-
-async def _remove_tag_from_note_impl(note_id: str, tag_id: str) -> str:
-    """Shared implementation for removing a tag from a note."""
-    note_id = validate_required_param(note_id, "note_id")
-    tag_id = validate_required_param(tag_id, "tag_id")
-    
-    client = get_joplin_client()
-    client.remove_tag_from_note(tag_id, note_id)
-    return format_relation_success("removed tag from note", "note", note_id, "tag", tag_id, "📝", "🏷️")
-
-
-# === ALIAS TOOLS (for backward compatibility) ===
-
-@conditional_tool("add_tag_to_note")
-@with_client_error_handling("Add tag to note")
-async def add_tag_to_note(note_id: str, tag_id: str) -> str:
-    """Add a tag to a note (alias for tag_note)."""
-    return await _add_tag_to_note_impl(note_id, tag_id)
-
-
-@conditional_tool("remove_tag_from_note")
-@with_client_error_handling("Remove tag from note")
-async def remove_tag_from_note(note_id: str, tag_id: str) -> str:
-    """Remove a tag from a note (alias for untag_note)."""
-    return await _remove_tag_from_note_impl(note_id, tag_id)
-
-
-# === FORMATTING UTILITIES ===
 
 def format_note_details(note: Any, include_body: bool = True) -> str:
     """Format a note for detailed display."""
@@ -701,7 +323,6 @@ def format_note_details(note: Any, include_body: bool = True) -> str:
     
     return "\n".join(result_parts)
 
-
 def format_search_results(query: str, results: List[Any]) -> str:
     """Format search results for display."""
     count = len(results)
@@ -723,6 +344,311 @@ def format_search_results(query: str, results: List[Any]) -> str:
     
     return "\n".join(result_parts)
 
+# === GENERIC CRUD OPERATIONS ===
+
+def create_tool(tool_name: str, operation_name: str):
+    """Create a tool decorator with consistent error handling."""
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        return conditional_tool(tool_name)(
+            with_client_error_handling(operation_name)(func)
+        )
+    return decorator
+
+# === CORE TOOLS ===
+
+@create_tool("ping_joplin", "Ping Joplin")
+async def ping_joplin() -> str:
+    """Test connection to Joplin server."""
+    try:
+        client = get_joplin_client()
+        client.ping()
+        return "✅ Joplin server connection successful\n\nThe Joplin server is responding and accessible."
+    except Exception as e:
+        return f"❌ Joplin server connection failed\n\nUnable to reach the Joplin server. Please check your connection settings.\n\nError: {str(e)}"
+
+# === NOTE OPERATIONS ===
+
+@create_tool("get_note", "Get note")
+async def get_note(note_id: str, include_body: bool = True) -> str:
+    """Get a specific note by ID."""
+    note_id = validate_required_param(note_id, "note_id")
+    client = get_joplin_client()
+    note = client.get_note(note_id)
+    return format_note_details(note, include_body)
+
+@create_tool("create_note", "Create note")
+async def create_note(title: str, parent_id: str, body: str = "", is_todo: bool = False, todo_completed: bool = False) -> str:
+    """Create a new note in Joplin."""
+    title = validate_required_param(title, "title")
+    parent_id = validate_required_param(parent_id, "parent_id")
+    
+    client = get_joplin_client()
+    note = client.add_note(
+        title=title, body=body, parent_id=parent_id,
+        is_todo=1 if is_todo else 0, todo_completed=1 if todo_completed else 0
+    )
+    return format_creation_success(ItemType.note, title, str(note))
+
+@create_tool("update_note", "Update note")
+async def update_note(note_id: str, title: Optional[str] = None, body: Optional[str] = None, is_todo: Optional[bool] = None, todo_completed: Optional[bool] = None) -> str:
+    """Update an existing note in Joplin."""
+    note_id = validate_required_param(note_id, "note_id")
+    
+    update_data = {}
+    if title is not None: update_data["title"] = title
+    if body is not None: update_data["body"] = body
+    if is_todo is not None: update_data["is_todo"] = 1 if is_todo else 0
+    if todo_completed is not None: update_data["todo_completed"] = 1 if todo_completed else 0
+    
+    if not update_data:
+        raise ValueError("At least one field must be provided for update")
+    
+    client = get_joplin_client()
+    client.modify_note(note_id, **update_data)
+    return format_update_success(ItemType.note, note_id)
+
+@create_tool("delete_note", "Delete note")
+async def delete_note(note_id: str) -> str:
+    """Delete a note from Joplin."""
+    note_id = validate_required_param(note_id, "note_id")
+    client = get_joplin_client()
+    client.delete_note(note_id)
+    return format_delete_success(ItemType.note, note_id)
+
+@create_tool("search_notes", "Search notes")
+async def search_notes(query: str, limit: int = 20, notebook_id: Optional[str] = None, sort_by: SortBy = SortBy.updated_time, sort_order: SortOrder = SortOrder.desc) -> str:
+    """Search notes with full-text query."""
+    query = validate_required_param(query, "query")
+    limit = validate_limit(limit)
+    
+    client = get_joplin_client()
+    
+    # Get notes based on query
+    if query == "*":
+        results = client.get_notes()
+    else:
+        results = client.search(query=query)
+    
+    notes = process_search_results(results)
+    
+    # Filter by notebook if specified
+    if notebook_id:
+        notes = [n for n in notes if getattr(n, 'parent_id', None) == notebook_id]
+    
+    # Apply limit
+    notes = notes[:limit]
+    
+    if not notes:
+        return format_no_results_message("note", f'for query: "{query}"')
+    
+    return format_search_results(query, notes)
+
+# === NOTEBOOK OPERATIONS ===
+
+@create_tool("list_notebooks", "List notebooks")
+async def list_notebooks() -> str:
+    """List all notebooks."""
+    client = get_joplin_client()
+    notebooks = client.get_all_notebooks()
+    return format_item_list(notebooks, ItemType.notebook)
+
+@create_tool("get_notebook", "Get notebook")
+async def get_notebook(notebook_id: str) -> str:
+    """Get a specific notebook by ID."""
+    notebook_id = validate_required_param(notebook_id, "notebook_id")
+    client = get_joplin_client()
+    notebook = client.get_notebook(notebook_id)
+    return format_item_details(notebook, ItemType.notebook)
+
+@create_tool("create_notebook", "Create notebook")
+async def create_notebook(title: str, parent_id: Optional[str] = None) -> str:
+    """Create a new notebook."""
+    title = validate_required_param(title, "title")
+    
+    client = get_joplin_client()
+    notebook_kwargs = {"title": title}
+    if parent_id:
+        notebook_kwargs["parent_id"] = parent_id.strip()
+    
+    notebook = client.add_notebook(**notebook_kwargs)
+    return format_creation_success(ItemType.notebook, title, str(notebook))
+
+@create_tool("update_notebook", "Update notebook")
+async def update_notebook(notebook_id: str, title: str) -> str:
+    """Update an existing notebook."""
+    notebook_id = validate_required_param(notebook_id, "notebook_id")
+    title = validate_required_param(title, "title")
+    
+    client = get_joplin_client()
+    client.modify_notebook(notebook_id, title=title)
+    return format_update_success(ItemType.notebook, notebook_id)
+
+@create_tool("delete_notebook", "Delete notebook")
+async def delete_notebook(notebook_id: str) -> str:
+    """Delete a notebook from Joplin."""
+    notebook_id = validate_required_param(notebook_id, "notebook_id")
+    client = get_joplin_client()
+    client.delete_notebook(notebook_id)
+    return format_delete_success(ItemType.notebook, notebook_id)
+
+@create_tool("search_notebooks", "Search notebooks")
+async def search_notebooks(query: str, limit: int = 20) -> str:
+    """Search notebooks by title."""
+    query = validate_required_param(query, "query")
+    limit = validate_limit(limit)
+    
+    client = get_joplin_client()
+    all_notebooks = client.get_all_notebooks()
+    matching_notebooks = filter_items_by_title(all_notebooks, query)[:limit]
+    
+    if not matching_notebooks:
+        return format_no_results_message("notebook", f'for query: "{query}"')
+    
+    return format_item_list(matching_notebooks, ItemType.notebook)
+
+@create_tool("get_notes_by_notebook", "Get notes by notebook")
+async def get_notes_by_notebook(notebook_id: str, limit: int = 20) -> str:
+    """Get all notes in a specific notebook."""
+    notebook_id = validate_required_param(notebook_id, "notebook_id")
+    limit = validate_limit(limit)
+    
+    client = get_joplin_client()
+    notes_result = client.get_notes(notebook_id=notebook_id)
+    notes = process_search_results(notes_result)[:limit]
+    
+    if not notes:
+        return format_no_results_message("note", f"in notebook: {notebook_id}")
+    
+    return format_search_results(f"notebook {notebook_id}", notes)
+
+# === TAG OPERATIONS ===
+
+@create_tool("list_tags", "List tags")
+async def list_tags() -> str:
+    """List all tags."""
+    client = get_joplin_client()
+    tags = client.get_all_tags()
+    return format_item_list(tags, ItemType.tag)
+
+@create_tool("get_tag", "Get tag")
+async def get_tag(tag_id: str) -> str:
+    """Get a specific tag by ID."""
+    tag_id = validate_required_param(tag_id, "tag_id")
+    client = get_joplin_client()
+    tag = client.get_tag(tag_id)
+    return format_item_details(tag, ItemType.tag)
+
+@create_tool("create_tag", "Create tag")
+async def create_tag(title: str) -> str:
+    """Create a new tag."""
+    title = validate_required_param(title, "title")
+    client = get_joplin_client()
+    tag = client.add_tag(title=title)
+    return format_creation_success(ItemType.tag, title, str(tag))
+
+@create_tool("update_tag", "Update tag")
+async def update_tag(tag_id: str, title: str) -> str:
+    """Update an existing tag."""
+    tag_id = validate_required_param(tag_id, "tag_id")
+    title = validate_required_param(title, "title")
+    
+    client = get_joplin_client()
+    client.modify_tag(tag_id, title=title)
+    return format_update_success(ItemType.tag, tag_id)
+
+@create_tool("delete_tag", "Delete tag")
+async def delete_tag(tag_id: str) -> str:
+    """Delete a tag from Joplin."""
+    tag_id = validate_required_param(tag_id, "tag_id")
+    client = get_joplin_client()
+    client.delete_tag(tag_id)
+    return format_delete_success(ItemType.tag, tag_id)
+
+@create_tool("search_tags", "Search tags")
+async def search_tags(query: str, limit: int = 20) -> str:
+    """Search tags by title."""
+    query = validate_required_param(query, "query")
+    limit = validate_limit(limit)
+    
+    client = get_joplin_client()
+    all_tags = client.get_all_tags()
+    matching_tags = filter_items_by_title(all_tags, query)[:limit]
+    
+    if not matching_tags:
+        return format_no_results_message("tag", f'for query: "{query}"')
+    
+    return format_item_list(matching_tags, ItemType.tag)
+
+@create_tool("get_tags_by_note", "Get tags by note")
+async def get_tags_by_note(note_id: str) -> str:
+    """Get all tags for a specific note."""
+    note_id = validate_required_param(note_id, "note_id")
+    
+    client = get_joplin_client()
+    tags_result = client.get_tags(note_id=note_id)
+    tags = process_search_results(tags_result)
+    
+    if not tags:
+        return format_no_results_message("tag", f"for note: {note_id}")
+    
+    return format_item_list(tags, ItemType.tag)
+
+@create_tool("get_notes_by_tag", "Get notes by tag")
+async def get_notes_by_tag(tag_id: str, limit: int = 20) -> str:
+    """Get all notes with a specific tag."""
+    tag_id = validate_required_param(tag_id, "tag_id")
+    limit = validate_limit(limit)
+    
+    client = get_joplin_client()
+    notes_result = client.get_notes(tag_id=tag_id)
+    notes = process_search_results(notes_result)[:limit]
+    
+    if not notes:
+        return format_no_results_message("note", f"with tag: {tag_id}")
+    
+    return format_search_results(f"tag {tag_id}", notes)
+
+# === TAG-NOTE RELATIONSHIP OPERATIONS ===
+
+async def _tag_note_impl(note_id: str, tag_id: str) -> str:
+    """Shared implementation for adding a tag to a note."""
+    note_id = validate_required_param(note_id, "note_id")
+    tag_id = validate_required_param(tag_id, "tag_id")
+    
+    client = get_joplin_client()
+    client.add_tag_to_note(tag_id, note_id)
+    return format_relation_success("tagged note", ItemType.note, note_id, ItemType.tag, tag_id)
+
+async def _untag_note_impl(note_id: str, tag_id: str) -> str:
+    """Shared implementation for removing a tag from a note."""
+    note_id = validate_required_param(note_id, "note_id")
+    tag_id = validate_required_param(tag_id, "tag_id")
+    
+    client = get_joplin_client()
+    client.remove_tag_from_note(tag_id, note_id)
+    return format_relation_success("removed tag from note", ItemType.note, note_id, ItemType.tag, tag_id)
+
+# Primary tag operations
+@create_tool("tag_note", "Tag note")
+async def tag_note(note_id: str, tag_id: str) -> str:
+    """Add a tag to a note."""
+    return await _tag_note_impl(note_id, tag_id)
+
+@create_tool("untag_note", "Untag note")
+async def untag_note(note_id: str, tag_id: str) -> str:
+    """Remove a tag from a note."""
+    return await _untag_note_impl(note_id, tag_id)
+
+# Alias tools (for backward compatibility)
+@create_tool("add_tag_to_note", "Add tag to note")
+async def add_tag_to_note(note_id: str, tag_id: str) -> str:
+    """Add a tag to a note (alias for tag_note)."""
+    return await _tag_note_impl(note_id, tag_id)
+
+@create_tool("remove_tag_from_note", "Remove tag from note")
+async def remove_tag_from_note(note_id: str, tag_id: str) -> str:
+    """Remove a tag from a note (alias for untag_note)."""
+    return await _untag_note_impl(note_id, tag_id)
 
 # === RESOURCES ===
 
@@ -739,7 +665,6 @@ async def get_server_info() -> dict:
         }
     except Exception:
         return {"connected": False}
-
 
 # === MAIN RUNNER ===
 
@@ -777,7 +702,6 @@ def main(config_file: Optional[str] = None):
         import traceback
         traceback.print_exc()
         raise
-
 
 if __name__ == "__main__":
     main() 
