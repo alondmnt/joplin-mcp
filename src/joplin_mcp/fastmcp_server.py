@@ -4,7 +4,7 @@
 import os
 import logging
 import datetime
-from typing import Optional, List, Dict, Any, Callable, TypeVar, Union
+from typing import Optional, List, Dict, Any, Callable, TypeVar, Union, Annotated
 from enum import Enum
 from functools import wraps
 
@@ -448,7 +448,14 @@ def create_tool(tool_name: str, operation_name: str):
 
 @create_tool("ping_joplin", "Ping Joplin")
 async def ping_joplin() -> str:
-    """Test connection to Joplin server."""
+    """Test connection to Joplin server.
+    
+    Verifies that the Joplin MCP server can connect to the Joplin application.
+    Use to troubleshoot connection issues or confirm proper configuration.
+    
+    Returns:
+        str: "✅ Joplin server connection successful" if connected, or "❌ Joplin server connection failed" with error details if not.
+    """
     try:
         client = get_joplin_client()
         client.ping()
@@ -459,8 +466,27 @@ async def ping_joplin() -> str:
 # === NOTE OPERATIONS ===
 
 @create_tool("get_note", "Get note")
-async def get_note(note_id: str, include_body: bool = True) -> str:
-    """Get a specific note by ID."""
+async def get_note(
+    note_id: Annotated[str, "The unique identifier of the note to retrieve. This is typically a long alphanumeric string like 'a1b2c3d4e5f6...' that uniquely identifies the note in Joplin."], 
+    include_body: Annotated[bool, "Whether to include the note's content/body in the response. Set to True to see the full note content, False to only see metadata like title, dates, and IDs. Default is True."] = True
+) -> str:
+    """Retrieve a specific note by its unique identifier.
+    
+    Fetches a single note from Joplin using its unique ID. Returns the note's title, content, 
+    creation/modification dates, and other metadata.
+    
+    Parameters:
+        note_id (str): The unique identifier of the note to retrieve. Required.
+        include_body (bool): Whether to include the note's content in the response. 
+                            True = full note with content (default), False = metadata only.
+    
+    Returns:
+        str: Formatted note details including title, ID, content (if requested), creation/modification dates, and parent notebook ID.
+    
+    Examples:
+        - get_note("a1b2c3d4e5f6...", True) - Get full note with content
+        - get_note("a1b2c3d4e5f6...", False) - Get metadata only
+    """
     note_id = validate_required_param(note_id, "note_id")
     client = get_joplin_client()
     
@@ -471,8 +497,34 @@ async def get_note(note_id: str, include_body: bool = True) -> str:
     return format_note_details(note, include_body, "individual_notes")
 
 @create_tool("create_note", "Create note")
-async def create_note(title: str, parent_id: str, body: str = "", is_todo: bool = False, todo_completed: bool = False) -> str:
-    """Create a new note in Joplin."""
+async def create_note(
+    title: Annotated[str, "The title/name of the new note. This is required and will be displayed in Joplin's note list. Example: 'My Important Note' or 'Meeting Notes - Jan 15'"], 
+    parent_id: Annotated[str, "The unique identifier of the notebook where this note should be created. This is required - you must specify which notebook to put the note in. Use list_notebooks or get_notebook tools to find the correct notebook ID."], 
+    body: Annotated[str, "The content/text of the note. This can be plain text or Markdown. Leave empty to create a note with no content initially. Example: 'This is my note content with **bold** and *italic* text.'"] = "",
+    is_todo: Annotated[bool, "Whether this note should be created as a todo/task item. Set to True to make it a checkable todo item, False for a regular note. Default is False."] = False,
+    todo_completed: Annotated[bool, "Whether the todo item should be marked as completed when created. Only relevant if is_todo=True. Set to True to create a completed todo, False for uncompleted. Default is False."] = False
+) -> str:
+    """Create a new note in a specified notebook in Joplin.
+    
+    This tool creates a new note with the specified title, content, and properties in the given notebook.
+    Creates a new note with the specified title, content, and properties. The note can be a regular note or a todo item.
+    
+    Parameters:
+        title (str): The title of the new note. Required.
+        parent_id (str): The unique identifier of the notebook where the note should be created. Required.
+                        Use list_notebooks() to find available notebook IDs.
+        body (str): The content of the note. Can be plain text or Markdown. Optional, defaults to empty.
+        is_todo (bool): Whether to create as a todo/task item. Optional, defaults to False.
+        todo_completed (bool): Whether the todo should be marked as completed when created. 
+                              Only relevant if is_todo=True. Optional, defaults to False.
+    
+    Returns:
+        str: Success message with the created note's title and unique ID that can be used to reference this note.
+    
+    Examples:
+        - create_note("Shopping List", "notebook123", "- Milk\n- Eggs", True, False) - Create uncompleted todo
+        - create_note("Meeting Notes", "work_notebook", "# Meeting with Client", False, False) - Create regular note
+    """
     title = validate_required_param(title, "title")
     parent_id = validate_required_param(parent_id, "parent_id")
     
@@ -484,8 +536,31 @@ async def create_note(title: str, parent_id: str, body: str = "", is_todo: bool 
     return format_creation_success(ItemType.note, title, str(note))
 
 @create_tool("update_note", "Update note")
-async def update_note(note_id: str, title: Optional[str] = None, body: Optional[str] = None, is_todo: Optional[bool] = None, todo_completed: Optional[bool] = None) -> str:
-    """Update an existing note in Joplin."""
+async def update_note(
+    note_id: Annotated[str, "The unique identifier of the note to update. Required."],
+    title: Annotated[Optional[str], "New title for the note. Optional - only updates if provided."] = None,
+    body: Annotated[Optional[str], "New content for the note. Can be plain text or Markdown. Optional - only updates if provided."] = None,
+    is_todo: Annotated[Optional[bool], "Whether to convert the note to/from a todo item. Optional - only updates if provided."] = None,
+    todo_completed: Annotated[Optional[bool], "Whether to mark the todo as completed. Only relevant if note is a todo. Optional - only updates if provided."] = None
+) -> str:
+    """Update an existing note in Joplin.
+    
+    Updates one or more properties of an existing note. At least one field must be provided for update.
+    
+    Parameters:
+        note_id (str): The unique identifier of the note to update. Required.
+        title (str, optional): New title for the note. Only updates if provided.
+        body (str, optional): New content for the note. Can be plain text or Markdown. Only updates if provided.
+        is_todo (bool, optional): Whether to convert the note to/from a todo item. Only updates if provided.
+        todo_completed (bool, optional): Whether to mark the todo as completed. Only updates if provided.
+    
+    Returns:
+        str: Success message confirming the note was updated.
+    
+    Examples:
+        - update_note("note123", title="New Title") - Update only the title
+        - update_note("note123", body="New content", is_todo=True) - Update content and convert to todo
+    """
     note_id = validate_required_param(note_id, "note_id")
     
     update_data = {}
@@ -502,16 +577,57 @@ async def update_note(note_id: str, title: Optional[str] = None, body: Optional[
     return format_update_success(ItemType.note, note_id)
 
 @create_tool("delete_note", "Delete note")
-async def delete_note(note_id: str) -> str:
-    """Delete a note from Joplin."""
+async def delete_note(
+    note_id: Annotated[str, "The unique identifier of the note to delete. Required."]
+) -> str:
+    """Delete a note from Joplin.
+    
+    Permanently removes a note from Joplin. This action cannot be undone.
+    
+    Parameters:
+        note_id (str): The unique identifier of the note to delete. Required.
+    
+    Returns:
+        str: Success message confirming the note was deleted.
+    
+    Examples:
+        - delete_note("note123") - Delete the specified note
+    
+    Warning: This action is permanent and cannot be undone.
+    """
     note_id = validate_required_param(note_id, "note_id")
     client = get_joplin_client()
     client.delete_note(note_id)
     return format_delete_success(ItemType.note, note_id)
 
 @create_tool("search_notes", "Search notes")
-async def search_notes(query: str, limit: int = 20, notebook_id: Optional[str] = None, sort_by: SortBy = SortBy.updated_time, sort_order: SortOrder = SortOrder.desc) -> str:
-    """Search notes with full-text query."""
+async def search_notes(
+    query: Annotated[str, "The search query to find notes. Can be a word, phrase, or '*' to get all notes. Joplin supports full-text search through note titles and content. Example: 'meeting' or 'project planning' or 'grocery list'"], 
+    limit: Annotated[int, "Maximum number of notes to return in the search results. Must be between 1 and 100. Default is 20. Use smaller values for quick overviews, larger values for comprehensive searches."] = 20,
+    notebook_id: Annotated[Optional[str], "Optional notebook ID to limit search to notes within a specific notebook. If provided, only notes in that notebook will be searched. Leave empty to search all notebooks. Example: 'notebook123456789abcdef'"] = None,
+    sort_by: Annotated[SortBy, "How to sort the search results. Options: 'title' (alphabetical), 'created_time' (when created), 'updated_time' (when last modified), 'relevance' (search relevance). Default is 'updated_time' to show most recently modified notes first."] = SortBy.updated_time,
+    sort_order: Annotated[SortOrder, "Sort direction for the results. Options: 'asc' (ascending/oldest first), 'desc' (descending/newest first). Default is 'desc' to show newest/most recent results first."] = SortOrder.desc
+) -> str:
+    """Search for notes using full-text search across titles and content.
+    
+    Searches through all notes in Joplin using the provided query. Performs full-text search on both note titles and content.
+    
+    Parameters:
+        query (str): The search term or phrase to look for in notes. Required.
+                    Use "*" to get all notes. Search is case-insensitive.
+        limit (int): Maximum number of results to return. Must be between 1 and 100. Default is 20.
+        notebook_id (str, optional): Limit search to notes within a specific notebook. Use list_notebooks() to find IDs.
+        sort_by (SortBy): How to sort results. Options: 'title', 'created_time', 'updated_time', 'relevance'. Default is 'updated_time'.
+        sort_order (SortOrder): Sort direction. 'asc' (ascending) or 'desc' (descending). Default is 'desc'.
+    
+    Returns:
+        str: Formatted list of matching notes with title, ID, content (if privacy allows), and dates.
+    
+    Examples:
+        - search_notes("meeting") - Find all notes containing "meeting"
+        - search_notes("project", 10) - Find up to 10 notes about projects
+        - search_notes("*", 5, None, "title", "asc") - Get 5 notes sorted by title A-Z
+    """
     query = validate_required_param(query, "query")
     limit = validate_limit(limit)
     
@@ -542,15 +658,39 @@ async def search_notes(query: str, limit: int = 20, notebook_id: Optional[str] =
 
 @create_tool("list_notebooks", "List notebooks")
 async def list_notebooks() -> str:
-    """List all notebooks."""
+    """List all notebooks/folders in your Joplin instance.
+    
+    Retrieves and displays all notebooks (folders) in your Joplin application. Notebooks are
+    containers that hold your notes, similar to folders in a file system.
+    
+    Returns:
+        str: Formatted list of all notebooks including title, unique ID, parent notebook (if sub-notebook), and creation date.
+             Returns "📁 No notebooks found" if no notebooks exist.
+    
+    Use case: Get notebook IDs for creating new notes or understanding your organizational structure.
+    """
     client = get_joplin_client()
     fields_list = "id,title,created_time,updated_time,parent_id"
     notebooks = client.get_all_notebooks(fields=fields_list)
     return format_item_list(notebooks, ItemType.notebook)
 
 @create_tool("get_notebook", "Get notebook")
-async def get_notebook(notebook_id: str) -> str:
-    """Get a specific notebook by ID."""
+async def get_notebook(
+    notebook_id: Annotated[str, "The unique identifier of the notebook to retrieve. Required."]
+) -> str:
+    """Get a specific notebook by ID.
+    
+    Retrieves detailed information about a single notebook including its title, ID, parent notebook, and creation date.
+    
+    Parameters:
+        notebook_id (str): The unique identifier of the notebook to retrieve. Required.
+    
+    Returns:
+        str: Formatted notebook details including title, ID, parent notebook (if sub-notebook), and creation date.
+    
+    Examples:
+        - get_notebook("notebook123") - Get details for the specified notebook
+    """
     notebook_id = validate_required_param(notebook_id, "notebook_id")
     client = get_joplin_client()
     fields_list = "id,title,created_time,updated_time,parent_id"
@@ -558,8 +698,27 @@ async def get_notebook(notebook_id: str) -> str:
     return format_item_details(notebook, ItemType.notebook)
 
 @create_tool("create_notebook", "Create notebook")
-async def create_notebook(title: str, parent_id: Optional[str] = None) -> str:
-    """Create a new notebook."""
+async def create_notebook(
+    title: Annotated[str, "The name of the new notebook/folder. This is required and will be displayed in Joplin's notebook list. Example: 'Work Projects' or 'Personal Notes' or 'Archive 2024'"], 
+    parent_id: Annotated[Optional[str], "Optional parent notebook ID to create this as a sub-notebook. If provided, this notebook will be created inside the specified parent notebook. Leave empty to create a top-level notebook. Example: 'notebook123456789abcdef'"] = None
+) -> str:
+    """Create a new notebook (folder) in Joplin to organize your notes.
+    
+    Creates a new notebook that can be used to organize and contain notes. You can create top-level notebooks or sub-notebooks within existing notebooks.
+    
+    Parameters:
+        title (str): The name of the new notebook. Required.
+        parent_id (str, optional): The unique identifier of a parent notebook to create this as a sub-notebook.
+                                  Optional - defaults to None (creates a top-level notebook).
+                                  Use list_notebooks() to find available parent notebook IDs.
+    
+    Returns:
+        str: Success message containing the created notebook's title and unique ID that can be used to reference this notebook.
+    
+    Examples:
+        - create_notebook("Work Projects") - Create a top-level notebook for work
+        - create_notebook("2024 Projects", "work_notebook_id") - Create a sub-notebook within work notebook
+    """
     title = validate_required_param(title, "title")
     
     client = get_joplin_client()
@@ -571,8 +730,24 @@ async def create_notebook(title: str, parent_id: Optional[str] = None) -> str:
     return format_creation_success(ItemType.notebook, title, str(notebook))
 
 @create_tool("update_notebook", "Update notebook")
-async def update_notebook(notebook_id: str, title: str) -> str:
-    """Update an existing notebook."""
+async def update_notebook(
+    notebook_id: Annotated[str, "The unique identifier of the notebook to update. Required."],
+    title: Annotated[str, "The new title for the notebook. Required."]
+) -> str:
+    """Update an existing notebook.
+    
+    Updates the title of an existing notebook. Currently only the title can be updated.
+    
+    Parameters:
+        notebook_id (str): The unique identifier of the notebook to update. Required.
+        title (str): The new title for the notebook. Required.
+    
+    Returns:
+        str: Success message confirming the notebook was updated.
+    
+    Examples:
+        - update_notebook("notebook123", "New Notebook Name") - Update notebook title
+    """
     notebook_id = validate_required_param(notebook_id, "notebook_id")
     title = validate_required_param(title, "title")
     
@@ -581,16 +756,49 @@ async def update_notebook(notebook_id: str, title: str) -> str:
     return format_update_success(ItemType.notebook, notebook_id)
 
 @create_tool("delete_notebook", "Delete notebook")
-async def delete_notebook(notebook_id: str) -> str:
-    """Delete a notebook from Joplin."""
+async def delete_notebook(
+    notebook_id: Annotated[str, "The unique identifier of the notebook to delete. Required."]
+) -> str:
+    """Delete a notebook from Joplin.
+    
+    Permanently removes a notebook from Joplin. This action cannot be undone.
+    
+    Parameters:
+        notebook_id (str): The unique identifier of the notebook to delete. Required.
+    
+    Returns:
+        str: Success message confirming the notebook was deleted.
+    
+    Examples:
+        - delete_notebook("notebook123") - Delete the specified notebook
+    
+    Warning: This action is permanent and cannot be undone. All notes in the notebook will also be deleted.
+    """
     notebook_id = validate_required_param(notebook_id, "notebook_id")
     client = get_joplin_client()
     client.delete_notebook(notebook_id)
     return format_delete_success(ItemType.notebook, notebook_id)
 
 @create_tool("search_notebooks", "Search notebooks")
-async def search_notebooks(query: str, limit: int = 20) -> str:
-    """Search notebooks by title."""
+async def search_notebooks(
+    query: Annotated[str, "The search query to find notebooks by title. Required."],
+    limit: Annotated[int, "Maximum number of notebooks to return. Must be between 1 and 100. Default is 20."] = 20
+) -> str:
+    """Search notebooks by title.
+    
+    Searches for notebooks that match the query in their title. Search is case-insensitive.
+    
+    Parameters:
+        query (str): The search query to find notebooks by title. Required.
+        limit (int): Maximum number of notebooks to return. Must be between 1 and 100. Default is 20.
+    
+    Returns:
+        str: Formatted list of matching notebooks with title, ID, parent notebook, and creation date.
+    
+    Examples:
+        - search_notebooks("work") - Find notebooks with "work" in the title
+        - search_notebooks("project", 5) - Find up to 5 notebooks with "project" in the title
+    """
     query = validate_required_param(query, "query")
     limit = validate_limit(limit)
     
@@ -605,8 +813,25 @@ async def search_notebooks(query: str, limit: int = 20) -> str:
     return format_item_list(matching_notebooks, ItemType.notebook)
 
 @create_tool("get_notes_by_notebook", "Get notes by notebook")
-async def get_notes_by_notebook(notebook_id: str, limit: int = 20) -> str:
-    """Get all notes in a specific notebook."""
+async def get_notes_by_notebook(
+    notebook_id: Annotated[str, "The unique identifier of the notebook to get notes from. Required."],
+    limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20
+) -> str:
+    """Get all notes in a specific notebook.
+    
+    Retrieves all notes contained within a specific notebook, showing their titles, IDs, content, and metadata.
+    
+    Parameters:
+        notebook_id (str): The unique identifier of the notebook to get notes from. Required.
+        limit (int): Maximum number of notes to return. Must be between 1 and 100. Default is 20.
+    
+    Returns:
+        str: Formatted list of notes in the notebook with title, ID, content (if privacy allows), and dates.
+    
+    Examples:
+        - get_notes_by_notebook("notebook123") - Get all notes from the specified notebook
+        - get_notes_by_notebook("notebook123", 10) - Get up to 10 notes from the notebook
+    """
     notebook_id = validate_required_param(notebook_id, "notebook_id")
     limit = validate_limit(limit)
     
@@ -624,15 +849,39 @@ async def get_notes_by_notebook(notebook_id: str, limit: int = 20) -> str:
 
 @create_tool("list_tags", "List tags")
 async def list_tags() -> str:
-    """List all tags."""
+    """List all tags in your Joplin instance with note counts.
+    
+    Retrieves and displays all tags that exist in your Joplin application. Tags are labels
+    that can be applied to notes for categorization and organization.
+    
+    Returns:
+        str: Formatted list of all tags including title, unique ID, number of notes tagged with it, and creation date.
+             Returns "🏷️ No tags found" if no tags exist.
+    
+    Use case: Get tag IDs for applying to notes or searching. Understand your tagging system.
+    """
     client = get_joplin_client()
     fields_list = "id,title,created_time,updated_time"
     tags = client.get_all_tags(fields=fields_list)
     return format_tag_list_with_counts(tags, client)
 
 @create_tool("get_tag", "Get tag")
-async def get_tag(tag_id: str) -> str:
-    """Get a specific tag by ID."""
+async def get_tag(
+    tag_id: Annotated[str, "The unique identifier of the tag to retrieve. Required."]
+) -> str:
+    """Get a specific tag by ID.
+    
+    Retrieves detailed information about a single tag including its title, ID, and creation date.
+    
+    Parameters:
+        tag_id (str): The unique identifier of the tag to retrieve. Required.
+    
+    Returns:
+        str: Formatted tag details including title, ID, and creation date.
+    
+    Examples:
+        - get_tag("tag123") - Get details for the specified tag
+    """
     tag_id = validate_required_param(tag_id, "tag_id")
     client = get_joplin_client()
     fields_list = "id,title,created_time,updated_time"
@@ -640,16 +889,47 @@ async def get_tag(tag_id: str) -> str:
     return format_item_details(tag, ItemType.tag)
 
 @create_tool("create_tag", "Create tag")
-async def create_tag(title: str) -> str:
-    """Create a new tag."""
+async def create_tag(
+    title: Annotated[str, "The name of the new tag. Required."]
+) -> str:
+    """Create a new tag.
+    
+    Creates a new tag that can be applied to notes for categorization and organization.
+    
+    Parameters:
+        title (str): The name of the new tag. Required.
+    
+    Returns:
+        str: Success message with the created tag's title and unique ID that can be used to reference this tag.
+    
+    Examples:
+        - create_tag("work") - Create a new tag named "work"
+        - create_tag("important") - Create a new tag named "important"
+    """
     title = validate_required_param(title, "title")
     client = get_joplin_client()
     tag = client.add_tag(title=title)
     return format_creation_success(ItemType.tag, title, str(tag))
 
 @create_tool("update_tag", "Update tag")
-async def update_tag(tag_id: str, title: str) -> str:
-    """Update an existing tag."""
+async def update_tag(
+    tag_id: Annotated[str, "The unique identifier of the tag to update. Required."],
+    title: Annotated[str, "The new title for the tag. Required."]
+) -> str:
+    """Update an existing tag.
+    
+    Updates the title of an existing tag. Currently only the title can be updated.
+    
+    Parameters:
+        tag_id (str): The unique identifier of the tag to update. Required.
+        title (str): The new title for the tag. Required.
+    
+    Returns:
+        str: Success message confirming the tag was updated.
+    
+    Examples:
+        - update_tag("tag123", "work-urgent") - Update tag title to "work-urgent"
+    """
     tag_id = validate_required_param(tag_id, "tag_id")
     title = validate_required_param(title, "title")
     
@@ -658,16 +938,50 @@ async def update_tag(tag_id: str, title: str) -> str:
     return format_update_success(ItemType.tag, tag_id)
 
 @create_tool("delete_tag", "Delete tag")
-async def delete_tag(tag_id: str) -> str:
-    """Delete a tag from Joplin."""
+async def delete_tag(
+    tag_id: Annotated[str, "The unique identifier of the tag to delete. Required."]
+) -> str:
+    """Delete a tag from Joplin.
+    
+    Permanently removes a tag from Joplin. This action cannot be undone.
+    The tag will be removed from all notes that currently have it.
+    
+    Parameters:
+        tag_id (str): The unique identifier of the tag to delete. Required.
+    
+    Returns:
+        str: Success message confirming the tag was deleted.
+    
+    Examples:
+        - delete_tag("tag123") - Delete the specified tag
+    
+    Warning: This action is permanent and cannot be undone. The tag will be removed from all notes.
+    """
     tag_id = validate_required_param(tag_id, "tag_id")
     client = get_joplin_client()
     client.delete_tag(tag_id)
     return format_delete_success(ItemType.tag, tag_id)
 
 @create_tool("search_tags", "Search tags")
-async def search_tags(query: str, limit: int = 20) -> str:
-    """Search tags by title."""
+async def search_tags(
+    query: Annotated[str, "The search query to find tags by title. Required."],
+    limit: Annotated[int, "Maximum number of tags to return. Must be between 1 and 100. Default is 20."] = 20
+) -> str:
+    """Search tags by title.
+    
+    Searches for tags that match the query in their title. Search is case-insensitive.
+    
+    Parameters:
+        query (str): The search query to find tags by title. Required.
+        limit (int): Maximum number of tags to return. Must be between 1 and 100. Default is 20.
+    
+    Returns:
+        str: Formatted list of matching tags with title, ID, and creation date.
+    
+    Examples:
+        - search_tags("work") - Find tags with "work" in the title
+        - search_tags("project", 5) - Find up to 5 tags with "project" in the title
+    """
     query = validate_required_param(query, "query")
     limit = validate_limit(limit)
     
@@ -682,8 +996,23 @@ async def search_tags(query: str, limit: int = 20) -> str:
     return format_item_list(matching_tags, ItemType.tag)
 
 @create_tool("get_tags_by_note", "Get tags by note")
-async def get_tags_by_note(note_id: str) -> str:
-    """Get all tags for a specific note."""
+async def get_tags_by_note(
+    note_id: Annotated[str, "The unique identifier of the note to get tags from. Required."]
+) -> str:
+    """Get all tags for a specific note.
+    
+    Retrieves all tags that are currently applied to a specific note.
+    
+    Parameters:
+        note_id (str): The unique identifier of the note to get tags from. Required.
+    
+    Returns:
+        str: Formatted list of tags applied to the note with title, ID, and creation date.
+             Returns "No tags found for note" if the note has no tags.
+    
+    Examples:
+        - get_tags_by_note("note123") - Get all tags for the specified note
+    """
     note_id = validate_required_param(note_id, "note_id")
     
     client = get_joplin_client()
@@ -697,8 +1026,26 @@ async def get_tags_by_note(note_id: str) -> str:
     return format_item_list(tags, ItemType.tag)
 
 @create_tool("get_notes_by_tag", "Get notes by tag")
-async def get_notes_by_tag(tag_id: str, limit: int = 20) -> str:
-    """Get all notes with a specific tag."""
+async def get_notes_by_tag(
+    tag_id: Annotated[str, "The unique identifier of the tag to get notes from. Required."],
+    limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20
+) -> str:
+    """Get all notes with a specific tag.
+    
+    Retrieves all notes that have been tagged with a specific tag, showing their titles, IDs, content, and metadata.
+    
+    Parameters:
+        tag_id (str): The unique identifier of the tag to get notes from. Required.
+        limit (int): Maximum number of notes to return. Must be between 1 and 100. Default is 20.
+    
+    Returns:
+        str: Formatted list of notes with the specified tag including title, ID, content (if privacy allows), and dates.
+             Returns "No notes found with tag" if no notes have this tag.
+    
+    Examples:
+        - get_notes_by_tag("tag123") - Get all notes with the specified tag
+        - get_notes_by_tag("tag123", 10) - Get up to 10 notes with the tag
+    """
     tag_id = validate_required_param(tag_id, "tag_id")
     limit = validate_limit(limit)
     
@@ -734,24 +1081,97 @@ async def _untag_note_impl(note_id: str, tag_id: str) -> str:
 
 # Primary tag operations
 @create_tool("tag_note", "Tag note")
-async def tag_note(note_id: str, tag_id: str) -> str:
-    """Add a tag to a note."""
+async def tag_note(
+    note_id: Annotated[str, "The unique identifier of the note to add a tag to. This is the note that will be tagged. Example: 'note123456789abcdef'"], 
+    tag_id: Annotated[str, "The unique identifier of the tag to add to the note. This tag will be applied to the note for categorization. Example: 'tag987654321fedcba'"]
+) -> str:
+    """Add a tag to a note for categorization and organization.
+    
+    Applies an existing tag to a note, creating a relationship between them. Tags help you
+    categorize and organize notes across different notebooks.
+    
+    Parameters:
+        note_id (str): The unique identifier of the note to tag. Required.
+                      Use get_note() or search_notes() to find note IDs.
+        tag_id (str): The unique identifier of the tag to apply to the note. Required.
+                     Use list_tags() or create_tag() to find or create tag IDs.
+    
+    Returns:
+        str: Success message confirming the tag was added to the note.
+    
+    Examples:
+        - tag_note("note123", "tag_work") - Add 'work' tag to a note
+        - tag_note("meeting_note_id", "tag_important") - Mark a meeting note as important
+    
+    Note: Both the note and tag must exist in Joplin. A note can have multiple tags.
+    """
     return await _tag_note_impl(note_id, tag_id)
 
 @create_tool("untag_note", "Untag note")
-async def untag_note(note_id: str, tag_id: str) -> str:
-    """Remove a tag from a note."""
+async def untag_note(
+    note_id: Annotated[str, "The unique identifier of the note to remove a tag from. Required."], 
+    tag_id: Annotated[str, "The unique identifier of the tag to remove from the note. Required."]
+) -> str:
+    """Remove a tag from a note.
+    
+    Removes an existing tag from a note, breaking the relationship between them.
+    
+    Parameters:
+        note_id (str): The unique identifier of the note to remove a tag from. Required.
+        tag_id (str): The unique identifier of the tag to remove from the note. Required.
+    
+    Returns:
+        str: Success message confirming the tag was removed from the note.
+    
+    Examples:
+        - untag_note("note123", "tag_work") - Remove 'work' tag from a note
+        - untag_note("meeting_note_id", "tag_important") - Remove 'important' tag from meeting note
+    
+    Note: Both the note and tag must exist in Joplin.
+    """
     return await _untag_note_impl(note_id, tag_id)
 
 # Alias tools (for backward compatibility)
 @create_tool("add_tag_to_note", "Add tag to note")
-async def add_tag_to_note(note_id: str, tag_id: str) -> str:
-    """Add a tag to a note (alias for tag_note)."""
+async def add_tag_to_note(
+    note_id: Annotated[str, "The unique identifier of the note to add a tag to. Required."], 
+    tag_id: Annotated[str, "The unique identifier of the tag to add to the note. Required."]
+) -> str:
+    """Add a tag to a note (alias for tag_note).
+    
+    This is an alias for the tag_note function. Applies an existing tag to a note.
+    
+    Parameters:
+        note_id (str): The unique identifier of the note to add a tag to. Required.
+        tag_id (str): The unique identifier of the tag to add to the note. Required.
+    
+    Returns:
+        str: Success message confirming the tag was added to the note.
+    
+    Examples:
+        - add_tag_to_note("note123", "tag_work") - Add 'work' tag to a note
+    """
     return await _tag_note_impl(note_id, tag_id)
 
 @create_tool("remove_tag_from_note", "Remove tag from note")
-async def remove_tag_from_note(note_id: str, tag_id: str) -> str:
-    """Remove a tag from a note (alias for untag_note)."""
+async def remove_tag_from_note(
+    note_id: Annotated[str, "The unique identifier of the note to remove a tag from. Required."], 
+    tag_id: Annotated[str, "The unique identifier of the tag to remove from the note. Required."]
+) -> str:
+    """Remove a tag from a note (alias for untag_note).
+    
+    This is an alias for the untag_note function. Removes an existing tag from a note.
+    
+    Parameters:
+        note_id (str): The unique identifier of the note to remove a tag from. Required.
+        tag_id (str): The unique identifier of the tag to remove from the note. Required.
+    
+    Returns:
+        str: Success message confirming the tag was removed from the note.
+    
+    Examples:
+        - remove_tag_from_note("note123", "tag_work") - Remove 'work' tag from a note
+    """
     return await _untag_note_impl(note_id, tag_id)
 
 # === RESOURCES ===
