@@ -15,7 +15,7 @@ import shutil
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Type
+from typing import Dict, List, Optional, Any, Type, Union
 
 # Color codes for terminal output
 class Colors:
@@ -179,6 +179,127 @@ def get_permission_settings() -> Dict[str, bool]:
     print_info(f"• Delete (remove permanently): {'✅ Enabled' if delete_enabled else '❌ Disabled'}")
     
     return permissions
+
+def get_content_privacy_settings() -> Dict[str, Union[str, int]]:
+    """Get content privacy settings from user with three context levels."""
+    print_step("Content Privacy Configuration")
+    print_info("Configure what note content the AI assistant can see:")
+    print_info("This is important for privacy and security when dealing with sensitive notes.")
+    print()
+    
+    print_colored("📋 Content Exposure Levels:", Colors.BOLD)
+    print_info("• none:    Only titles and metadata (maximum privacy)")
+    print_info("• preview: Short content snippets (balanced privacy)")
+    print_info("• full:    Complete note content (full functionality)")
+    print()
+    
+    content_exposure = {}
+    
+    # 1. Search Results
+    print_colored("1. 🔍 SEARCH RESULTS", Colors.BLUE + Colors.BOLD)
+    print_info("   When searching notes, what content should be visible?")
+    print_info("   Contexts: search_notes, search results from other operations")
+    print()
+    
+    while True:
+        search_level = input("Search results content level (none/preview/full) [default: preview]: ").lower().strip()
+        if search_level in ('', 'preview'):
+            content_exposure["search_results"] = "preview"
+            break
+        elif search_level in ('none', 'preview', 'full'):
+            content_exposure["search_results"] = search_level
+            break
+        else:
+            print_warning("Please enter 'none', 'preview', or 'full'.")
+    
+    # 2. Individual Notes
+    print()
+    print_colored("2. 📝 INDIVIDUAL NOTES", Colors.YELLOW + Colors.BOLD)
+    print_info("   When retrieving a specific note, what content should be visible?")
+    print_info("   Contexts: get_note operation")
+    print()
+    
+    while True:
+        note_level = input("Individual note content level (none/preview/full) [default: full]: ").lower().strip()
+        if note_level in ('', 'full'):
+            content_exposure["individual_notes"] = "full"
+            break
+        elif note_level in ('none', 'preview', 'full'):
+            content_exposure["individual_notes"] = note_level
+            break
+        else:
+            print_warning("Please enter 'none', 'preview', or 'full'.")
+    
+    # 3. Note Listings
+    print()
+    print_colored("3. 📂 NOTE LISTINGS", Colors.MAGENTA + Colors.BOLD)
+    print_info("   When listing notes by notebook/tag, what content should be visible?")
+    print_info("   Contexts: get_notes_by_notebook, get_notes_by_tag")
+    print()
+    
+    while True:
+        listing_level = input("Note listings content level (none/preview/full) [default: none]: ").lower().strip()
+        if listing_level in ('', 'none'):
+            content_exposure["listings"] = "none"
+            break
+        elif listing_level in ('none', 'preview', 'full'):
+            content_exposure["listings"] = listing_level
+            break
+        else:
+            print_warning("Please enter 'none', 'preview', or 'full'.")
+    
+    # 4. Preview Length (if any previews are enabled)
+    if any(level == "preview" for level in content_exposure.values()):
+        print()
+        print_colored("4. ✂️  PREVIEW LENGTH", Colors.CYAN + Colors.BOLD)
+        print_info("   Maximum length for content previews (in characters)")
+        print()
+        
+        while True:
+            try:
+                length_input = input("Preview length (50-500) [default: 200]: ").strip()
+                if length_input == '':
+                    content_exposure["max_preview_length"] = 200
+                    break
+                length = int(length_input)
+                if 50 <= length <= 500:
+                    content_exposure["max_preview_length"] = length
+                    break
+                else:
+                    print_warning("Preview length must be between 50 and 500 characters.")
+            except ValueError:
+                print_warning("Please enter a valid number.")
+    else:
+        content_exposure["max_preview_length"] = 200
+    
+    # Summary
+    print()
+    print_colored("🔒 Privacy Summary:", Colors.BOLD)
+    print_info(f"• Search results: {content_exposure['search_results']}")
+    print_info(f"• Individual notes: {content_exposure['individual_notes']}")
+    print_info(f"• Note listings: {content_exposure['listings']}")
+    print_info(f"• Preview length: {content_exposure['max_preview_length']} characters")
+    
+    # Privacy assessment
+    privacy_score = 0
+    for context in ["search_results", "individual_notes", "listings"]:
+        level = content_exposure[context]
+        if level == "none":
+            privacy_score += 2
+        elif level == "preview":
+            privacy_score += 1
+        # "full" adds 0
+    
+    print()
+    if privacy_score >= 5:
+        print_colored("✅ High Privacy: Minimal content exposure", Colors.GREEN + Colors.BOLD)
+    elif privacy_score >= 3:
+        print_colored("⚠️  Balanced Privacy: Some content visible", Colors.YELLOW + Colors.BOLD)
+    else:
+        print_colored("❌ Low Privacy: Significant content exposure", Colors.RED + Colors.BOLD)
+        print_warning("Consider using 'none' or 'preview' for better privacy protection.")
+    
+    return content_exposure
 
 # === CHAT INTERFACE INTEGRATION ===
 
@@ -552,8 +673,10 @@ def print_final_instructions(config_path: Path, claude_updated: bool, is_develop
             print_info(f"• {tool}")
     
     print()
-    print_colored("⚠️  Note: Tool permissions are configured during installation", Colors.YELLOW)
-    print_info("Edit joplin-mcp.json to modify tool permissions if needed later")
+    print_colored("⚠️  Configuration notes:", Colors.YELLOW)
+    print_info("• Tool permissions and content privacy are configured during installation")
+    print_info("• Edit joplin-mcp.json to modify settings if needed later")
+    print_info("• See docs/content-privacy.md for detailed privacy controls information")
     
     print()
     print_colored("🆘 Troubleshooting:", Colors.BOLD)

@@ -1007,6 +1007,7 @@ class JoplinMCPConfig:
         cls, 
         token: Optional[str] = None,
         include_permissions: bool = True,
+        include_content_privacy: bool = True,
         **defaults
     ) -> "JoplinMCPConfig":
         """Create configuration interactively with user prompts.
@@ -1014,12 +1015,13 @@ class JoplinMCPConfig:
         Args:
             token: Pre-provided token (skip token prompt if provided)
             include_permissions: Whether to prompt for tool permissions
+            include_content_privacy: Whether to prompt for content privacy settings
             defaults: Default values for configuration options
         
         Returns:
             Configured JoplinMCPConfig instance
         """
-        from .ui_integration import get_permission_settings, get_token_interactively
+        from .ui_integration import get_permission_settings, get_token_interactively, get_content_privacy_settings
         
         # Get token if not provided
         if not token:
@@ -1031,6 +1033,12 @@ class JoplinMCPConfig:
         else:
             tool_permissions = cls.DEFAULT_TOOLS.copy()
         
+        # Get content privacy settings if requested
+        if include_content_privacy:
+            content_privacy = get_content_privacy_settings()
+        else:
+            content_privacy = cls.DEFAULT_CONTENT_EXPOSURE.copy()
+        
         # Create configuration with user choices and defaults
         config_kwargs = {
             "host": defaults.get("host", "localhost"),
@@ -1038,7 +1046,8 @@ class JoplinMCPConfig:
             "token": token,
             "timeout": defaults.get("timeout", 30),
             "verify_ssl": defaults.get("verify_ssl", False),
-            "tools": tool_permissions
+            "tools": tool_permissions,
+            "content_exposure": content_privacy
         }
         
         return cls(**config_kwargs)
