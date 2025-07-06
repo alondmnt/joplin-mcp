@@ -58,13 +58,15 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/joplin-mcp"
-Documentation = "https://github.com/your-org/joplin-mcp/blob/main/README.md"
-Repository = "https://github.com/your-org/joplin-mcp"
-Issues = "https://github.com/your-org/joplin-mcp/issues"
+Homepage = "https://github.com/alondmnt/joplin-mcp"
+Documentation = "https://github.com/alondmnt/joplin-mcp/blob/main/README.md"
+Repository = "https://github.com/alondmnt/joplin-mcp"
+Issues = "https://github.com/alondmnt/joplin-mcp/issues"
 
 [project.scripts]
 joplin-mcp = "joplin_mcp.server:main"
+joplin-mcp-server = "joplin_mcp.server:main"
+joplin-mcp-install = "joplin_mcp.install:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

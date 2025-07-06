@@ -1,6 +1,6 @@
-# Joplin MCP Server (FastMCP)
+# Joplin MCP Server
 
-A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://joplinapp.org/) note-taking application, enabling AI assistants to interact with your Joplin notes, notebooks, and tags through a standardized interface.
+A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://joplinapp.org/) note-taking application via its Pythohn API [joppy](https://github.com/marph91/joppy), enabling AI assistants to interact with your Joplin notes, notebooks, and tags through a standardized interface.
 
 ## 🎯 Overview
 
@@ -8,42 +8,112 @@ This FastMCP server provides AI assistants with comprehensive access to your Jop
 
 ## 🔧 Complete Tool Reference
 
-### 📝 Note Management (5 tools)
-- **search_notes** - Full-text search across all notes with advanced filtering
-- **get_note** - Retrieve specific notes with metadata and content
-- **create_note** - Create new notes with support for todos, tags, and notebooks
-- **update_note** - Modify existing notes with flexible parameter support
-- **delete_note** - Remove notes with confirmation
+**23 tools** organized by category and permission level:
 
-### 📁 Notebook Management (7 tools)
-- **list_notebooks** - Browse all notebooks with hierarchical structure
-- **get_notebook** - Get detailed notebook information
-- **create_notebook** - Create new notebooks with parent-child relationships
-- **update_notebook** - Modify notebook titles and organization
-- **delete_notebook** - Remove notebooks with confirmation
-- **search_notebooks** - Find notebooks by name or content
-- **get_notes_by_notebook** - List all notes within a specific notebook
+| Tool | Category | Permission Level | Description |
+|------|----------|------------------|-------------|
+| **📝 Note Management** | | | |
+| `search_notes` | Notes | 🔍 Read | Full-text search across all notes with advanced filtering |
+| `get_note` | Notes | 🔍 Read | Retrieve specific notes with metadata and content |
+| `create_note` | Notes | 📝 Write | Create new notes with support for todos, tags, and notebooks |
+| `update_note` | Notes | ✏️ Update | Modify existing notes with flexible parameter support |
+| `delete_note` | Notes | 🗑️ Delete | Remove notes with confirmation |
+| **📁 Notebook Management** | | | |
+| `list_notebooks` | Notebooks | 🔍 Read | Browse all notebooks with hierarchical structure |
+| `get_notebook` | Notebooks | 🔍 Read | Get detailed notebook information |
+| `create_notebook` | Notebooks | 📝 Write | Create new notebooks with parent-child relationships |
+| `update_notebook` | Notebooks | ✏️ Update | Modify notebook titles and organization |
+| `delete_notebook` | Notebooks | 🗑️ Delete | Remove notebooks with confirmation |
+| `search_notebooks` | Notebooks | 🔍 Read | Find notebooks by name or content |
+| `get_notes_by_notebook` | Notebooks | 🔍 Read | List all notes within a specific notebook |
+| **🏷️ Tag Management** | | | |
+| `list_tags` | Tags | 🔍 Read | View all available tags |
+| `get_tag` | Tags | 🔍 Read | Retrieve specific tag information |
+| `create_tag` | Tags | 📝 Write | Create new tags for organization |
+| `update_tag` | Tags | ✏️ Update | Modify tag names and properties |
+| `delete_tag` | Tags | 🗑️ Delete | Remove tags with confirmation |
+| `search_tags` | Tags | 🔍 Read | Find tags by name or pattern |
+| `get_tags_by_note` | Tags | 🔍 Read | List all tags assigned to a specific note |
+| `get_notes_by_tag` | Tags | 🔍 Read | Find all notes with a specific tag |
+| **🔗 Relationship Management** | | | |
+| `tag_note` | Tags | ✏️ Update | Add tags to notes (create relationships) |
+| `untag_note` | Tags | ✏️ Update | Remove tags from notes (remove relationships) |
+| **🔧 System Tools** | | | |
+| `ping_joplin` | Utilities | 🔍 Read | Test server connectivity and health |
 
-### 🏷️ Tag Management (7 tools)
-- **list_tags** - View all available tags
-- **get_tag** - Retrieve specific tag information
-- **create_tag** - Create new tags for organization
-- **update_tag** - Modify tag names and properties
-- **delete_tag** - Remove tags with confirmation
-- **search_tags** - Find tags by name or pattern
-- **get_tags_by_note** - List all tags assigned to a specific note
-
-### 🔗 Relationship Management (3 tools)
-- **tag_note** - Add tags to notes (create relationships)
-- **untag_note** - Remove tags from notes (remove relationships)
-- **get_notes_by_tag** - Find all notes with a specific tag
-
-### 🔧 System Tools (1 tool)
-- **ping_joplin** - Test server connectivity and health
+**Permission Levels:**
+- 🔍 **Read**: Always enabled - safe operations for browsing and searching
+- 📝 **Write**: Create new objects (configurable during installation)
+- ✏️ **Update**: Modify existing objects (configurable during installation)  
+- 🗑️ **Delete**: Remove objects permanently (configurable during installation)
 
 ## 🚀 Quick Start
 
-### FastMCP Server Setup
+### Option 1: Pip Install (Recommended for most users)
+
+The simplest way to install for end users:
+
+```bash
+# Install the package
+pip install joplin-mcp
+
+# Run the configuration script (any of these work):
+joplin-mcp-install           # Console command (recommended)
+python -m joplin_mcp.install # Module command
+```
+
+**Available commands after pip install:**
+- `joplin-mcp-install` - Interactive configuration script
+- `joplin-mcp-server` - Run the MCP server  
+- `joplin-mcp` - Run the MCP server (alias)
+
+This approach:
+- ✅ Handles all dependencies automatically
+- ✅ Works in any Python environment
+- ✅ Provides the same configuration experience
+- ✅ Installs the package globally or in your current environment
+- ✅ Provides convenient console commands
+
+### Option 2: Development Install
+
+For developers or users who want the latest features:
+
+#### For macOS/Linux users:
+```bash
+# Clone the repository
+git clone https://github.com/alondmnt/joplin-mcp.git
+cd joplin-mcp
+
+# Run the installation script (includes virtual environment setup)
+./install.sh
+```
+
+#### For Windows users:
+```batch
+REM Clone the repository
+git clone https://github.com/alondmnt/joplin-mcp.git
+cd joplin-mcp
+
+REM Run the installation script
+install.bat
+```
+
+#### Or run the Python script directly:
+```bash
+python install.py
+```
+
+**Both approaches provide:**
+1. ✅ Prompt you for your Joplin API token
+2. ✅ Configure tool permissions (3 levels: Write, Update, Delete)
+3. ✅ Create the `joplin-mcp.json` configuration file
+4. ✅ Find and update your Claude Desktop configuration
+5. ✅ Test the connection to Joplin
+6. ✅ Provide detailed setup instructions
+
+### Manual Installation
+
+If you prefer to set up manually or the automated script doesn't work for your setup:
 
 ### Prerequisites
 
@@ -87,16 +157,32 @@ Create `joplin-mcp.json` in your project directory:
 }
 ```
 
-#### 4. Tool Configuration (Optional)
+#### 4. Tool Permission Configuration
 
-You can **enable or disable individual tools** to customize which operations are available to AI assistants. This is useful for:
-- **Security**: Disable destructive operations like `delete_note`, `delete_notebook`, `delete_tag`
-- **Simplicity**: Enable only the tools you need
-- **Development**: Test specific functionality
+The installation script provides **3 levels of permission control** for enhanced security:
 
-##### Basic Tool Configuration
+##### 📝 **Write Permission** (Creating new objects)
+- `create_note` - Create new notes
+- `create_notebook` - Create new notebooks  
+- `create_tag` - Create new tags
 
-Add a `tools` section to your configuration file:
+##### ✏️ **Update Permission** (Modifying existing objects)
+- `update_note` - Update existing notes
+- `update_notebook` - Update existing notebooks
+- `update_tag` - Update existing tags
+- `tag_note` - Add tags to notes
+- `untag_note` - Remove tags from notes
+
+##### 🗑️ **Delete Permission** (Permanently removing objects)
+- `delete_note` - Delete notes
+- `delete_notebook` - Delete notebooks
+- `delete_tag` - Delete tags
+
+The installation script will prompt you for each permission level and configure the tools accordingly. This provides fine-grained control over what operations the AI assistant can perform.
+
+##### Manual Tool Configuration
+
+If you need to modify permissions later, edit the `tools` section in your configuration file:
 
 ```json
 {
@@ -104,6 +190,14 @@ Add a `tools` section to your configuration file:
   "host": "localhost",
   "port": 41184,
   "tools": {
+    "create_note": true,
+    "create_notebook": true,
+    "create_tag": true,
+    "update_note": true,
+    "update_notebook": true,
+    "update_tag": true,
+    "tag_note": true,
+    "untag_note": true,
     "delete_note": false,
     "delete_notebook": false,
     "delete_tag": false
@@ -121,44 +215,45 @@ export JOPLIN_TOOL_DELETE_NOTEBOOK=false
 export JOPLIN_TOOL_DELETE_TAG=false
 ```
 
-##### Available Tools
 
-All tools are **enabled by default**. Here's the complete list:
-
-| Tool | Category | Description | Default |
-|------|----------|-------------|---------|
-| `search_notes` | Notes | Search notes with full-text query | ✅ |
-| `get_note` | Notes | Retrieve a specific note by ID | ✅ |
-| `create_note` | Notes | Create a new note | ✅ |
-| `update_note` | Notes | Update an existing note | ✅ |
-| `delete_note` | Notes | Delete a note | ✅ |
-| `list_notebooks` | Notebooks | List all notebooks | ✅ |
-| `get_notebook` | Notebooks | Get notebook details | ✅ |
-| `create_notebook` | Notebooks | Create a new notebook | ✅ |
-| `update_notebook` | Notebooks | Update an existing notebook | ✅ |
-| `delete_notebook` | Notebooks | Delete a notebook | ✅ |
-| `search_notebooks` | Notebooks | Search notebooks by name | ✅ |
-| `get_notes_by_notebook` | Notebooks | Get all notes in a notebook | ✅ |
-| `list_tags` | Tags | List all tags | ✅ |
-| `get_tag` | Tags | Get a specific tag by ID | ✅ |
-| `create_tag` | Tags | Create a new tag | ✅ |
-| `update_tag` | Tags | Update an existing tag | ✅ |
-| `delete_tag` | Tags | Delete a tag | ✅ |
-| `search_tags` | Tags | Search tags by name | ✅ |
-| `get_tags_by_note` | Tags | Get all tags for a note | ✅ |
-| `get_notes_by_tag` | Tags | Get all notes with a tag | ✅ |
-| `tag_note` | Tags | Add tag to note | ✅ |
-| `untag_note` | Tags | Remove tag from note | ✅ |
-| `ping_joplin` | Utilities | Test server connection | ✅ |
 
 ##### Configuration Examples
 
-**Minimal (disable dangerous operations):**
+**Recommended (Write + Update, no Delete):**
 ```json
 {
   "host": "localhost",
   "port": 41184,
   "tools": {
+    "create_note": true,
+    "create_notebook": true,
+    "create_tag": true,
+    "update_note": true,
+    "update_notebook": true,
+    "update_tag": true,
+    "tag_note": true,
+    "untag_note": true,
+    "delete_note": false,
+    "delete_notebook": false,
+    "delete_tag": false
+  }
+}
+```
+
+**Conservative (Write only):**
+```json
+{
+  "host": "localhost",
+  "port": 41184,
+  "tools": {
+    "create_note": true,
+    "create_notebook": true,
+    "create_tag": true,
+    "update_note": false,
+    "update_notebook": false,
+    "update_tag": false,
+    "tag_note": false,
+    "untag_note": false,
     "delete_note": false,
     "delete_notebook": false,
     "delete_tag": false
@@ -173,21 +268,31 @@ All tools are **enabled by default**. Here's the complete list:
   "port": 41184,
   "tools": {
     "create_note": false,
-    "update_note": false,
-    "delete_note": false,
     "create_notebook": false,
-    "update_notebook": false,
-    "delete_notebook": false,
     "create_tag": false,
+    "update_note": false,
+    "update_notebook": false,
     "update_tag": false,
-    "delete_tag": false,
     "tag_note": false,
-    "untag_note": false
+    "untag_note": false,
+    "delete_note": false,
+    "delete_notebook": false,
+    "delete_tag": false
   }
 }
 ```
 
 #### 5. Test the Connection
+
+**For pip install:**
+```bash
+# Run the FastMCP server (any of these work):
+joplin-mcp-server            # Console command (recommended)
+joplin-mcp                   # Alias command
+python -m joplin_mcp.server  # Module command
+```
+
+**For development install:**
 ```bash
 # Run the FastMCP server
 python run_fastmcp_server.py
@@ -228,8 +333,52 @@ You should see:
 
 ### Claude Desktop Configuration
 
-Add this to your Claude Desktop configuration file (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+The configuration depends on your installation method:
 
+#### For Pip Install:
+```json
+{
+  "mcpServers": {
+    "joplin": {
+      "command": "joplin-mcp-server",
+      "env": {
+        "JOPLIN_TOKEN": "your_token_here"
+      }
+    }
+  }
+}
+```
+
+*Alternative commands that also work:*
+```json
+{
+  "mcpServers": {
+    "joplin": {
+      "command": "joplin-mcp",
+      "env": {
+        "JOPLIN_TOKEN": "your_token_here"
+      }
+    }
+  }
+}
+```
+
+*Or using Python module:*
+```json
+{
+  "mcpServers": {
+    "joplin": {
+      "command": "python",
+      "args": ["-m", "joplin_mcp.server"],
+      "env": {
+        "JOPLIN_TOKEN": "your_token_here"
+      }
+    }
+  }
+}
+```
+
+#### For Development Install:
 ```json
 {
   "mcpServers": {
@@ -237,7 +386,8 @@ Add this to your Claude Desktop configuration file (`~/Library/Application Suppo
       "command": "python",
       "args": ["/path/to/your/joplin-mcp/run_fastmcp_server.py"],
       "env": {
-        "PYTHONPATH": "/path/to/your/joplin-mcp"
+        "PYTHONPATH": "/path/to/your/joplin-mcp",
+        "JOPLIN_TOKEN": "your_token_here"
       }
     }
   }
@@ -245,6 +395,8 @@ Add this to your Claude Desktop configuration file (`~/Library/Application Suppo
 ```
 
 Replace `/path/to/your/joplin-mcp` with your actual project path.
+
+**Note:** The installation commands (`joplin-mcp-install`, `./install.sh`, or `install.py`) automatically configure this for you!
 
 ### Usage with Claude Desktop
 
@@ -299,8 +451,9 @@ config = JoplinMCPConfig(
 # export JOPLIN_HOST="localhost"
 # export JOPLIN_PORT="41184"
 
-# The FastMCP server runs automatically with:
-# python run_fastmcp_server.py
+# The FastMCP server can be run with:
+# pip install: joplin-mcp-server  
+# development: python run_fastmcp_server.py
 ```
 
 ## 📚 Comprehensive Examples
@@ -548,6 +701,83 @@ Test server connectivity and health.
 ```python
 {}                                     # No parameters required
 ```
+
+## 🔧 Installation Troubleshooting
+
+If you encounter issues with the automated installation script, here are common solutions:
+
+### Common Issues and Solutions
+
+#### Python Not Found
+- **Issue**: `Python 3 is required but not found in PATH`
+- **Solution**: Install Python 3.8+ from [python.org](https://python.org) and ensure it's added to your PATH
+
+#### Package Installation Issues
+- **Issue**: `pip install joplin-mcp` fails or package not found
+- **Solution**: Package may not be published yet. Use development install instead:
+  ```bash
+  git clone https://github.com/alondmnt/joplin-mcp.git
+  cd joplin-mcp
+  pip install -e .
+  ```
+
+#### Joplin Connection Failed
+- **Issue**: Cannot connect to Joplin during installation
+- **Solution**: 
+  1. Ensure Joplin Desktop is running
+  2. Enable Web Clipper: Tools → Options → Web Clipper
+  3. Verify the port (default: 41184)
+  4. Check your firewall settings
+
+#### Claude Desktop Config Not Found
+- **Issue**: Installation script can't find Claude Desktop config
+- **Solution**: Manually add the MCP server configuration to your Claude Desktop config file:
+  
+  **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+  **Linux:** `~/.config/claude-desktop/claude_desktop_config.json`
+  **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+#### Token Issues
+- **Issue**: Invalid or expired API token
+- **Solution**: Generate a new token in Joplin:
+  1. Go to Tools → Options → Web Clipper
+  2. Click "Advanced options"
+  3. Copy the Authorization token
+  4. Run the installation script again
+
+#### Permission Errors
+- **Issue**: Permission denied when updating Claude Desktop config
+- **Solution**: Run the installation script with appropriate permissions or manually edit the config file
+
+### Manual Claude Desktop Configuration
+
+If the automated installation doesn't update your Claude Desktop config, add this manually:
+
+```json
+{
+  "mcpServers": {
+    "joplin": {
+      "command": "python",
+      "args": ["/path/to/joplin-mcp/run_fastmcp_server.py"],
+      "cwd": "/path/to/joplin-mcp",
+      "env": {
+        "PYTHONPATH": "/path/to/joplin-mcp",
+        "JOPLIN_TOKEN": "your_token_here"
+      }
+    }
+  }
+}
+```
+
+Replace `/path/to/joplin-mcp` with the actual path to your installation directory.
+
+### Getting Help
+
+If you're still having issues:
+1. Check the `docs/troubleshooting.md` file
+2. Review the installation logs for detailed error messages
+3. Ensure all prerequisites are met
+4. Try the manual installation steps below
 
 ## 🏗️ Architecture
 

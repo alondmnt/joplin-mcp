@@ -858,3 +858,84 @@ class JoplinMCPConfig:
                 "total": len(self.tools),
             },
         }
+
+    # === INTERACTIVE CONFIGURATION ===
+
+    @classmethod
+    def create_interactively(
+        cls, 
+        token: Optional[str] = None,
+        include_permissions: bool = True,
+        **defaults
+    ) -> "JoplinMCPConfig":
+        """Create configuration interactively with user prompts.
+        
+        Args:
+            token: Pre-provided token (skip token prompt if provided)
+            include_permissions: Whether to prompt for tool permissions
+            defaults: Default values for configuration options
+        
+        Returns:
+            Configured JoplinMCPConfig instance
+        """
+        from .ui_integration import get_permission_settings, get_token_interactively
+        
+        # Get token if not provided
+        if not token:
+            token = get_token_interactively()
+        
+        # Get permission settings if requested
+        if include_permissions:
+            tool_permissions = get_permission_settings()
+        else:
+            tool_permissions = cls.DEFAULT_TOOLS.copy()
+        
+        # Create configuration with user choices and defaults
+        config_kwargs = {
+            "host": defaults.get("host", "localhost"),
+            "port": defaults.get("port", 41184),
+            "token": token,
+            "timeout": defaults.get("timeout", 30),
+            "verify_ssl": defaults.get("verify_ssl", False),
+            "tools": tool_permissions
+        }
+        
+        return cls(**config_kwargs)
+
+    def save_interactively(
+        self, 
+        suggested_path: Optional[Path] = None,
+        include_token: bool = True
+    ) -> Path:
+        """Save configuration to a file with interactive path selection.
+        
+        Args:
+            suggested_path: Suggested file path
+            include_token: Whether to include token in saved file
+        
+        Returns:
+            Path where config was saved
+        """
+        if not suggested_path:
+            suggested_path = Path.cwd() / "joplin-mcp.json"
+        
+        config_path = suggested_path
+        
+        # Prepare config data
+        config_data = {
+            "host": self.host,
+            "port": self.port,
+            "timeout": self.timeout,
+            "verify_ssl": self.verify_ssl,
+            "tools": self.tools.copy()
+        }
+        
+        if include_token and self.token:
+            config_data["token"] = self.token
+        
+        # Save configuration
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_path, 'w') as f:
+            json.dump(config_data, f, indent=2)
+        
+        return config_path
