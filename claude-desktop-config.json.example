@@ -17,6 +17,23 @@
         "JOPLIN_TOKEN": "your_joplin_api_token_here",
         "JOPLIN_VERIFY_SSL": "false"
       }
+    },
+    "joplin-http": {
+      "_comment": "For HTTP transport (requires running server separately):",
+      "transport": "http",
+      "url": "http://localhost:8000/mcp",
+      "env": {
+        "JOPLIN_TOKEN": "your_joplin_api_token_here"
+      }
+    },
+    "joplin-http-dev": {
+      "_comment": "For HTTP transport with development server:",
+      "transport": "http",
+      "url": "http://localhost:8000/mcp",
+      "env": {
+        "JOPLIN_TOKEN": "your_joplin_api_token_here",
+        "JOPLIN_VERIFY_SSL": "false"
+      }
     }
   }
 } 

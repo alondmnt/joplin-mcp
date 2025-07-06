@@ -772,7 +772,7 @@ async def get_server_info() -> dict:
 
 # === MAIN RUNNER ===
 
-def main(config_file: Optional[str] = None):
+def main(config_file: Optional[str] = None, transport: str = "stdio", host: str = "127.0.0.1", port: int = 8000, path: str = "/mcp", log_level: str = "info"):
     """Main entry point for the FastMCP Joplin server."""
     global _config
     
@@ -798,9 +798,13 @@ def main(config_file: Optional[str] = None):
         client = get_joplin_client()
         logger.info("Joplin client initialized successfully")
         
-        # Run the FastMCP server
-        logger.info("Starting FastMCP server...")
-        mcp.run()
+        # Run the FastMCP server with specified transport
+        if transport.lower() == "http":
+            logger.info(f"Starting FastMCP server with HTTP transport on {host}:{port}{path}")
+            mcp.run(transport="http", host=host, port=port, path=path, log_level=log_level)
+        else:
+            logger.info("Starting FastMCP server with STDIO transport")
+            mcp.run(transport="stdio")
     except Exception as e:
         logger.error(f"Failed to start FastMCP Joplin server: {e}")
         import traceback

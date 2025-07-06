@@ -21,8 +21,10 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python run_fastmcp_server.py                          # Use default joplin-mcp.json
-  python run_fastmcp_server.py --config my-config.json  # Use custom config file
+  python run_fastmcp_server.py                          # Use default joplin-mcp.json with STDIO transport
+  python run_fastmcp_server.py --config my-config.json  # Use custom config file with STDIO transport
+  python run_fastmcp_server.py --transport http         # Use HTTP transport on default port 8000
+  python run_fastmcp_server.py --transport http --port 9000 --host 0.0.0.0  # HTTP on custom port/host
         """
     )
     
@@ -30,6 +32,43 @@ Examples:
         "--config", "-c",
         type=str,
         help="Configuration file path (default: joplin-mcp.json if exists, otherwise auto-discovery)"
+    )
+    
+    parser.add_argument(
+        "--transport", "-t",
+        type=str,
+        choices=["stdio", "http"],
+        default="stdio",
+        help="Transport protocol to use (default: stdio)"
+    )
+    
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        help="Host to bind to for HTTP transport (default: 127.0.0.1)"
+    )
+    
+    parser.add_argument(
+        "--port", "-p",
+        type=int,
+        default=8000,
+        help="Port to bind to for HTTP transport (default: 8000)"
+    )
+    
+    parser.add_argument(
+        "--path",
+        type=str,
+        default="/mcp",
+        help="Path for HTTP transport endpoint (default: /mcp)"
+    )
+    
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        choices=["debug", "info", "warning", "error"],
+        default="info",
+        help="Logging level (default: info)"
     )
     
     return parser.parse_args()
@@ -49,11 +88,22 @@ if __name__ == "__main__":
         else:
             print("📋 Using auto-discovery for config")
     
+    print(f"🚀 Transport: {args.transport.upper()}")
+    if args.transport == "http":
+        print(f"🌐 HTTP Server: {args.host}:{args.port}{args.path}")
+    
     print("🔧 Press Ctrl+C to stop")
     print("-" * 50)
     
     try:
-        main(config_file=args.config)
+        main(
+            config_file=args.config,
+            transport=args.transport,
+            host=args.host,
+            port=args.port,
+            path=args.path,
+            log_level=args.log_level
+        )
     except KeyboardInterrupt:
         print("\n👋 FastMCP server stopped by user")
     except Exception as e:
