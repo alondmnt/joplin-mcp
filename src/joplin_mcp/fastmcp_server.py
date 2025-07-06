@@ -238,6 +238,11 @@ def format_item_list(items: List[Any], item_type: ItemType) -> str:
         result_parts.append(f"**{i}. {title}**")
         result_parts.append(f"   ID: {item_id}")
         
+        # Add parent folder ID if available (for notebooks)
+        parent_id = getattr(item, 'parent_id', None)
+        if parent_id:
+            result_parts.append(f"   Parent: {parent_id}")
+        
         # Add creation time if available
         created_time = getattr(item, 'created_time', None)
         if created_time:
