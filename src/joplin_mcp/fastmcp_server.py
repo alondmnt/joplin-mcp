@@ -378,7 +378,13 @@ async def get_note(note_id: str, include_body: bool = True) -> str:
     """Get a specific note by ID."""
     note_id = validate_required_param(note_id, "note_id")
     client = get_joplin_client()
-    note = client.get_note(note_id)
+    
+    # Explicitly request body field if needed
+    if include_body:
+        note = client.get_note(note_id, fields="id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed")
+    else:
+        note = client.get_note(note_id, fields="id,title,created_time,updated_time,parent_id,is_todo,todo_completed")
+    
     return format_note_details(note, include_body)
 
 @create_tool("create_note", "Create note")
