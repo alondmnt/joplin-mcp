@@ -349,6 +349,42 @@ def format_search_results(query: str, results: List[Any]) -> str:
     
     return "\n".join(result_parts)
 
+def format_tag_list_with_counts(tags: List[Any], client: Any) -> str:
+    """Format a list of tags with note counts for display."""
+    emoji = get_item_emoji(ItemType.tag)
+    
+    if not tags:
+        return f"{emoji} No tags found\n\nYour Joplin instance doesn't contain any tags yet."
+    
+    count = len(tags)
+    result_parts = [f"{emoji} Found {count} tag{'s' if count != 1 else ''}", ""]
+    
+    for i, tag in enumerate(tags, 1):
+        title = getattr(tag, 'title', 'Untitled')
+        tag_id = getattr(tag, 'id', 'unknown')
+        
+        # Get note count for this tag
+        try:
+            notes_result = client.get_notes(tag_id=tag_id)
+            notes = process_search_results(notes_result)
+            note_count = len(notes)
+        except Exception:
+            note_count = 0
+        
+        result_parts.append(f"**{i}. {title}** ({note_count} note{'s' if note_count != 1 else ''})")
+        result_parts.append(f"   ID: {tag_id}")
+        
+        # Add creation time if available
+        created_time = getattr(tag, 'created_time', None)
+        if created_time:
+            created_date = format_timestamp(created_time, "%Y-%m-%d %H:%M")
+            if created_date:
+                result_parts.append(f"   Created: {created_date}")
+        
+        result_parts.append("")
+    
+    return "\n".join(result_parts)
+
 # === GENERIC CRUD OPERATIONS ===
 
 def create_tool(tool_name: str, operation_name: str):
@@ -539,7 +575,7 @@ async def list_tags() -> str:
     """List all tags."""
     client = get_joplin_client()
     tags = client.get_all_tags()
-    return format_item_list(tags, ItemType.tag)
+    return format_tag_list_with_counts(tags, client)
 
 @create_tool("get_tag", "Get tag")
 async def get_tag(tag_id: str) -> str:
