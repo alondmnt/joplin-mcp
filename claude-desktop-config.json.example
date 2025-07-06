@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "joplin": {
+      "_comment": "For pip install (recommended):",
+      "command": "joplin-mcp-server",
+      "env": {
+        "JOPLIN_TOKEN": "your_joplin_api_token_here"
+      }
+    },
+    "joplin-dev": {
+      "_comment": "For development install:",
+      "command": "python",
+      "args": ["/path/to/your/joplin-mcp/run_fastmcp_server.py"],
+      "cwd": "/path/to/your/joplin-mcp",
+      "env": {
+        "PYTHONPATH": "/path/to/your/joplin-mcp",
+        "JOPLIN_TOKEN": "your_joplin_api_token_here",
+        "JOPLIN_VERIFY_SSL": "false"
+      }
+    }
+  }
+} 

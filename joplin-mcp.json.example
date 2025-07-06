@@ -1,0 +1,22 @@
+{
+  "host": "localhost",
+  "port": 41184,
+  "token": "your_joplin_api_token_here",
+  "timeout": 30,
+  "verify_ssl": false,
+  "tools": {
+    "create_note": true,
+    "create_notebook": true,
+    "create_tag": true,
+    "update_note": true,
+    "update_notebook": true,
+    "update_tag": true,
+    "tag_note": true,
+    "untag_note": true,
+    "add_tag_to_note": true,
+    "remove_tag_from_note": true,
+    "delete_note": false,
+    "delete_notebook": false,
+    "delete_tag": false
+  }
+} 

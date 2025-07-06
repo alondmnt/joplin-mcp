@@ -233,9 +233,16 @@ $RECYCLE.BIN/
 
 # Project-specific
 # Joplin MCP configuration files (contain sensitive tokens)
+joplin-mcp.json
+claude-desktop-config.json
 config/joplin_config.json
 .joplin_token
 .joplin_config
+
+# Development artifacts
+*.mdc
+temp-*.json
+*-config.json
 
 # Test output
 test_output/
