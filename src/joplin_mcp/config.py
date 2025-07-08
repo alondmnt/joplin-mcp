@@ -196,11 +196,11 @@ class JoplinMCPConfig:
 
     # Default tool configurations - optimized for LLMs (18 tools total)
     DEFAULT_TOOLS = {
-        # Finding notes (5 tools)
+        # Finding notes (4 tools enabled by default, 1 disabled)
         "find_notes": True,              # Find notes by text content
         "find_notes_with_tag": True,     # Find notes by tag
         "find_notes_in_notebook": True,  # Find notes by notebook
-        "get_all_notes": True,           # Get all notes
+        "get_all_notes": False,          # Get all notes - disabled by default (can fill context window)
         "get_note": True,                # Get specific note by ID
         
         # Managing notes (3 tools)

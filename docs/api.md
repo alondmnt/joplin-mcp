@@ -1,6 +1,6 @@
 # Joplin MCP Server API Documentation
 
-This document provides comprehensive API documentation for all 18 MCP tools available in the Joplin MCP Server.
+This document provides comprehensive API documentation for all 18 MCP tools available in the Joplin MCP Server (17 enabled by default).
 
 ## Table of Contents
 

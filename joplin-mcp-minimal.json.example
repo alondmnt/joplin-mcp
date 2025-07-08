@@ -5,13 +5,13 @@
   "timeout": 30,
   "verify_ssl": false,
   "tools": {
-    "_comment": "MINIMAL CORE TOOLS - Ultra-simple for small LLMs (9 tools only)",
+    "_comment": "MINIMAL CORE TOOLS - Ultra-simple for small LLMs (8 tools only)",
     
     "_comment_essential": "ABSOLUTE ESSENTIALS ONLY",
     "find_notes": true,
     "find_notes_with_tag": true,
     "find_notes_in_notebook": true,
-    "get_all_notes": true,
+    "get_all_notes": false,
     "create_note": true,
     "list_tags": true,
     "list_notebooks": true,

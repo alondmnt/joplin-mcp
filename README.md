@@ -247,7 +247,7 @@ python run_fastmcp_server.py --transport http --port 8000
 | `tools.find_notes` | `true` | Allow text search across notes (with task filtering) |
 | `tools.find_notes_with_tag` | `true` | Allow finding notes by tag (with task filtering) |
 | `tools.find_notes_in_notebook` | `true` | Allow finding notes by notebook (with task filtering) |
-| `tools.get_all_notes` | `true` | Allow getting all notes |
+| `tools.get_all_notes` | `false` | Allow getting all notes (disabled by default - can fill context window) |
 | `tools.get_note` | `true` | Allow getting specific notes |
 | `tools.list_notebooks` | `true` | Allow listing all notebooks |
 | `tools.list_tags` | `true` | Allow listing all tags |
@@ -266,7 +266,7 @@ python run_fastmcp_server.py --transport http --port 8000
 
 - **`run_fastmcp_server.py`** - FastMCP server launcher
 - **`src/joplin_mcp/`** - Main package directory
-  - `fastmcp_server.py` - Server implementation with 18 tools
+  - `fastmcp_server.py` - Server implementation with 17 tools (by default)
   - `models.py` - Data models and schemas
   - `config.py` - Configuration management
 - **`docs/`** - API documentation
@@ -290,7 +290,7 @@ Starting Joplin FastMCP Server...
 Successfully connected to Joplin!
 Found X notebooks, Y notes, Z tags
 FastMCP server starting...
-Available tools: 18 tools ready
+Available tools: 17 tools ready
 ```
 
 ## Complete Tool Reference
@@ -301,7 +301,7 @@ Available tools: 18 tools ready
 | `find_notes` | Read | Full-text search across all notes (supports task filtering) |
 | `find_notes_with_tag` | Read | Find notes with specific tag (supports task filtering) |
 | `find_notes_in_notebook` | Read | Find notes in specific notebook (supports task filtering) |
-| `get_all_notes` | Read | Get all notes, most recent first |
+| `get_all_notes` | Read | Get all notes, most recent first *(disabled by default)* |
 | `get_note` | Read | Get specific note by ID |
 | **Managing Notes** | | |
 | `create_note` | Write | Create new notes |

@@ -8,7 +8,7 @@
     "find_notes": true,
     "find_notes_with_tag": true,
     "find_notes_in_notebook": true,
-    "get_all_notes": true,
+    "get_all_notes": false,
     "get_note": true,
     "list_notebooks": true,
     "list_tags": true,
