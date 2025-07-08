@@ -963,7 +963,7 @@ class TestConfigToolConfiguration:
         assert len(config.get_disabled_tools()) == 0
         
         # Check specific tools
-        assert config.is_tool_enabled("find_notes")
+        assert config.is_tool_enabled("search_notes")
         assert config.is_tool_enabled("create_note")
         assert config.is_tool_enabled("delete_note")
         assert config.is_tool_enabled("ping_joplin")
@@ -971,7 +971,7 @@ class TestConfigToolConfiguration:
     def test_config_tools_from_dict_initialization(self):
         """Test tool configuration via direct initialization."""
         tools_config = {
-            "find_notes": True,
+            "search_notes": True,
             "create_note": True,
             "delete_note": False,
             "ping_joplin": True,
@@ -979,7 +979,7 @@ class TestConfigToolConfiguration:
         
         config = JoplinMCPConfig(token="test-token", tools=tools_config)
         
-        assert config.is_tool_enabled("find_notes")
+        assert config.is_tool_enabled("search_notes")
         assert config.is_tool_enabled("create_note")
         assert not config.is_tool_enabled("delete_note")
         assert config.is_tool_enabled("ping_joplin")
@@ -992,7 +992,7 @@ class TestConfigToolConfiguration:
                 "port": 41184,
                 "token": "test-token",
                 "tools": {
-                    "find_notes": True,
+                    "search_notes": True,
                     "create_note": False,
                     "delete_note": False,
                     "ping_joplin": True,
@@ -1003,7 +1003,7 @@ class TestConfigToolConfiguration:
         try:
             config = JoplinMCPConfig.from_file(temp_path)
             
-            assert config.is_tool_enabled("find_notes")
+            assert config.is_tool_enabled("search_notes")
             assert not config.is_tool_enabled("create_note")
             assert not config.is_tool_enabled("delete_note")
             assert config.is_tool_enabled("ping_joplin")
@@ -1022,7 +1022,7 @@ class TestConfigToolConfiguration:
                 "port": 41184,
                 "token": "test-token",
                 "tools": {
-                    "find_notes": True,
+                    "search_notes": True,
                     "create_note": False,
                     "delete_note": False,
                     "ping_joplin": True,
@@ -1033,7 +1033,7 @@ class TestConfigToolConfiguration:
         try:
             config = JoplinMCPConfig.from_file(temp_path)
             
-            assert config.is_tool_enabled("find_notes")
+            assert config.is_tool_enabled("search_notes")
             assert not config.is_tool_enabled("create_note")
             assert not config.is_tool_enabled("delete_note")
             assert config.is_tool_enabled("ping_joplin")
@@ -1047,7 +1047,7 @@ class TestConfigToolConfiguration:
             os.environ,
             {
                 "JOPLIN_TOKEN": "test-token",
-                "JOPLIN_TOOL_FIND_NOTES": "true",
+                "JOPLIN_TOOL_SEARCH_NOTES": "true",
                 "JOPLIN_TOOL_CREATE_NOTE": "false",
                 "JOPLIN_TOOL_DELETE_NOTE": "false",
                 "JOPLIN_TOOL_PING_JOPLIN": "true",
@@ -1055,7 +1055,7 @@ class TestConfigToolConfiguration:
         ):
             config = JoplinMCPConfig.from_environment()
             
-            assert config.is_tool_enabled("find_notes")
+            assert config.is_tool_enabled("search_notes")
             assert not config.is_tool_enabled("create_note")
             assert not config.is_tool_enabled("delete_note")
             assert config.is_tool_enabled("ping_joplin")
@@ -1096,7 +1096,7 @@ class TestConfigToolConfiguration:
             assert not config.is_tool_enabled(tool)
         
         # Non-tag tools should still be enabled
-        assert config.is_tool_enabled("find_notes")
+        assert config.is_tool_enabled("search_notes")
         assert config.is_tool_enabled("create_note")
         
         # Test enable category
@@ -1150,7 +1150,7 @@ class TestConfigToolConfiguration:
     def test_config_tools_validation_invalid_tool_value(self):
         """Test validation of invalid tool values in configuration."""
         config = JoplinMCPConfig(token="test-token")
-        config.tools["find_notes"] = "invalid"
+        config.tools["search_notes"] = "invalid"
         
         with pytest.raises(ConfigError, match="Tool configuration.*must be boolean"):
             config.validate()
@@ -1170,7 +1170,7 @@ class TestConfigToolConfiguration:
                 "token": "test-token",
                 "tools": {
                     "invalid_tool": True,
-                    "find_notes": True,
+                    "search_notes": True,
                 }
             }, f)
             temp_path = f.name
@@ -1187,13 +1187,13 @@ class TestConfigToolConfiguration:
             json.dump({
                 "token": "test-token",
                 "tools": {
-                    "find_notes": "invalid",
+                    "search_notes": "invalid",
                 }
             }, f)
             temp_path = f.name
 
         try:
-            with pytest.raises(ConfigError, match="Invalid data type for tool 'find_notes'"):
+            with pytest.raises(ConfigError, match="Invalid data type for tool 'search_notes'"):
                 JoplinMCPConfig.from_file(temp_path)
         finally:
             os.unlink(temp_path)
@@ -1219,7 +1219,7 @@ class TestConfigToolConfiguration:
             json.dump({
                 "token": "test-token",
                 "tools": {
-                    "find_notes": False,
+                    "search_notes": False,
                     "create_note": True,
                 }
             }, f)
@@ -1229,14 +1229,14 @@ class TestConfigToolConfiguration:
             with patch.dict(
                 os.environ,
                 {
-                    "JOPLIN_TOOL_FIND_NOTES": "true",  # Override file setting
+                    "JOPLIN_TOOL_SEARCH_NOTES": "true",  # Override file setting
                     "JOPLIN_TOOL_DELETE_NOTE": "false",  # New setting
                 },
             ):
                 config = JoplinMCPConfig.from_file_and_environment(temp_path)
                 
                 # Environment should override file
-                assert config.is_tool_enabled("find_notes")  # env: true, file: false
+                assert config.is_tool_enabled("search_notes")  # env: true, file: false
                 assert config.is_tool_enabled("create_note")   # file: true, no env
                 assert not config.is_tool_enabled("delete_note")  # env: false, file: default true
                 
@@ -1251,15 +1251,15 @@ class TestConfigToolConfiguration:
         copied_config = config.copy()
         
         assert not copied_config.is_tool_enabled("delete_note")
-        assert copied_config.is_tool_enabled("find_notes")
+        assert copied_config.is_tool_enabled("search_notes")
 
     def test_config_tools_copy_with_tools_override(self):
         """Test configuration copy with tools override."""
         config = JoplinMCPConfig(token="test-token")
         
-        copied_config = config.copy(tools={"find_notes": False, "create_note": True})
+        copied_config = config.copy(tools={"search_notes": False, "create_note": True})
         
-        assert not copied_config.is_tool_enabled("find_notes")
+        assert not copied_config.is_tool_enabled("search_notes")
         assert copied_config.is_tool_enabled("create_note")
 
     def test_config_tools_to_dict_includes_tools(self):
@@ -1302,7 +1302,7 @@ class TestConfigToolConfiguration:
             
             assert "tools" in saved_data
             assert not saved_data["tools"]["delete_note"]
-            assert saved_data["tools"]["find_notes"]
+            assert saved_data["tools"]["search_notes"]
             
         finally:
             os.unlink(temp_path)
@@ -1324,7 +1324,7 @@ class TestConfigToolConfiguration:
         """Test that get_validation_errors includes tools validation."""
         config = JoplinMCPConfig(token="test-token")
         config.tools["invalid_tool"] = True
-        config.tools["find_notes"] = "invalid"
+        config.tools["search_notes"] = "invalid"
         
         errors = config.get_validation_errors()
         

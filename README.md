@@ -86,7 +86,7 @@ Once configured, you can ask your AI assistant:
 - **"Find notes about Python programming"** - Search your knowledge base  
 - **"Create a meeting note for today's standup"** - Quick note creation
 - **"Tag my recent AI notes as 'important'"** - Organize with tags
-- **"Show me my todos"** - Find task items
+- **"Show me my todos"** - Find task items with `find_notes(task=True)`
 
 ## Tool Permissions
 
@@ -244,9 +244,9 @@ python run_fastmcp_server.py --transport http --port 8000
 | `tools.delete_tag` | `true` | Allow deleting tags |
 | `tools.tag_note` | `true` | Allow adding tags to notes |
 | `tools.untag_note` | `true` | Allow removing tags from notes |
-| `tools.find_notes` | `true` | Allow text search across notes |
-| `tools.find_notes_with_tag` | `true` | Allow finding notes by tag |
-| `tools.find_notes_in_notebook` | `true` | Allow finding notes by notebook |
+| `tools.find_notes` | `true` | Allow text search across notes (with task filtering) |
+| `tools.find_notes_with_tag` | `true` | Allow finding notes by tag (with task filtering) |
+| `tools.find_notes_in_notebook` | `true` | Allow finding notes by notebook (with task filtering) |
 | `tools.get_all_notes` | `true` | Allow getting all notes |
 | `tools.get_note` | `true` | Allow getting specific notes |
 | `tools.list_notebooks` | `true` | Allow listing all notebooks |
@@ -298,9 +298,9 @@ Available tools: 18 tools ready
 | Tool | Permission | Description |
 |------|------------|-------------|
 | **Finding Notes** | | |
-| `find_notes` | Read | Full-text search across all notes |
-| `find_notes_with_tag` | Read | Find notes with specific tag |
-| `find_notes_in_notebook` | Read | Find notes in specific notebook |
+| `find_notes` | Read | Full-text search across all notes (supports task filtering) |
+| `find_notes_with_tag` | Read | Find notes with specific tag (supports task filtering) |
+| `find_notes_in_notebook` | Read | Find notes in specific notebook (supports task filtering) |
 | `get_all_notes` | Read | Get all notes, most recent first |
 | `get_note` | Read | Get specific note by ID |
 | **Managing Notes** | | |

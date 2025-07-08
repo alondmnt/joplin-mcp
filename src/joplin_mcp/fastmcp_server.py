@@ -1,9 +1,9 @@
 """FastMCP-based Joplin MCP Server Implementation.
 
 📝 FINDING NOTES:
-- find_notes(query) - Find notes containing specific text ⭐ MAIN FUNCTION FOR TEXT SEARCHES!
-- find_notes_with_tag(tag_name) - Find all notes with a specific tag ⭐ MAIN FUNCTION FOR TAG SEARCHES!
-- find_notes_in_notebook(notebook_name) - Find all notes in a specific notebook ⭐ MAIN FUNCTION FOR NOTEBOOK SEARCHES!
+- find_notes(query, task, completed) - Find notes containing specific text ⭐ MAIN FUNCTION FOR TEXT SEARCHES!
+- find_notes_with_tag(tag_name, task, completed) - Find all notes with a specific tag ⭐ MAIN FUNCTION FOR TAG SEARCHES!
+- find_notes_in_notebook(notebook_name, task, completed) - Find all notes in a specific notebook ⭐ MAIN FUNCTION FOR NOTEBOOK SEARCHES!
 - get_all_notes() - Get all notes, most recent first
 - find_notes(query, tag_name, notebook_name) - Search notes by text with optional filters
 
@@ -135,6 +135,27 @@ def validate_limit(limit: int) -> int:
     if not (1 <= limit <= 100):
         raise ValueError("Limit must be between 1 and 100")
     return limit
+
+def validate_boolean_param(value: Union[bool, str, None], param_name: str) -> Optional[bool]:
+    """Validate and convert boolean parameter that might come as string."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        value_lower = value.lower().strip()
+        if value_lower in ('true', '1', 'yes', 'on'):
+            return True
+        elif value_lower in ('false', '0', 'no', 'off'):
+            return False
+        else:
+            raise ValueError(f"{param_name} must be a boolean value or string representation (true/false, 1/0, yes/no, on/off)")
+    # Handle non-None values that are not boolean or string (e.g., default values)
+    if value is False:
+        return False
+    elif value is True:
+        return True
+    raise ValueError(f"{param_name} must be a boolean value or string representation")
 
 def format_timestamp(timestamp: Optional[Union[int, datetime.datetime]], format_str: str = "%Y-%m-%d %H:%M:%S") -> Optional[str]:
     """Format a timestamp safely."""
@@ -559,7 +580,7 @@ async def ping_joplin() -> str:
 @create_tool("get_note", "Get note")
 async def get_note(
     note_id: Annotated[str, "The unique identifier of the note to retrieve. This is typically a long alphanumeric string like 'a1b2c3d4e5f6...' that uniquely identifies the note in Joplin."], 
-    include_body: Annotated[bool, "Whether to include the note's content/body in the response. Set to True to see the full note content, False to only see metadata like title, dates, and IDs. Default is True."] = True
+    include_body: Annotated[Union[bool, str], "Whether to include the note's content/body in the response. Set to True to see the full note content, False to only see metadata like title, dates, and IDs. Default is True."] = True
 ) -> str:
     """Retrieve a specific note by its unique identifier.
     
@@ -579,6 +600,7 @@ async def get_note(
         - get_note("a1b2c3d4e5f6...", False) - Get metadata only
     """
     note_id = validate_required_param(note_id, "note_id")
+    include_body = validate_boolean_param(include_body, "include_body")
     client = get_joplin_client()
     
     # Use string format for fields (list format causes SQL errors)
@@ -592,8 +614,8 @@ async def create_note(
     title: Annotated[str, "The title/name of the new note. This is required and will be displayed in Joplin's note list. Example: 'My Important Note' or 'Meeting Notes - Jan 15'"], 
     notebook_name: Annotated[str, "The name of the notebook where this note should be created. This is required - you must specify which notebook to put the note in. Use the exact notebook name as shown in list_notebooks. Example: 'Work Projects' or 'Personal Notes'"], 
     body: Annotated[str, "The content/text of the note. This can be plain text or Markdown. Leave empty to create a note with no content initially. Example: 'This is my note content with **bold** and *italic* text.'"] = "",
-    is_todo: Annotated[bool, "Whether this note should be created as a todo/task item. Set to True to make it a checkable todo item, False for a regular note. Default is False."] = False,
-    todo_completed: Annotated[bool, "Whether the todo item should be marked as completed when created. Only relevant if is_todo=True. Set to True to create a completed todo, False for uncompleted. Default is False."] = False
+    is_todo: Annotated[Union[bool, str], "Whether this note should be created as a todo/task item. Set to True to make it a checkable todo item, False for a regular note. Default is False."] = False,
+    todo_completed: Annotated[Union[bool, str], "Whether the todo item should be marked as completed when created. Only relevant if is_todo=True. Set to True to create a completed todo, False for uncompleted. Default is False."] = False
 ) -> str:
     """Create a new note in a specified notebook in Joplin.
     
@@ -617,6 +639,8 @@ async def create_note(
         - create_note("Meeting Notes", "Work Projects", "# Meeting with Client", False, False) - Create regular note
     """
     title = validate_required_param(title, "title")
+    is_todo = validate_boolean_param(is_todo, "is_todo")
+    todo_completed = validate_boolean_param(todo_completed, "todo_completed")
     
     # Use helper function to get notebook ID
     parent_id = get_notebook_id_by_name(notebook_name)
@@ -633,8 +657,8 @@ async def update_note(
     note_id: Annotated[str, "The unique identifier of the note to update. Required."],
     title: Annotated[Optional[str], "New title for the note. Optional - only updates if provided."] = None,
     body: Annotated[Optional[str], "New content for the note. Can be plain text or Markdown. Optional - only updates if provided."] = None,
-    is_todo: Annotated[Optional[bool], "Whether to convert the note to/from a todo item. Optional - only updates if provided."] = None,
-    todo_completed: Annotated[Optional[bool], "Whether to mark the todo as completed. Only relevant if note is a todo. Optional - only updates if provided."] = None
+    is_todo: Annotated[Union[bool, str, None], "Whether to convert the note to/from a todo item. Optional - only updates if provided."] = None,
+    todo_completed: Annotated[Union[bool, str, None], "Whether to mark the todo as completed. Only relevant if note is a todo. Optional - only updates if provided."] = None
 ) -> str:
     """Update an existing note in Joplin.
     
@@ -655,6 +679,8 @@ async def update_note(
         - update_note("note123", body="New content", is_todo=True) - Update content and convert to todo
     """
     note_id = validate_required_param(note_id, "note_id")
+    is_todo = validate_boolean_param(is_todo, "is_todo")
+    todo_completed = validate_boolean_param(todo_completed, "todo_completed")
     
     update_data = {}
     if title is not None: update_data["title"] = title
@@ -696,7 +722,9 @@ async def delete_note(
 @create_tool("find_notes", "Find notes")
 async def find_notes(
     query: Annotated[str, "Text to search for in note titles and content. Example: 'meeting' or 'project planning' or 'grocery list'"],
-    limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20
+    limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20,
+    task: Annotated[Union[bool, str, None], "Filter by task type. True for tasks only, False for regular notes only, None for all notes. Default is None (all notes)."] = None,
+    completed: Annotated[Union[bool, str, None], "Filter by completion status (only relevant when task=True). True for completed tasks, False for uncompleted tasks, None for all tasks. Default is None (all tasks)."] = None
 ) -> str:
     """Find notes by searching their titles and content for specific text.
     
@@ -706,35 +734,73 @@ async def find_notes(
     Parameters:
         query (str): Text to search for in note titles and content. Required.
         limit (int): Maximum number of notes to return. Must be between 1 and 100. Default is 20.
+        task (bool, optional): Filter by task type. True = tasks only, False = regular notes only, None = all notes. Default is None.
+        completed (bool, optional): Filter by completion status (only relevant when task=True). 
+                                   True = completed tasks only, False = uncompleted tasks only, None = all tasks. 
+                                   Default is None.
     
     Returns:
         str: List of notes containing the search text, with title, ID, content preview, and dates.
     
     Examples:
         - find_notes("meeting") - Find all notes containing "meeting"
-        - find_notes("grocery list") - Find notes about grocery lists
-        - find_notes("project planning") - Find notes about project planning
+        - find_notes("meeting", task=True) - Find only tasks containing "meeting"
+        - find_notes("meeting", task=True, completed=False) - Find only uncompleted tasks containing "meeting"
+        - find_notes("grocery list", task=False) - Find only regular notes containing "grocery list"
         
     💡 TIP: For tag-specific searches, use find_notes_with_tag("tag_name") instead.
     💡 TIP: For notebook-specific searches, use find_notes_in_notebook("notebook_name") instead.
     """
-    query = validate_required_param(query, "query")
     limit = validate_limit(limit)
+    task = validate_boolean_param(task, "task")
+    completed = validate_boolean_param(completed, "completed")
     
     client = get_joplin_client()
     
+    # Build search query with filters
+    search_parts = [query]
+    
+    # Add task filter if specified
+    if task is not None:
+        if task:
+            search_parts.append("type:todo")
+        else:
+            search_parts.append("type:note")
+    
+    # Add completion filter if specified (only relevant for tasks)
+    if completed is not None and task is not False:
+        if completed:
+            search_parts.append("iscompleted:1")
+        else:
+            search_parts.append("iscompleted:0")
+    
+    search_query = " ".join(search_parts)
+    search_query = validate_required_param(search_query, "query")
+    
     # Use search_all for full pagination support
     fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-    results = client.search_all(query=query, fields=fields_list)
+    results = client.search_all(query=search_query, fields=fields_list)
     notes = process_search_results(results)
     
     # Apply limit
     notes = notes[:limit]
     
     if not notes:
-        return format_no_results_message("note", f'containing "{query}"')
+        # Create descriptive message based on search criteria
+        criteria_parts = [f'containing "{query}"']
+        if task is True:
+            criteria_parts.append("(tasks only)")
+        elif task is False:
+            criteria_parts.append("(regular notes only)")
+        if completed is True:
+            criteria_parts.append("(completed)")
+        elif completed is False:
+            criteria_parts.append("(uncompleted)")
+        
+        criteria_str = " ".join(criteria_parts)
+        return format_no_results_message("note", criteria_str)
     
-    return format_search_results(f'text search: {query}', notes, "search_results")
+    return format_search_results(f'text search: {search_query}', notes, "search_results")
 
 @create_tool("get_all_notes", "Get all notes")
 async def get_all_notes(
@@ -776,7 +842,9 @@ async def get_all_notes(
 @create_tool("find_notes_with_tag", "Find notes with tag")
 async def find_notes_with_tag(
     tag_name: Annotated[str, "The tag name to search for. Example: 'time-slip' or 'work' or 'important'"],
-    limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20
+    limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20,
+    task: Annotated[Union[bool, str, None], "Filter by task type. True for tasks only, False for regular notes only, None for all notes. Default is None (all notes)."] = None,
+    completed: Annotated[Union[bool, str, None], "Filter by completion status (only relevant when task=True). True for completed tasks, False for uncompleted tasks, None for all tasks. Default is None (all tasks)."] = None
 ) -> str:
     """Find all notes that have a specific tag.
     
@@ -786,21 +854,46 @@ async def find_notes_with_tag(
     Parameters:
         tag_name (str): The tag name to search for. Required.
         limit (int): Maximum number of notes to return. Must be between 1 and 100. Default is 20.
+        task (bool, optional): Filter by task type. True = tasks only, False = regular notes only, None = all notes. Default is None.
+        completed (bool, optional): Filter by completion status (only relevant when task=True). 
+                                   True = completed tasks only, False = uncompleted tasks only, None = all tasks. 
+                                   Default is None.
     
     Returns:
         str: List of all notes with the specified tag.
     
     Examples:
         - find_notes_with_tag("time-slip") - Find all notes tagged with "time-slip"
-        - find_notes_with_tag("work") - Find all notes tagged with "work"
-        - find_notes_with_tag("important") - Find all notes tagged with "important"
+        - find_notes_with_tag("work", task=True) - Find only tasks tagged with "work"
+        - find_notes_with_tag("important", task=True, completed=False) - Find only uncompleted tasks tagged with "important"
+        - find_notes_with_tag("personal", task=False) - Find only regular notes tagged with "personal"
     """
     tag_name = validate_required_param(tag_name, "tag_name")
     limit = validate_limit(limit)
+    task = validate_boolean_param(task, "task")
+    completed = validate_boolean_param(completed, "completed")
+    
+    # Build search query with filters
+    search_parts = [f"tag:{tag_name.strip()}"]
+    
+    # Add task filter if specified
+    if task is not None:
+        if task:
+            search_parts.append("type:todo")
+        else:
+            search_parts.append("type:note")
+    
+    # Add completion filter if specified (only relevant for tasks)
+    if completed is not None and task is not False:
+        if completed:
+            search_parts.append("iscompleted:1")
+        else:
+            search_parts.append("iscompleted:0")
+    
+    search_query = " ".join(search_parts)
     
     # Use search_all API with tag constraint for full pagination support
     client = get_joplin_client()
-    search_query = f"tag:{tag_name.strip()}"
     
     fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
     results = client.search_all(query=search_query, fields=fields_list)
@@ -810,14 +903,28 @@ async def find_notes_with_tag(
     notes = notes[:limit]
     
     if not notes:
-        return format_no_results_message("note", f'with tag "{tag_name}"')
+        # Create descriptive message based on search criteria
+        criteria_parts = [f'with tag "{tag_name}"']
+        if task is True:
+            criteria_parts.append("(tasks only)")
+        elif task is False:
+            criteria_parts.append("(regular notes only)")
+        if completed is True:
+            criteria_parts.append("(completed)")
+        elif completed is False:
+            criteria_parts.append("(uncompleted)")
+        
+        criteria_str = " ".join(criteria_parts)
+        return format_no_results_message("note", criteria_str)
     
-    return format_search_results(f'tag:{tag_name}', notes, "search_results")
+    return format_search_results(f'tag search: {search_query}', notes, "search_results")
 
 @create_tool("find_notes_in_notebook", "Find notes in notebook")  
 async def find_notes_in_notebook(
     notebook_name: Annotated[str, "The notebook name to search in. Example: 'Work Projects' or 'Personal Notes'"],
-    limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20
+    limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20,
+    task: Annotated[Union[bool, str, None], "Filter by task type. True for tasks only, False for regular notes only, None for all notes. Default is None (all notes)."] = None,
+    completed: Annotated[Union[bool, str, None], "Filter by completion status (only relevant when task=True). True for completed tasks, False for uncompleted tasks, None for all tasks. Default is None (all tasks)."] = None
 ) -> str:
     """Find all notes in a specific notebook.
     
@@ -827,20 +934,46 @@ async def find_notes_in_notebook(
     Parameters:
         notebook_name (str): The notebook name to search in. Required.
         limit (int): Maximum number of notes to return. Must be between 1 and 100. Default is 20.
+        task (bool, optional): Filter by task type. True = tasks only, False = regular notes only, None = all notes. Default is None.
+        completed (bool, optional): Filter by completion status (only relevant when task=True). 
+                                   True = completed tasks only, False = uncompleted tasks only, None = all tasks. 
+                                   Default is None.
     
     Returns:
         str: List of all notes in the specified notebook.
     
     Examples:
         - find_notes_in_notebook("Work Projects") - Find all notes in "Work Projects"
-        - find_notes_in_notebook("Personal Notes") - Find all notes in "Personal Notes"
+        - find_notes_in_notebook("Personal Notes", task=True) - Find only tasks in "Personal Notes"
+        - find_notes_in_notebook("Projects", task=True, completed=False) - Find only uncompleted tasks in "Projects"
+        - find_notes_in_notebook("Archive", task=False) - Find only regular notes in "Archive"
     """
     notebook_name = validate_required_param(notebook_name, "notebook_name")
     limit = validate_limit(limit)
+    task = validate_boolean_param(task, "task")
+    completed = validate_boolean_param(completed, "completed")
+    
+    # Build search query with filters
+    search_parts = [f"notebook:{notebook_name.strip()}"]
+    
+    # Add task filter if specified
+    if task is not None:
+        if task:
+            search_parts.append("type:todo")
+        else:
+            search_parts.append("type:note")
+    
+    # Add completion filter if specified (only relevant for tasks)
+    if completed is not None and task is not False:
+        if completed:
+            search_parts.append("iscompleted:1")
+        else:
+            search_parts.append("iscompleted:0")
+    
+    search_query = " ".join(search_parts)
     
     # Use search_all API with notebook constraint for full pagination support
     client = get_joplin_client()
-    search_query = f"notebook:{notebook_name.strip()}"
     
     fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
     results = client.search_all(query=search_query, fields=fields_list)
@@ -850,9 +983,23 @@ async def find_notes_in_notebook(
     notes = notes[:limit]
     
     if not notes:
-        return format_no_results_message("note", f'in notebook "{notebook_name}"')
+        # Create descriptive message based on search criteria
+        criteria_parts = [f'in notebook "{notebook_name}"']
+        if task is True:
+            criteria_parts.append("(tasks only)")
+        elif task is False:
+            criteria_parts.append("(regular notes only)")
+        if completed is True:
+            criteria_parts.append("(completed)")
+        elif completed is False:
+            criteria_parts.append("(uncompleted)")
+        
+        criteria_str = " ".join(criteria_parts)
+        return format_no_results_message("note", criteria_str)
     
-    return format_search_results(f'notebook:{notebook_name}', notes, "search_results")
+    return format_search_results(f'notebook search: {search_query}', notes, "search_results")
+
+
 
 # === NOTEBOOK OPERATIONS ===
 

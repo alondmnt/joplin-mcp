@@ -72,7 +72,7 @@ async def test_tool_schemas():
         tool_names = {tool.name for tool in tools}
         
         expected_tools = {
-            "ping_joplin", "get_note", "create_note", "search_notes",
+            "ping_joplin", "get_note", "create_note", "find_notes",
             "list_notebooks", "create_notebook", "list_tags", "create_tag", "tag_note"
         }
         

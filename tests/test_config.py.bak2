@@ -1047,7 +1047,7 @@ class TestConfigToolConfiguration:
             os.environ,
             {
                 "JOPLIN_TOKEN": "test-token",
-                "JOPLIN_TOOL_FIND_NOTES": "true",
+                "JOPLIN_TOOL_SEARCH_NOTES": "true",
                 "JOPLIN_TOOL_CREATE_NOTE": "false",
                 "JOPLIN_TOOL_DELETE_NOTE": "false",
                 "JOPLIN_TOOL_PING_JOPLIN": "true",
@@ -1229,7 +1229,7 @@ class TestConfigToolConfiguration:
             with patch.dict(
                 os.environ,
                 {
-                    "JOPLIN_TOOL_FIND_NOTES": "true",  # Override file setting
+                    "JOPLIN_TOOL_SEARCH_NOTES": "true",  # Override file setting
                     "JOPLIN_TOOL_DELETE_NOTE": "false",  # New setting
                 },
             ):

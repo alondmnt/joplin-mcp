@@ -7,7 +7,7 @@
   "tools": {
     "find_notes": true,
     "find_notes_with_tag": true,
-    "find_notes_in_notebook": true, 
+    "find_notes_in_notebook": true,
     "get_all_notes": true,
     "get_note": true,
     "create_note": true,

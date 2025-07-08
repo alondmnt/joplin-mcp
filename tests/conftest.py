@@ -254,7 +254,7 @@ def mock_mcp_server():
 @pytest.fixture
 def sample_mcp_tool_request():
     """Return a sample MCP tool request for testing."""
-    return {"name": "search_notes", "arguments": {"query": "test", "limit": 10}}
+    return {"name": "find_notes", "arguments": {"query": "test", "limit": 10}}
 
 
 @pytest.fixture
