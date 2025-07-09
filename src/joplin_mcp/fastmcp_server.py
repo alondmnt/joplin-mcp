@@ -1346,7 +1346,7 @@ async def get_server_info() -> dict:
         return {
             "connected": bool(is_connected),
             "url": getattr(client, 'url', 'unknown'),
-            "version": "FastMCP-based Joplin Server v1.0.0"
+            "version": "FastMCP-based Joplin Server v0.1.1"
         }
     except Exception:
         return {"connected": False}

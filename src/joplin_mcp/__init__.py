@@ -49,7 +49,7 @@ from .models import (
 # from .client import JoplinMCPClient  # REMOVED
 # from .server import JoplinMCPServer  # REMOVED
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __author__ = "Joplin MCP Contributors"
 __license__ = "MIT"
 __description__ = "Model Context Protocol server for Joplin note-taking application"
