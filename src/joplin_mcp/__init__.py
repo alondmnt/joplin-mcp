@@ -9,45 +9,18 @@ Features:
 - Full-text search capabilities with Joplin syntax support
 - MCP-compliant tool definitions and error handling
 - Built on the proven joppy library for reliable Joplin API integration
-- Comprehensive test coverage with TDD methodology
+- FastMCP-based server implementation
 
 Example usage:
-    >>> from joplin_mcp import JoplinMCPServer
-    >>> server = JoplinMCPServer(token="your_joplin_token")
-    >>> await server.start()
+    >>> from joplin_mcp.fastmcp_server import main
+    >>> main()  # Start the FastMCP server
 """
 
 import logging
 from typing import Optional
 
-# Import exceptions first (they have no dependencies)
-from .exceptions import (
-    JoplinAPIError,
-    JoplinConfigurationError,
-    JoplinConnectionError,
-    JoplinMCPError,
-    JoplinServerError,
-)
-
 # Import configuration
 from .config import JoplinMCPConfig
-
-# Import data models
-from .models import (
-    MCPNote,
-    MCPNotebook,
-    MCPSearchResult,
-    MCPTag,
-    MCPPaginatedResponse,
-    MCPErrorResponse,
-    MCPAPIResponse,
-    NotePriority,
-    JoplinTimestamp,
-)
-
-# Legacy client and server removed - using FastMCP implementation
-# from .client import JoplinMCPClient  # REMOVED
-# from .server import JoplinMCPServer  # REMOVED
 
 __version__ = "0.1.1"
 __author__ = "Joplin MCP Contributors"
@@ -56,26 +29,8 @@ __description__ = "Model Context Protocol server for Joplin note-taking applicat
 
 # Public API exports - these will be available when importing the package
 __all__ = [
-    # Core classes (legacy server/client removed - use FastMCP implementation)
-    # "JoplinMCPServer",  # REMOVED - use run_fastmcp_server.py
-    # "JoplinMCPClient",  # REMOVED - use FastMCP directly
-    # Configuration and models
+    # Configuration
     "JoplinMCPConfig",
-    "MCPNote",
-    "MCPNotebook",
-    "MCPTag",
-    "MCPSearchResult",
-    "MCPPaginatedResponse",
-    "MCPErrorResponse",
-    "MCPAPIResponse",
-    "NotePriority",
-    "JoplinTimestamp",
-    # Exceptions
-    "JoplinMCPError",
-    "JoplinConnectionError",
-    "JoplinConfigurationError",
-    "JoplinAPIError",
-    "JoplinServerError",
     # Version and metadata
     "__version__",
     "__author__",
