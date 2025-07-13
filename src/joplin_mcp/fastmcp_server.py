@@ -189,9 +189,8 @@ def filter_items_by_title(items: List[Any], query: str) -> List[Any]:
     ]
 
 def format_no_results_message(item_type: str, context: str = "") -> str:
-    """Format a standardized no results message."""
-    context_part = f" {context}" if context else ""
-    return f"No {item_type}s found{context_part}"
+    """Format a standardized no results message optimized for LLM comprehension."""
+    return f"ITEM_TYPE: {item_type}\nTOTAL_ITEMS: 0\nCONTEXT: {context}\nSTATUS: No {item_type}s found"
 
 def with_client_error_handling(operation_name: str):
     """Decorator to handle client operations with standardized error handling."""
@@ -300,73 +299,81 @@ def get_item_emoji(item_type: ItemType) -> str:
     return emoji_map.get(item_type, "📄")
 
 def format_creation_success(item_type: ItemType, title: str, item_id: str) -> str:
-    """Format a standardized success message for creation operations."""
-    emoji = get_item_emoji(item_type)
-    return f"""✅ Successfully created {item_type.value}
-
-**Title:** {title}
-**{emoji} CREATED {item_type.value.upper()} ID: {item_id} {emoji}**
-
-The {item_type.value} has been successfully created in Joplin.
-💡 **Remember: The {item_type.value} ID is `{item_id}` - you can use this to reference this {item_type.value}.**"""
+    """Format a standardized success message for creation operations optimized for LLM comprehension."""
+    return f"""OPERATION: CREATE_{item_type.value.upper()}
+STATUS: SUCCESS
+ITEM_TYPE: {item_type.value}
+ITEM_ID: {item_id}
+TITLE: {title}
+MESSAGE: {item_type.value} created successfully in Joplin"""
 
 def format_update_success(item_type: ItemType, item_id: str) -> str:
-    """Format a standardized success message for update operations."""
-    emoji = get_item_emoji(item_type)
-    return f"""✅ Successfully updated {item_type.value}
-
-**{emoji} UPDATED {item_type.value.upper()} ID: {item_id} {emoji}**
-
-The {item_type.value} has been successfully updated in Joplin."""
+    """Format a standardized success message for update operations optimized for LLM comprehension."""
+    return f"""OPERATION: UPDATE_{item_type.value.upper()}
+STATUS: SUCCESS
+ITEM_TYPE: {item_type.value}
+ITEM_ID: {item_id}
+MESSAGE: {item_type.value} updated successfully in Joplin"""
 
 def format_delete_success(item_type: ItemType, item_id: str) -> str:
-    """Format a standardized success message for delete operations."""
-    emoji = get_item_emoji(item_type)
-    return f"""✅ Successfully deleted {item_type.value}
-
-**{emoji} DELETED {item_type.value.upper()} ID: {item_id} {emoji}**
-
-The {item_type.value} has been permanently removed from Joplin."""
+    """Format a standardized success message for delete operations optimized for LLM comprehension."""
+    return f"""OPERATION: DELETE_{item_type.value.upper()}
+STATUS: SUCCESS
+ITEM_TYPE: {item_type.value}
+ITEM_ID: {item_id}
+MESSAGE: {item_type.value} deleted successfully from Joplin"""
 
 def format_relation_success(operation: str, item1_type: ItemType, item1_id: str, item2_type: ItemType, item2_id: str) -> str:
-    """Format a standardized success message for relationship operations."""
-    emoji1 = get_item_emoji(item1_type)
-    emoji2 = get_item_emoji(item2_type)
-    return f"""✅ Successfully {operation}
-
-**{emoji1} {item1_type.value.title()} ID:** `{item1_id}`
-**{emoji2} {item2_type.value.title()} ID:** `{item2_id}`
-
-The {operation} operation has been completed successfully."""
+    """Format a standardized success message for relationship operations optimized for LLM comprehension."""
+    return f"""OPERATION: {operation.upper().replace(' ', '_')}
+STATUS: SUCCESS
+ITEM1_TYPE: {item1_type.value}
+ITEM1_ID: {item1_id}
+ITEM2_TYPE: {item2_type.value}
+ITEM2_ID: {item2_id}
+MESSAGE: {operation} completed successfully"""
 
 def format_item_list(items: List[Any], item_type: ItemType) -> str:
-    """Format a list of items (notebooks, tags, etc.) for display."""
-    emoji = get_item_emoji(item_type)
-    
+    """Format a list of items (notebooks, tags, etc.) for display optimized for LLM comprehension."""
     if not items:
-        return f"{emoji} No {item_type.value}s found\n\nYour Joplin instance doesn't contain any {item_type.value}s yet."
+        return f"ITEM_TYPE: {item_type.value}\nTOTAL_ITEMS: 0\nSTATUS: No {item_type.value}s found in Joplin instance"
     
     count = len(items)
-    result_parts = [f"{emoji} Found {count} {item_type.value}{'s' if count != 1 else ''}", ""]
+    result_parts = [
+        f"ITEM_TYPE: {item_type.value}",
+        f"TOTAL_ITEMS: {count}",
+        ""
+    ]
     
     for i, item in enumerate(items, 1):
         title = getattr(item, 'title', 'Untitled')
         item_id = getattr(item, 'id', 'unknown')
         
-        result_parts.append(f"**{i}. {title}**")
-        result_parts.append(f"   ID: {item_id}")
+        # Structured item entry
+        result_parts.extend([
+            f"ITEM_{i}:",
+            f"  {item_type.value}_id: {item_id}",
+            f"  title: {title}",
+        ])
         
         # Add parent folder ID if available (for notebooks)
         parent_id = getattr(item, 'parent_id', None)
         if parent_id:
-            result_parts.append(f"   Parent: {parent_id}")
+            result_parts.append(f"  parent_id: {parent_id}")
         
         # Add creation time if available
         created_time = getattr(item, 'created_time', None)
         if created_time:
             created_date = format_timestamp(created_time, "%Y-%m-%d %H:%M")
             if created_date:
-                result_parts.append(f"   Created: {created_date}")
+                result_parts.append(f"  created: {created_date}")
+        
+        # Add update time if available
+        updated_time = getattr(item, 'updated_time', None)
+        if updated_time:
+            updated_date = format_timestamp(updated_time, "%Y-%m-%d %H:%M")
+            if updated_date:
+                result_parts.append(f"  updated: {updated_date}")
         
         result_parts.append("")
     
@@ -408,61 +415,69 @@ def format_item_details(item: Any, item_type: ItemType) -> str:
     return "\n".join(result_parts)
 
 def format_note_details(note: Any, include_body: bool = True, context: str = "individual_notes") -> str:
-    """Format a note for detailed display."""
+    """Format a note for detailed display optimized for LLM comprehension."""
     title = getattr(note, 'title', 'Untitled')
     note_id = getattr(note, 'id', 'unknown')
-    
-    result_parts = [f"**{title}**", f"ID: {note_id}", ""]
     
     # Check content exposure settings
     config = _module_config
     should_show_content = config.should_show_content(context)
     should_show_full_content = config.should_show_full_content(context)
     
+    # Structured note details - metadata first
+    result_parts = [
+        f"NOTE_ID: {note_id}",
+        f"TITLE: {title}",
+    ]
+    
+    # Add structured metadata first
+    created_time = getattr(note, 'created_time', None)
+    if created_time:
+        created_date = format_timestamp(created_time)
+        if created_date:
+            result_parts.append(f"CREATED: {created_date}")
+    
+    updated_time = getattr(note, 'updated_time', None)
+    if updated_time:
+        updated_date = format_timestamp(updated_time)
+        if updated_date:
+            result_parts.append(f"UPDATED: {updated_date}")
+    
+    # Notebook reference
+    parent_id = getattr(note, 'parent_id', None)
+    if parent_id:
+        result_parts.append(f"NOTEBOOK_ID: {parent_id}")
+    
+    # Todo status
+    is_todo = getattr(note, 'is_todo', 0)
+    if is_todo:
+        result_parts.append("IS_TODO: true")
+        todo_completed = getattr(note, 'todo_completed', 0)
+        result_parts.append(f"TODO_COMPLETED: {'true' if todo_completed else 'false'}")
+    else:
+        result_parts.append("IS_TODO: false")
+    
+    # Add content last to avoid breaking metadata flow
     if include_body and should_show_content:
         body = getattr(note, 'body', '')
         if body:
             if should_show_full_content:
-                result_parts.extend(["**Content:**", body, ""])
+                result_parts.append(f"CONTENT: {body}")
             else:
                 # Show preview only
                 max_length = config.get_max_preview_length()
                 preview = body[:max_length]
                 if len(body) > max_length:
                     preview += "..."
-                result_parts.extend(["**Content Preview:**", preview, ""])
-    
-    # Add metadata
-    metadata = []
-    
-    # Timestamps
-    created_time = getattr(note, 'created_time', None)
-    if created_time:
-        created_date = format_timestamp(created_time)
-        if created_date:
-            metadata.append(f"Created: {created_date}")
-    
-    updated_time = getattr(note, 'updated_time', None)
-    if updated_time:
-        updated_date = format_timestamp(updated_time)
-        if updated_date:
-            metadata.append(f"Updated: {updated_date}")
-    
-    # Notebook
-    parent_id = getattr(note, 'parent_id', None)
-    if parent_id:
-        metadata.append(f"Notebook: {parent_id}")
-    
-    if metadata:
-        result_parts.append("**Metadata:**")
-        result_parts.extend(f"- {m}" for m in metadata)
+                result_parts.append(f"CONTENT_PREVIEW: {preview}")
+        else:
+            result_parts.append("CONTENT: (empty)")
     
     return "\n".join(result_parts)
 
 def format_search_results(query: str, results: List[Any], context: str = "search_results") -> str:
-    """Format search results for display."""
+    """Format search results for display optimized for LLM comprehension."""
     count = len(results)
-    result_parts = [f'Found {count} note(s) for query: "{query}"', ""]
     
     # Check content exposure settings
     config = _module_config
@@ -470,55 +485,79 @@ def format_search_results(query: str, results: List[Any], context: str = "search
     should_show_full_content = config.should_show_full_content(context)
     max_preview_length = config.get_max_preview_length()
     
-    for note in results:
+    # Start with structured header
+    result_parts = [
+        f"SEARCH_QUERY: {query}",
+        f"TOTAL_RESULTS: {count}",
+        ""
+    ]
+    
+    for i, note in enumerate(results, 1):
         title = getattr(note, 'title', 'Untitled')
         note_id = getattr(note, 'id', 'unknown')
         
-        result_parts.append(f"**{title}** (ID: {note_id})")
+        # Structured note entry - metadata first
+        result_parts.extend([
+            f"RESULT_{i}:",
+            f"  note_id: {note_id}",
+            f"  title: {title}",
+        ])
         
-        # Handle content based on exposure settings
-        if should_show_content:
-            body = getattr(note, 'body', '')
-            if body:
-                if should_show_full_content:
-                    result_parts.append(body)
-                else:
-                    # Show preview only
-                    preview = body[:max_preview_length]
-                    if len(body) > max_preview_length:
-                        preview += "..."
-                    result_parts.append(preview)
-        
-        # Add creation and modification dates
-        dates = []
+        # Add structured timestamps
         created_time = getattr(note, 'created_time', None)
         if created_time:
             created_date = format_timestamp(created_time, "%Y-%m-%d %H:%M")
             if created_date:
-                dates.append(f"Created: {created_date}")
+                result_parts.append(f"  created: {created_date}")
         
         updated_time = getattr(note, 'updated_time', None)
         if updated_time:
             updated_date = format_timestamp(updated_time, "%Y-%m-%d %H:%M")
             if updated_date:
-                dates.append(f"Updated: {updated_date}")
+                result_parts.append(f"  updated: {updated_date}")
         
-        if dates:
-            result_parts.append(f"   {' | '.join(dates)}")
+        # Add notebook reference if available
+        parent_id = getattr(note, 'parent_id', None)
+        if parent_id:
+            result_parts.append(f"  notebook_id: {parent_id}")
+        
+        # Add todo status
+        is_todo = getattr(note, 'is_todo', 0)
+        if is_todo:
+            todo_completed = getattr(note, 'todo_completed', 0)
+            result_parts.append(f"  is_todo: true")
+            result_parts.append(f"  todo_completed: {'true' if todo_completed else 'false'}")
+        else:
+            result_parts.append(f"  is_todo: false")
+        
+        # Handle content last to avoid breaking metadata flow
+        if should_show_content:
+            body = getattr(note, 'body', '')
+            if body:
+                if should_show_full_content:
+                    result_parts.append(f"  content: {body}")
+                else:
+                    # Show preview only
+                    preview = body[:max_preview_length]
+                    if len(body) > max_preview_length:
+                        preview += "..."
+                    result_parts.append(f"  content_preview: {preview}")
         
         result_parts.append("")
     
     return "\n".join(result_parts)
 
 def format_tag_list_with_counts(tags: List[Any], client: Any) -> str:
-    """Format a list of tags with note counts for display."""
-    emoji = get_item_emoji(ItemType.tag)
-    
+    """Format a list of tags with note counts for display optimized for LLM comprehension."""
     if not tags:
-        return f"{emoji} No tags found\n\nYour Joplin instance doesn't contain any tags yet."
+        return "ITEM_TYPE: tag\nTOTAL_ITEMS: 0\nSTATUS: No tags found in Joplin instance"
     
     count = len(tags)
-    result_parts = [f"{emoji} Found {count} tag{'s' if count != 1 else ''}", ""]
+    result_parts = [
+        "ITEM_TYPE: tag",
+        f"TOTAL_ITEMS: {count}",
+        ""
+    ]
     
     for i, tag in enumerate(tags, 1):
         title = getattr(tag, 'title', 'Untitled')
@@ -533,15 +572,27 @@ def format_tag_list_with_counts(tags: List[Any], client: Any) -> str:
         except Exception:
             note_count = 0
         
-        result_parts.append(f"**{i}. {title}** ({note_count} note{'s' if note_count != 1 else ''})")
-        result_parts.append(f"   ID: {tag_id}")
+        # Structured tag entry
+        result_parts.extend([
+            f"ITEM_{i}:",
+            f"  tag_id: {tag_id}",
+            f"  title: {title}",
+            f"  note_count: {note_count}",
+        ])
         
         # Add creation time if available
         created_time = getattr(tag, 'created_time', None)
         if created_time:
             created_date = format_timestamp(created_time, "%Y-%m-%d %H:%M")
             if created_date:
-                result_parts.append(f"   Created: {created_date}")
+                result_parts.append(f"  created: {created_date}")
+        
+        # Add update time if available
+        updated_time = getattr(tag, 'updated_time', None)
+        if updated_time:
+            updated_date = format_timestamp(updated_time, "%Y-%m-%d %H:%M")
+            if updated_date:
+                result_parts.append(f"  updated: {updated_date}")
         
         result_parts.append("")
     
@@ -567,14 +618,21 @@ async def ping_joplin() -> str:
     Use to troubleshoot connection issues or confirm proper configuration.
     
     Returns:
-        str: "✅ Joplin server connection successful" if connected, or "❌ Joplin server connection failed" with error details if not.
+        str: Structured connection status information optimized for LLM comprehension.
     """
     try:
         client = get_joplin_client()
         client.ping()
-        return "✅ Joplin server connection successful\n\nThe Joplin server is responding and accessible."
+        return """OPERATION: PING_JOPLIN
+STATUS: SUCCESS
+CONNECTION: ESTABLISHED
+MESSAGE: Joplin server connection successful"""
     except Exception as e:
-        return f"❌ Joplin server connection failed\n\nUnable to reach the Joplin server. Please check your connection settings.\n\nError: {str(e)}"
+        return f"""OPERATION: PING_JOPLIN
+STATUS: FAILED
+CONNECTION: FAILED
+ERROR: {str(e)}
+MESSAGE: Unable to reach Joplin server - check connection settings"""
 
 # === NOTE OPERATIONS ===
 
@@ -644,7 +702,7 @@ async def get_links(
     body = getattr(note, 'body', '')
     
     if not body:
-        return f"📝 **{note_title}** (ID: {note_id})\n\nNo content found in this note."
+        return f"SOURCE_NOTE: {note_title}\nNOTE_ID: {note_id}\nTOTAL_LINKS: 0\nSTATUS: No content found in this note"
     
     # Parse links using regex
     import re
