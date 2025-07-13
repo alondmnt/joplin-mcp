@@ -672,22 +672,23 @@ async def get_note(
 async def get_links(
     note_id: Annotated[str, "The unique identifier of the note to extract links from. This is typically a long alphanumeric string like 'a1b2c3d4e5f6...' that uniquely identifies the note in Joplin."]
 ) -> str:
-    """Extract all links to other notes from a given note.
+    """Extract all links to other notes from a given note and find backlinks from other notes.
     
     Scans the note's content for links to other notes in the format [text](:/noteId)
-    and returns information about each link including the link text, target note ID,
-    target note title (if accessible), and the line context where the link appears.
+    and searches for backlinks (other notes that link to this note). Returns information
+    about each link including the link text, target note ID, target note title (if accessible),
+    and the line context where the link appears.
     
     Parameters:
         note_id (str): The unique identifier of the note to extract links from. Required.
     
     Returns:
-        str: Formatted list of all note links found in the note, including link text,
-             target note ID, target note title, and line context with line numbers.
-             Returns "No note links found" if no links are present.
+        str: Formatted list of all note links found in the note and backlinks from other notes,
+             including link text, target/source note ID, target/source note title, and line context.
+             Returns information about both outgoing links and backlinks.
     
     Examples:
-        - get_links("a1b2c3d4e5f6...") - Get all note links from the specified note
+        - get_links("a1b2c3d4e5f6...") - Get all note links and backlinks for the specified note
         
     Link format: [link text](:/targetNoteId)
     """
@@ -701,63 +702,134 @@ async def get_links(
     note_title = getattr(note, 'title', 'Untitled')
     body = getattr(note, 'body', '')
     
-    if not body:
-        return f"SOURCE_NOTE: {note_title}\nNOTE_ID: {note_id}\nTOTAL_LINKS: 0\nSTATUS: No content found in this note"
-    
-    # Parse links using regex
+    # Parse outgoing links using regex
     import re
     link_pattern = r'\[([^\]]+)\]\(:/([a-zA-Z0-9]+)\)'
     
-    links = []
-    lines = body.split('\n')
+    outgoing_links = []
+    if body:
+        lines = body.split('\n')
+        for line_num, line in enumerate(lines, 1):
+            matches = re.finditer(link_pattern, line)
+            for match in matches:
+                link_text = match.group(1)
+                target_note_id = match.group(2)
+                
+                # Try to get the target note title
+                try:
+                    target_note = client.get_note(target_note_id, fields="id,title")
+                    target_title = getattr(target_note, 'title', 'Unknown Note')
+                    target_exists = True
+                except:
+                    target_title = "Note not found"
+                    target_exists = False
+                
+                outgoing_links.append({
+                    'text': link_text,
+                    'target_id': target_note_id,
+                    'target_title': target_title,
+                    'target_exists': target_exists,
+                    'line_number': line_num,
+                    'line_context': line.strip()
+                })
     
-    for line_num, line in enumerate(lines, 1):
-        matches = re.finditer(link_pattern, line)
-        for match in matches:
-            link_text = match.group(1)
-            target_note_id = match.group(2)
+    # Search for backlinks - notes that link to this note
+    backlinks = []
+    try:
+        # Search for notes containing this note's ID in link format
+        search_query = f":/{note_id}"
+        backlink_results = client.search_all(query=search_query, fields=fields_list)
+        backlink_notes = process_search_results(backlink_results)
+        
+        # Filter out the current note and parse backlinks
+        for source_note in backlink_notes:
+            source_note_id = getattr(source_note, 'id', '')
+            source_note_title = getattr(source_note, 'title', 'Untitled')
+            source_body = getattr(source_note, 'body', '')
             
-            # Try to get the target note title
-            try:
-                target_note = client.get_note(target_note_id, fields="id,title")
-                target_title = getattr(target_note, 'title', 'Unknown Note')
-                target_exists = True
-            except:
-                target_title = "Note not found"
-                target_exists = False
-            
-            links.append({
-                'text': link_text,
-                'target_id': target_note_id,
-                'target_title': target_title,
-                'target_exists': target_exists,
-                'line_number': line_num,
-                'line_context': line.strip()
-            })
-    
-    if not links:
-        return f"SOURCE_NOTE: {note_title}\nNOTE_ID: {note_id}\nTOTAL_LINKS: 0\nSTATUS: No note links found in this note."
+            # Skip if it's the same note
+            if source_note_id == note_id:
+                continue
+                
+            # Parse links in the source note that point to our note
+            if source_body:
+                lines = source_body.split('\n')
+                for line_num, line in enumerate(lines, 1):
+                    matches = re.finditer(link_pattern, line)
+                    for match in matches:
+                        link_text = match.group(1)
+                        target_note_id = match.group(2)
+                        
+                        # Only include if this link points to our note
+                        if target_note_id == note_id:
+                            backlinks.append({
+                                'text': link_text,
+                                'source_id': source_note_id,
+                                'source_title': source_note_title,
+                                'line_number': line_num,
+                                'line_context': line.strip()
+                            })
+    except Exception as e:
+        # If backlink search fails, continue without backlinks
+        logger.warning(f"Failed to search for backlinks: {e}")
     
     # Format output optimized for LLM comprehension
     result_parts = [
         f"SOURCE_NOTE: {note_title}",
         f"NOTE_ID: {note_id}",
-        f"TOTAL_LINKS: {len(links)}",
+        f"TOTAL_OUTGOING_LINKS: {len(outgoing_links)}",
+        f"TOTAL_BACKLINKS: {len(backlinks)}",
         ""
     ]
     
-    for i, link in enumerate(links, 1):
-        status = "VALID" if link['target_exists'] else "BROKEN"
+    # Add outgoing links section
+    if outgoing_links:
+        result_parts.append("OUTGOING_LINKS:")
+        for i, link in enumerate(outgoing_links, 1):
+            status = "VALID" if link['target_exists'] else "BROKEN"
+            result_parts.extend([
+                f"  LINK_{i}:",
+                f"    link_text: {link['text']}",
+                f"    target_note_id: {link['target_id']}",
+                f"    target_note_title: {link['target_title']}",
+                f"    link_status: {status}",
+                f"    line_number: {link['line_number']}",
+                f"    line_context: {link['line_context']}",
+                ""
+            ])
+    else:
         result_parts.extend([
-            f"LINK_{i}:",
-            f"  link_text: {link['text']}",
-            f"  target_note_id: {link['target_id']}",
-            f"  target_note_title: {link['target_title']}",
-            f"  link_status: {status}",
-            f"  line_number: {link['line_number']}",
-            f"  line_context: {link['line_context']}",
+            "OUTGOING_LINKS: None",
             ""
         ])
+    
+    # Add backlinks section
+    if backlinks:
+        result_parts.append("BACKLINKS:")
+        for i, backlink in enumerate(backlinks, 1):
+            result_parts.extend([
+                f"  BACKLINK_{i}:",
+                f"    link_text: {backlink['text']}",
+                f"    source_note_id: {backlink['source_id']}",
+                f"    source_note_title: {backlink['source_title']}",
+                f"    line_number: {backlink['line_number']}",
+                f"    line_context: {backlink['line_context']}",
+                ""
+            ])
+    else:
+        result_parts.extend([
+            "BACKLINKS: None",
+            ""
+        ])
+    
+    # Add status message
+    if not outgoing_links and not backlinks:
+        if not body:
+            result_parts.append("STATUS: No content found in this note and no backlinks found")
+        else:
+            result_parts.append("STATUS: No note links found in this note and no backlinks found")
+    else:
+        result_parts.append("STATUS: Links and backlinks retrieved successfully")
     
     return "\n".join(result_parts)
 
