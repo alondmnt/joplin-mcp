@@ -10,6 +10,7 @@
     "find_notes_in_notebook": true,
     "get_all_notes": false,
     "get_note": true,
+    "get_links": true,
     "list_notebooks": true,
     "list_tags": true,
     "get_tags_by_note": true,

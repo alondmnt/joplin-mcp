@@ -20,6 +20,7 @@
     
     "_comment_disabled": "EVERYTHING ELSE DISABLED",
     "get_note": false,
+    "get_links": false,
     "create_notebook": false,
     "create_tag": false,
     "update_note": false,
@@ -31,15 +32,9 @@
     "ping_joplin": false
   },
   "content_exposure": {
-    "search_results": {
-      "show_content": true,
-      "show_full_content": false,
-      "max_preview_length": 150
-    },
-    "individual_notes": {
-      "show_content": true,
-      "show_full_content": false,
-      "max_preview_length": 300
-    }
+    "search_results": "preview",
+    "individual_notes": "preview",
+    "listings": "none",
+    "max_preview_length": 150
   }
 } 

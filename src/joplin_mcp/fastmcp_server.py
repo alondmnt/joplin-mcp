@@ -10,6 +10,7 @@
 📋 MANAGING NOTES:
 - create_note(title, notebook_name, body) - Create a new note
 - get_note(note_id) - Get a specific note by ID
+- get_links(note_id) - Extract all links to other notes from a note
 - update_note(note_id, title, body) - Update an existing note
 - delete_note(note_id) - Delete a note
 
@@ -608,6 +609,99 @@ async def get_note(
     note = client.get_note(note_id, fields=fields_list)
     
     return format_note_details(note, include_body, "individual_notes")
+
+@create_tool("get_links", "Get links")
+async def get_links(
+    note_id: Annotated[str, "The unique identifier of the note to extract links from. This is typically a long alphanumeric string like 'a1b2c3d4e5f6...' that uniquely identifies the note in Joplin."]
+) -> str:
+    """Extract all links to other notes from a given note.
+    
+    Scans the note's content for links to other notes in the format [text](:/noteId)
+    and returns information about each link including the link text, target note ID,
+    target note title (if accessible), and the line context where the link appears.
+    
+    Parameters:
+        note_id (str): The unique identifier of the note to extract links from. Required.
+    
+    Returns:
+        str: Formatted list of all note links found in the note, including link text,
+             target note ID, target note title, and line context with line numbers.
+             Returns "No note links found" if no links are present.
+    
+    Examples:
+        - get_links("a1b2c3d4e5f6...") - Get all note links from the specified note
+        
+    Link format: [link text](:/targetNoteId)
+    """
+    note_id = validate_required_param(note_id, "note_id")
+    client = get_joplin_client()
+    
+    # Get the note
+    fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
+    note = client.get_note(note_id, fields=fields_list)
+    
+    note_title = getattr(note, 'title', 'Untitled')
+    body = getattr(note, 'body', '')
+    
+    if not body:
+        return f"📝 **{note_title}** (ID: {note_id})\n\nNo content found in this note."
+    
+    # Parse links using regex
+    import re
+    link_pattern = r'\[([^\]]+)\]\(:/([a-zA-Z0-9]+)\)'
+    
+    links = []
+    lines = body.split('\n')
+    
+    for line_num, line in enumerate(lines, 1):
+        matches = re.finditer(link_pattern, line)
+        for match in matches:
+            link_text = match.group(1)
+            target_note_id = match.group(2)
+            
+            # Try to get the target note title
+            try:
+                target_note = client.get_note(target_note_id, fields="id,title")
+                target_title = getattr(target_note, 'title', 'Unknown Note')
+                target_exists = True
+            except:
+                target_title = "Note not found"
+                target_exists = False
+            
+            links.append({
+                'text': link_text,
+                'target_id': target_note_id,
+                'target_title': target_title,
+                'target_exists': target_exists,
+                'line_number': line_num,
+                'line_context': line.strip()
+            })
+    
+    if not links:
+        return f"SOURCE_NOTE: {note_title}\nNOTE_ID: {note_id}\nTOTAL_LINKS: 0\nSTATUS: No note links found in this note."
+    
+    # Format output optimized for LLM comprehension
+    result_parts = [
+        f"SOURCE_NOTE: {note_title}",
+        f"NOTE_ID: {note_id}",
+        f"TOTAL_LINKS: {len(links)}",
+        ""
+    ]
+    
+    for i, link in enumerate(links, 1):
+        status = "VALID" if link['target_exists'] else "BROKEN"
+        result_parts.extend([
+            f"LINK_{i}:",
+            f"  link_text: {link['text']}",
+            f"  target_note_id: {link['target_id']}",
+            f"  target_note_title: {link['target_title']}",
+            f"  link_status: {status}",
+            f"  line_number: {link['line_number']}",
+            f"  line_context: {link['line_context']}",
+            ""
+        ])
+    
+    return "\n".join(result_parts)
 
 @create_tool("create_note", "Create note")
 async def create_note(

@@ -10,6 +10,7 @@
     "find_notes_in_notebook": true,
     "get_all_notes": false,
     "get_note": true,
+    "get_links": true,
     "create_note": true,
     "create_notebook": true,
     "create_tag": true,
@@ -26,14 +27,9 @@
     "ping_joplin": true
   },
   "content_exposure": {
-    "search_results": {
-      "show_content": true,
-      "show_full_content": false,
-      "max_preview_length": 200
-    },
-    "individual_notes": {
-      "show_content": true,
-      "show_full_content": true
-    }
+    "search_results": "preview",
+    "individual_notes": "full",
+    "listings": "none",
+    "max_preview_length": 200
   }
 } 

@@ -194,14 +194,15 @@ class JoplinMCPConfig:
         "JOPLIN_SSL_VERIFY": "JOPLIN_VERIFY_SSL",
     }
 
-    # Default tool configurations - optimized for LLMs (17 tools total)
+    # Default tool configurations - optimized for LLMs (19 tools total)
     DEFAULT_TOOLS = {
-        # Finding notes (3 tools enabled by default, 2 disabled)
+        # Finding notes (5 tools enabled by default, 1 disabled)
         "find_notes": True,              # Find notes by text content
         "find_notes_with_tag": True,     # Find notes by tag
         "find_notes_in_notebook": True,  # Find notes by notebook
         "get_all_notes": False,          # Get all notes - disabled by default (can fill context window)
-        "get_note": False,               # Get formatted note - disabled by default, use joplin://notes/{id} instead
+        "get_note": True,               # Get formatted note details
+        "get_links": True,              # Extract links to other notes from a note
         
         # Managing notes (3 tools)
         "create_note": True,             # Create new note
@@ -228,15 +229,13 @@ class JoplinMCPConfig:
         # Utility operations (1 tool)
         "ping_joplin": True,             # Test connection
         
-        # Note: Redundant tools removed (search_notes, get_notebook, search_notebooks, 
         # get_notes_by_notebook, get_tag, search_tags, get_notes_by_tag)
-        # get_note, get_all_notes, update_tag and update_notebook are disabled by default but available if needed
-        # Use joplin://notes/{id} document access for efficient note content retrieval
+        # get_all_notes, update_tag and update_notebook are disabled by default but available if needed
     }
 
     # Tool categories for easier management
     TOOL_CATEGORIES = {
-        "finding": ["find_notes", "find_notes_with_tag", "find_notes_in_notebook", "get_all_notes", "get_note"],
+        "finding": ["find_notes", "find_notes_with_tag", "find_notes_in_notebook", "get_all_notes", "get_note", "get_links"],
         "notes": ["create_note", "update_note", "delete_note"],
         "notebooks": ["list_notebooks", "create_notebook", "update_notebook", "delete_notebook"],
         "tags": ["list_tags", "create_tag", "update_tag", "delete_tag", "get_tags_by_note", "tag_note", "untag_note"],

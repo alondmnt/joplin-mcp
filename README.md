@@ -15,11 +15,11 @@ A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://jop
 
 ## What You Can Do
 
-This MCP server provides **18 optimized tools** for comprehensive Joplin integration:
+This MCP server provides **19 optimized tools** for comprehensive Joplin integration:
 
 ### **Note Management**
 - **Find & Search**: `find_notes`, `find_notes_with_tag`, `find_notes_in_notebook`, `get_all_notes`
-- **CRUD Operations**: `get_note`, `create_note`, `update_note`, `delete_note`
+- **CRUD Operations**: `get_note`, `get_links`, `create_note`, `update_note`, `delete_note`
 
 ### **Notebook Management** 
 - **Organize**: `list_notebooks`, `create_notebook`, `update_notebook`, `delete_notebook`
@@ -303,6 +303,7 @@ Available tools: 17 tools ready
 | `find_notes_in_notebook` | Read | Find notes in specific notebook (supports task filtering) |
 | `get_all_notes` | Read | Get all notes, most recent first *(disabled by default)* |
 | `get_note` | Read | Get specific note by ID |
+| `get_links` | Read | Extract links to other notes from a note |
 | **Managing Notes** | | |
 | `create_note` | Write | Create new notes |
 | `update_note` | Update | Modify existing notes |
