@@ -34,6 +34,9 @@ from functools import wraps
 # FastMCP imports
 from fastmcp import FastMCP, Context
 
+# Pydantic imports for proper Field annotations
+from pydantic import Field
+
 # Direct joppy import
 from joppy.client_api import ClientApi
 
@@ -791,8 +794,8 @@ MESSAGE: Unable to reach Joplin server - check connection settings"""
 
 @create_tool("get_note", "Get note")
 async def get_note(
-    note_id: Annotated[str, "The unique identifier of the note to retrieve. This is typically a long alphanumeric string like 'a1b2c3d4e5f6...' that uniquely identifies the note in Joplin."], 
-    include_body: Annotated[Union[bool, str], "Whether to include the note's content/body in the response. Set to True to see the full note content, False to only see metadata like title, dates, and IDs. Default is True."] = True
+    note_id: Annotated[str, Field(description="The unique identifier of the note to retrieve. This is typically a long alphanumeric string like 'a1b2c3d4e5f6...' that uniquely identifies the note in Joplin.")], 
+    include_body: Annotated[Union[bool, str], Field(description="Whether to include the note's content/body in the response. Set to True to see the full note content, False to only see metadata like title, dates, and IDs. Default is True.")] = True
 ) -> str:
     """Retrieve a specific note by its unique identifier.
     
@@ -822,7 +825,7 @@ async def get_note(
 
 @create_tool("get_links", "Get links")
 async def get_links(
-    note_id: Annotated[str, "The unique identifier of the note to extract links from. This is typically a long alphanumeric string like 'a1b2c3d4e5f6...' that uniquely identifies the note in Joplin."]
+    note_id: Annotated[str, Field(description="The unique identifier of the note to extract links from. This is typically a long alphanumeric string like 'a1b2c3d4e5f6...' that uniquely identifies the note in Joplin.")]
 ) -> str:
     """Extract all links to other notes from a given note and find backlinks from other notes.
     
@@ -986,11 +989,11 @@ async def get_links(
 
 @create_tool("create_note", "Create note")
 async def create_note(
-    title: Annotated[str, "The title/name of the new note. This is required and will be displayed in Joplin's note list. Example: 'My Important Note' or 'Meeting Notes - Jan 15'"], 
-    notebook_name: Annotated[str, "The name of the notebook where this note should be created. This is required - you must specify which notebook to put the note in. Use the exact notebook name as shown in list_notebooks. Example: 'Work Projects' or 'Personal Notes'"], 
-    body: Annotated[str, "The content/text of the note. This can be plain text or Markdown. Leave empty to create a note with no content initially. Example: 'This is my note content with **bold** and *italic* text.'"] = "",
-    is_todo: Annotated[Union[bool, str], "Whether this note should be created as a todo/task item. Set to True to make it a checkable todo item, False for a regular note. Default is False."] = False,
-    todo_completed: Annotated[Union[bool, str], "Whether the todo item should be marked as completed when created. Only relevant if is_todo=True. Set to True to create a completed todo, False for uncompleted. Default is False."] = False
+    title: Annotated[str, Field(description="The title/name of the new note. This is required and will be displayed in Joplin's note list. Example: 'My Important Note' or 'Meeting Notes - Jan 15'")], 
+    notebook_name: Annotated[str, Field(description="The name of the notebook where this note should be created. This is required - you must specify which notebook to put the note in. Use the exact notebook name as shown in list_notebooks. Example: 'Work Projects' or 'Personal Notes'")], 
+    body: Annotated[str, Field(description="The content/text of the note. This can be plain text or Markdown. Leave empty to create a note with no content initially. Example: 'This is my note content with **bold** and *italic* text.'")] = "",
+    is_todo: Annotated[Union[bool, str], Field(description="Whether this note should be created as a todo/task item. Set to True to make it a checkable todo item, False for a regular note. Default is False.")] = False,
+    todo_completed: Annotated[Union[bool, str], Field(description="Whether the todo item should be marked as completed when created. Only relevant if is_todo=True. Set to True to create a completed todo, False for uncompleted. Default is False.")] = False
 ) -> str:
     """Create a new note in a specified notebook in Joplin.
     
@@ -1029,11 +1032,11 @@ async def create_note(
 
 @create_tool("update_note", "Update note")
 async def update_note(
-    note_id: Annotated[str, "The unique identifier of the note to update. Required."],
-    title: Annotated[Optional[str], "New title for the note. Optional - only updates if provided."] = None,
-    body: Annotated[Optional[str], "New content for the note. Can be plain text or Markdown. Optional - only updates if provided."] = None,
-    is_todo: Annotated[Union[bool, str, None], "Whether to convert the note to/from a todo item. Optional - only updates if provided."] = None,
-    todo_completed: Annotated[Union[bool, str, None], "Whether to mark the todo as completed. Only relevant if note is a todo. Optional - only updates if provided."] = None
+    note_id: Annotated[str, Field(description="The unique identifier of the note to update. Required.")],
+    title: Annotated[Optional[str], Field(description="New title for the note. Optional - only updates if provided.")] = None,
+    body: Annotated[Optional[str], Field(description="New content for the note. Can be plain text or Markdown. Optional - only updates if provided.")] = None,
+    is_todo: Annotated[Union[bool, str, None], Field(description="Whether to convert the note to/from a todo item. Optional - only updates if provided.")] = None,
+    todo_completed: Annotated[Union[bool, str, None], Field(description="Whether to mark the todo as completed. Only relevant if note is a todo. Optional - only updates if provided.")] = None
 ) -> str:
     """Update an existing note in Joplin.
     
@@ -1072,7 +1075,7 @@ async def update_note(
 
 @create_tool("delete_note", "Delete note")
 async def delete_note(
-    note_id: Annotated[str, "The unique identifier of the note to delete. Required."]
+    note_id: Annotated[str, Field(description="The unique identifier of the note to delete. Required.")]
 ) -> str:
     """Delete a note from Joplin.
     
@@ -1096,11 +1099,11 @@ async def delete_note(
 
 @create_tool("find_notes", "Find notes")
 async def find_notes(
-    query: Annotated[str, "Text to search for in note titles and content. Use '*' to list all notes without specific text filtering. Examples: 'meeting', 'project planning', 'grocery list', or '*' for all notes."],
-    limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20,
-    offset: Annotated[int, "Number of notes to skip for pagination. Use with limit for paging through results. Default is 0."] = 0,
-    task: Annotated[Union[bool, str, None], "Filter by task type. True for tasks only, False for regular notes only, None for all notes. Default is None (all notes)."] = None,
-    completed: Annotated[Union[bool, str, None], "Filter by completion status (only relevant when task=True). True for completed tasks, False for uncompleted tasks, None for all tasks. Default is None (all tasks)."] = None
+    query: Annotated[str, Field(description="Text to search for in note titles and content. Use '*' to list all notes without specific text filtering. Examples: 'meeting', 'project planning', 'grocery list', or '*' for all notes.")],
+    limit: Annotated[int, Field(description="Maximum number of notes to return. Must be between 1 and 100. Default is 20.")] = 20,
+    offset: Annotated[int, Field(description="Number of notes to skip for pagination. Use with limit for paging through results. Default is 0.")] = 0,
+    task: Annotated[Union[bool, str, None], Field(description="Filter by task type. True for tasks only, False for regular notes only, None for all notes. Default is None (all notes).")] = None,
+    completed: Annotated[Union[bool, str, None], Field(description="Filter by completion status (only relevant when task=True). True for completed tasks, False for uncompleted tasks, None for all tasks. Default is None (all tasks).")] = None
 ) -> str:
     """Find notes by searching their titles and content, with support for listing all notes and pagination.
     
@@ -1211,7 +1214,7 @@ async def find_notes(
 
 @create_tool("get_all_notes", "Get all notes")
 async def get_all_notes(
-    limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20
+    limit: Annotated[int, Field(description="Maximum number of notes to return. Must be between 1 and 100. Default is 20.")] = 20
 ) -> str:
     """Get all notes in your Joplin instance.
     
@@ -1247,11 +1250,11 @@ async def get_all_notes(
 
 @create_tool("find_notes_with_tag", "Find notes with tag")
 async def find_notes_with_tag(
-    tag_name: Annotated[str, "The tag name to search for. Example: 'time-slip' or 'work' or 'important'"],
-    limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20,
-    offset: Annotated[int, "Number of notes to skip for pagination. Use with limit for paging through results. Default is 0."] = 0,
-    task: Annotated[Union[bool, str, None], "Filter by task type. True for tasks only, False for regular notes only, None for all notes. Default is None (all notes)."] = None,
-    completed: Annotated[Union[bool, str, None], "Filter by completion status (only relevant when task=True). True for completed tasks, False for uncompleted tasks, None for all tasks. Default is None (all tasks)."] = None
+    tag_name: Annotated[str, Field(description="The tag name to search for. Example: 'time-slip' or 'work' or 'important'")],
+    limit: Annotated[int, Field(description="Maximum number of notes to return. Must be between 1 and 100. Default is 20.")] = 20,
+    offset: Annotated[int, Field(description="Number of notes to skip for pagination. Use with limit for paging through results. Default is 0.")] = 0,
+    task: Annotated[Union[bool, str, None], Field(description="Filter by task type. True for tasks only, False for regular notes only, None for all notes. Default is None (all notes).")] = None,
+    completed: Annotated[Union[bool, str, None], Field(description="Filter by completion status (only relevant when task=True). True for completed tasks, False for uncompleted tasks, None for all tasks. Default is None (all tasks).")] = None
 ) -> str:
     """Find all notes that have a specific tag, with pagination support.
     
@@ -1313,11 +1316,11 @@ async def find_notes_with_tag(
 
 @create_tool("find_notes_in_notebook", "Find notes in notebook")  
 async def find_notes_in_notebook(
-    notebook_name: Annotated[str, "The notebook name to search in. Example: 'Work Projects' or 'Personal Notes'"],
-    limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20,
-    offset: Annotated[int, "Number of notes to skip for pagination. Use with limit for paging through results. Default is 0."] = 0,
-    task: Annotated[Union[bool, str, None], "Filter by task type. True for tasks only, False for regular notes only, None for all notes. Default is None (all notes)."] = None,
-    completed: Annotated[Union[bool, str, None], "Filter by completion status (only relevant when task=True). True for completed tasks, False for uncompleted tasks, None for all tasks. Default is None (all tasks)."] = None
+    notebook_name: Annotated[str, Field(description="The notebook name to search in. Example: 'Work Projects' or 'Personal Notes'")],
+    limit: Annotated[int, Field(description="Maximum number of notes to return. Must be between 1 and 100. Default is 20.")] = 20,
+    offset: Annotated[int, Field(description="Number of notes to skip for pagination. Use with limit for paging through results. Default is 0.")] = 0,
+    task: Annotated[Union[bool, str, None], Field(description="Filter by task type. True for tasks only, False for regular notes only, None for all notes. Default is None (all notes).")] = None,
+    completed: Annotated[Union[bool, str, None], Field(description="Filter by completion status (only relevant when task=True). True for completed tasks, False for uncompleted tasks, None for all tasks. Default is None (all tasks).")] = None
 ) -> str:
     """Find all notes in a specific notebook, with pagination support.
     
@@ -1403,8 +1406,8 @@ async def list_notebooks() -> str:
 
 @create_tool("create_notebook", "Create notebook")
 async def create_notebook(
-    title: Annotated[str, "The name of the new notebook/folder. This is required and will be displayed in Joplin's notebook list. Example: 'Work Projects' or 'Personal Notes' or 'Archive 2024'"], 
-    parent_id: Annotated[Optional[str], "Optional parent notebook ID to create this as a sub-notebook. If provided, this notebook will be created inside the specified parent notebook. Leave empty to create a top-level notebook. Example: 'notebook123456789abcdef'"] = None
+    title: Annotated[str, Field(description="The name of the new notebook/folder. This is required and will be displayed in Joplin's notebook list. Example: 'Work Projects' or 'Personal Notes' or 'Archive 2024'")], 
+    parent_id: Annotated[Optional[str], Field(description="Optional parent notebook ID to create this as a sub-notebook. If provided, this notebook will be created inside the specified parent notebook. Leave empty to create a top-level notebook. Example: 'notebook123456789abcdef'")] = None
 ) -> str:
     """Create a new notebook (folder) in Joplin to organize your notes.
     
@@ -1435,8 +1438,8 @@ async def create_notebook(
 
 @create_tool("update_notebook", "Update notebook")
 async def update_notebook(
-    notebook_id: Annotated[str, "The unique identifier of the notebook to update. Required."],
-    title: Annotated[str, "The new title for the notebook. Required."]
+    notebook_id: Annotated[str, Field(description="The unique identifier of the notebook to update. Required.")],
+    title: Annotated[str, Field(description="The new title for the notebook. Required.")]
 ) -> str:
     """Update an existing notebook.
     
@@ -1461,7 +1464,7 @@ async def update_notebook(
 
 @create_tool("delete_notebook", "Delete notebook")
 async def delete_notebook(
-    notebook_id: Annotated[str, "The unique identifier of the notebook to delete. Required."]
+    notebook_id: Annotated[str, Field(description="The unique identifier of the notebook to delete. Required.")]
 ) -> str:
     """Delete a notebook from Joplin.
     
@@ -1511,7 +1514,7 @@ async def list_tags() -> str:
 
 @create_tool("create_tag", "Create tag")
 async def create_tag(
-    title: Annotated[str, "The name of the new tag. Required."]
+    title: Annotated[str, Field(description="The name of the new tag. Required.")]
 ) -> str:
     """Create a new tag.
     
@@ -1534,8 +1537,8 @@ async def create_tag(
 
 @create_tool("update_tag", "Update tag")
 async def update_tag(
-    tag_id: Annotated[str, "The unique identifier of the tag to update. Required."],
-    title: Annotated[str, "The new title for the tag. Required."]
+    tag_id: Annotated[str, Field(description="The unique identifier of the tag to update. Required.")],
+    title: Annotated[str, Field(description="The new title for the tag. Required.")]
 ) -> str:
     """Update an existing tag.
     
@@ -1560,7 +1563,7 @@ async def update_tag(
 
 @create_tool("delete_tag", "Delete tag")
 async def delete_tag(
-    tag_id: Annotated[str, "The unique identifier of the tag to delete. Required."]
+    tag_id: Annotated[str, Field(description="The unique identifier of the tag to delete. Required.")]
 ) -> str:
     """Delete a tag from Joplin.
     
@@ -1587,7 +1590,7 @@ async def delete_tag(
 
 @create_tool("get_tags_by_note", "Get tags by note")
 async def get_tags_by_note(
-    note_id: Annotated[str, "The unique identifier of the note to get tags from. Required."]
+    note_id: Annotated[str, Field(description="The unique identifier of the note to get tags from. Required.")]
 ) -> str:
     """Get all tags for a specific note.
     
@@ -1662,8 +1665,8 @@ async def _untag_note_impl(note_id: str, tag_name: str) -> str:
 # Primary tag operations
 @create_tool("tag_note", "Tag note")
 async def tag_note(
-    note_id: Annotated[str, "The unique identifier of the note to add a tag to. This ensures we target the exact note even if multiple notes have similar titles. Example: 'a1b2c3d4e5f6...'"], 
-    tag_name: Annotated[str, "The name of the tag to add to the note. This tag will be applied to the note for categorization. Example: 'Important' or 'Work'"]
+    note_id: Annotated[str, Field(description="The unique identifier of the note to add a tag to. This ensures we target the exact note even if multiple notes have similar titles. Example: 'a1b2c3d4e5f6...'")], 
+    tag_name: Annotated[str, Field(description="The name of the tag to add to the note. This tag will be applied to the note for categorization. Example: 'Important' or 'Work'")]
 ) -> str:
     """Add a tag to a note for categorization and organization.
     
@@ -1689,8 +1692,8 @@ async def tag_note(
 
 @create_tool("untag_note", "Untag note")
 async def untag_note(
-    note_id: Annotated[str, "The unique identifier of the note to remove a tag from. Required."], 
-    tag_name: Annotated[str, "The name of the tag to remove from the note. Required."]
+    note_id: Annotated[str, Field(description="The unique identifier of the note to remove a tag from. Required.")], 
+    tag_name: Annotated[str, Field(description="The name of the tag to remove from the note. Required.")]
 ) -> str:
     """Remove a tag from a note.
     
