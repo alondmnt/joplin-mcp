@@ -197,6 +197,67 @@ def format_no_results_with_pagination(item_type: str, criteria: str, offset: int
 # Common fields list for note operations
 COMMON_NOTE_FIELDS = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
 
+def create_content_preview(body: str, max_length: int) -> str:
+    """Create a content preview that preserves front matter if present.
+    
+    If the content starts with front matter (delimited by ---), includes the entire
+    front matter in the preview, then continues with the regular preview logic for
+    the remaining content.
+    
+    Args:
+        body: The note content to create a preview for
+        max_length: Maximum length for the preview (excluding front matter)
+    
+    Returns:
+        str: The content preview with front matter preserved if present
+    """
+    if not body:
+        return ""
+    
+    # Check if content starts with front matter
+    if body.startswith('---'):
+        # Find the closing front matter delimiter
+        lines = body.split('\n')
+        front_matter_end = -1
+        
+        # Look for the closing --- (skip the first line which is the opening ---)
+        for i, line in enumerate(lines[1:], 1):
+            if line.strip() == '---':
+                front_matter_end = i
+                break
+        
+        if front_matter_end != -1:
+            # Include the front matter up to 20 lines maximum
+            front_matter_lines = lines[:front_matter_end + 1]
+            if len(front_matter_lines) > 20:
+                # Truncate front matter if it exceeds 20 lines
+                # Keep opening --- + 18 lines of content + closing --- = 20 lines total
+                front_matter_lines = lines[:19]  # Opening --- + 18 lines of content
+                front_matter_lines.append('---')  # Add back the closing delimiter
+            front_matter = '\n'.join(front_matter_lines)
+            
+            # Get the remaining content after front matter
+            remaining_content = '\n'.join(lines[front_matter_end + 1:])
+            
+            # Apply preview logic to the remaining content
+            if remaining_content:
+                remaining_content = remaining_content.strip()
+                if len(remaining_content) > max_length:
+                    remaining_content = remaining_content[:max_length] + "..."
+                
+                # Combine front matter with remaining content preview
+                return front_matter + '\n' + remaining_content
+            else:
+                # Only front matter, no additional content
+                return front_matter
+    
+    # No front matter, use regular preview logic
+    preview = body[:max_length]
+    if len(body) > max_length:
+        preview += "..."
+    
+    return preview
+
 def validate_boolean_param(value: Union[bool, str, None], param_name: str) -> Optional[bool]:
     """Validate and convert boolean parameter that might come as string."""
     if value is None:
@@ -526,9 +587,7 @@ def format_note_details(note: Any, include_body: bool = True, context: str = "in
             else:
                 # Show preview only
                 max_length = config.get_max_preview_length()
-                preview = body[:max_length]
-                if len(body) > max_length:
-                    preview += "..."
+                preview = create_content_preview(body, max_length)
                 result_parts.append(f"CONTENT_PREVIEW: {preview}")
         else:
             result_parts.append("CONTENT: (empty)")
@@ -618,9 +677,7 @@ def format_search_results_with_pagination(query: str, results: List[Any], total_
                     result_parts.append(f"  content: {body}")
                 else:
                     # Show preview only
-                    preview = body[:max_preview_length]
-                    if len(body) > max_preview_length:
-                        preview += "..."
+                    preview = create_content_preview(body, max_preview_length)
                     result_parts.append(f"  content_preview: {preview}")
         
         result_parts.append("")
