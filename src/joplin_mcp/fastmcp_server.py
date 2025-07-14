@@ -770,11 +770,10 @@ def create_tool(tool_name: str, operation_name: str):
 async def ping_joplin() -> str:
     """Test connection to Joplin server.
     
-    Verifies that the Joplin MCP server can connect to the Joplin application.
-    Use to troubleshoot connection issues or confirm proper configuration.
+    Verifies connectivity to the Joplin application. Use to troubleshoot connection issues.
     
     Returns:
-        str: Structured connection status information optimized for LLM comprehension.
+        str: Connection status information.
     """
     try:
         client = get_joplin_client()
@@ -799,16 +798,10 @@ async def get_note(
 ) -> str:
     """Retrieve a specific note by its unique identifier.
     
-    Fetches a single note from Joplin using its unique ID. Returns the note's title, content, 
-    creation/modification dates, and other metadata.
-    
-    Parameters:
-        note_id (str): The unique identifier of the note to retrieve. Required.
-        include_body (bool): Whether to include the note's content in the response. 
-                            True = full note with content (default), False = metadata only.
+    Fetches a single note from Joplin and returns its title, content, dates, and metadata.
     
     Returns:
-        str: Formatted note details including title, ID, content (if requested), creation/modification dates, and parent notebook ID.
+        str: Formatted note details including title, ID, content (if requested), and dates.
     
     Examples:
         - get_note("a1b2c3d4e5f6...", True) - Get full note with content
@@ -829,21 +822,11 @@ async def get_links(
 ) -> str:
     """Extract all links to other notes from a given note and find backlinks from other notes.
     
-    Scans the note's content for links to other notes in the format [text](:/noteId)
-    and searches for backlinks (other notes that link to this note). Returns information
-    about each link including the link text, target note ID, target note title (if accessible),
-    and the line context where the link appears.
-    
-    Parameters:
-        note_id (str): The unique identifier of the note to extract links from. Required.
+    Scans the note's content for links in the format [text](:/noteId) and searches for backlinks
+    (other notes that link to this note). Returns link text, target/source note info, and line context.
     
     Returns:
-        str: Formatted list of all note links found in the note and backlinks from other notes,
-             including link text, target/source note ID, target/source note title, and line context.
-             Returns information about both outgoing links and backlinks.
-    
-    Examples:
-        - get_links("a1b2c3d4e5f6...") - Get all note links and backlinks for the specified note
+        str: Formatted list of outgoing links and backlinks with titles, IDs, and line context.
         
     Link format: [link text](:/targetNoteId)
     """
@@ -997,24 +980,15 @@ async def create_note(
 ) -> str:
     """Create a new note in a specified notebook in Joplin.
     
-    Creates a new note with the specified title, content, and properties in the given notebook.
-    Uses the notebook name for easier identification instead of requiring notebook IDs.
-    
-    Parameters:
-        title (str): The title of the new note. Required.
-        notebook_name (str): The name of the notebook where the note should be created. Required.
-                             Use list_notebooks() to see available notebook names.
-        body (str): The content of the note. Can be plain text or Markdown. Optional, defaults to empty.
-        is_todo (bool): Whether to create as a todo/task item. Optional, defaults to False.
-        todo_completed (bool): Whether the todo should be marked as completed when created. 
-                              Only relevant if is_todo=True. Optional, defaults to False.
+    Creates a new note with the specified title, content, and properties. Uses notebook name
+    for easier identification instead of requiring notebook IDs.
     
     Returns:
-        str: Success message with the created note's title and unique ID that can be used to reference this note.
+        str: Success message with the created note's title and unique ID.
     
     Examples:
         - create_note("Shopping List", "Personal Notes", "- Milk\n- Eggs", True, False) - Create uncompleted todo
-        - create_note("Meeting Notes", "Work Projects", "# Meeting with Client", False, False) - Create regular note
+        - create_note("Meeting Notes", "Work Projects", "# Meeting with Client") - Create regular note
     """
     title = validate_required_param(title, "title")
     is_todo = validate_boolean_param(is_todo, "is_todo")
@@ -1040,14 +1014,7 @@ async def update_note(
 ) -> str:
     """Update an existing note in Joplin.
     
-    Updates one or more properties of an existing note. At least one field must be provided for update.
-    
-    Parameters:
-        note_id (str): The unique identifier of the note to update. Required.
-        title (str, optional): New title for the note. Only updates if provided.
-        body (str, optional): New content for the note. Can be plain text or Markdown. Only updates if provided.
-        is_todo (bool, optional): Whether to convert the note to/from a todo item. Only updates if provided.
-        todo_completed (bool, optional): Whether to mark the todo as completed. Only updates if provided.
+    Updates one or more properties of an existing note. At least one field must be provided.
     
     Returns:
         str: Success message confirming the note was updated.
@@ -1081,14 +1048,8 @@ async def delete_note(
     
     Permanently removes a note from Joplin. This action cannot be undone.
     
-    Parameters:
-        note_id (str): The unique identifier of the note to delete. Required.
-    
     Returns:
         str: Success message confirming the note was deleted.
-    
-    Examples:
-        - delete_note("note123") - Delete the specified note
     
     Warning: This action is permanent and cannot be undone.
     """
@@ -1107,49 +1068,20 @@ async def find_notes(
 ) -> str:
     """Find notes by searching their titles and content, with support for listing all notes and pagination.
     
+    ⭐ MAIN FUNCTION FOR TEXT SEARCHES AND LISTING ALL NOTES!
+    
     Versatile search function that can find specific text in notes OR list all notes with filtering and pagination.
-    Use this when you want to find notes containing specific words/phrases, or to browse through all notes.
-    
-    📝 LISTING ALL NOTES:
-    Use query="*" to list all notes without text filtering. Perfect for browsing your entire note collection.
-    
-    🔍 TEXT SEARCH:
-    Use specific text to find notes containing those words in titles or content.
-    
-    📄 PAGINATION:
-    Use limit and offset together to page through large result sets:
-    - Page 1: limit=20, offset=0 (first 20 notes)
-    - Page 2: limit=20, offset=20 (next 20 notes)  
-    - Page 3: limit=20, offset=40 (next 20 notes)
-    
-    Parameters:
-        query (str): Text to search for in note titles and content. Use '*' to list all notes. Required.
-        limit (int): Maximum number of notes to return. Must be between 1 and 100. Default is 20.
-        offset (int): Number of notes to skip for pagination. Use multiples of limit. Default is 0.
-        task (bool, optional): Filter by task type. True = tasks only, False = regular notes only, None = all notes. Default is None.
-        completed (bool, optional): Filter by completion status (only relevant when task=True). 
-                                   True = completed tasks only, False = uncompleted tasks only, None = all tasks. 
-                                   Default is None.
+    Use query="*" to list all notes without text filtering. Use specific text to find notes containing those words.
     
     Returns:
         str: List of notes matching criteria, with title, ID, content preview, and dates. 
              Includes pagination info (total results, current page range).
     
     Examples:
-        📝 LIST ALL NOTES:
         - find_notes("*") - List first 20 notes (all notes)
-        - find_notes("*", limit=50) - List first 50 notes
-        - find_notes("*", limit=20, offset=20) - List notes 21-40 (page 2)
-        - find_notes("*", limit=20, offset=40) - List notes 41-60 (page 3)
-        
-        🔍 TEXT SEARCH:
         - find_notes("meeting") - Find all notes containing "meeting"
-        - find_notes("meeting", limit=10, offset=10) - Find notes with "meeting" (page 2)
-        
-        🎯 FILTERED SEARCHES:
         - find_notes("*", task=True) - List all tasks
-        - find_notes("*", task=True, completed=False) - List uncompleted tasks
-        - find_notes("project", task=False) - Find regular notes containing "project"
+        - find_notes("*", limit=20, offset=20) - List notes 21-40 (page 2)
         
         💡 TIP: For tag-specific searches, use find_notes_with_tag("tag_name") instead.
         💡 TIP: For notebook-specific searches, use find_notes_in_notebook("notebook_name") instead.
@@ -1221,9 +1153,6 @@ async def get_all_notes(
     Simple function to retrieve all notes without any filtering or searching.
     Most recent notes are shown first.
     
-    Parameters:
-        limit (int): Maximum number of notes to return. Must be between 1 and 100. Default is 20.
-    
     Returns:
         str: Formatted list of all notes with title, ID, content preview, and dates.
     
@@ -1258,23 +1187,9 @@ async def find_notes_with_tag(
 ) -> str:
     """Find all notes that have a specific tag, with pagination support.
     
-    This is the MAIN function for finding notes by tag. Use this when you want to find
-    all notes tagged with a specific tag name.
+    ⭐ MAIN FUNCTION FOR TAG SEARCHES!
     
-    📄 PAGINATION:
-    Use limit and offset together to page through large result sets:
-    - Page 1: limit=20, offset=0 (first 20 notes)
-    - Page 2: limit=20, offset=20 (next 20 notes)  
-    - Page 3: limit=20, offset=40 (next 20 notes)
-    
-    Parameters:
-        tag_name (str): The tag name to search for. Required.
-        limit (int): Maximum number of notes to return. Must be between 1 and 100. Default is 20.
-        offset (int): Number of notes to skip for pagination. Use multiples of limit. Default is 0.
-        task (bool, optional): Filter by task type. True = tasks only, False = regular notes only, None = all notes. Default is None.
-        completed (bool, optional): Filter by completion status (only relevant when task=True). 
-                                   True = completed tasks only, False = uncompleted tasks only, None = all tasks. 
-                                   Default is None.
+    Use this when you want to find all notes tagged with a specific tag name.
     
     Returns:
         str: List of all notes with the specified tag, with pagination information.
@@ -1284,7 +1199,6 @@ async def find_notes_with_tag(
         - find_notes_with_tag("work", limit=10, offset=10) - Find notes tagged with "work" (page 2)
         - find_notes_with_tag("work", task=True) - Find only tasks tagged with "work"
         - find_notes_with_tag("important", task=True, completed=False) - Find only uncompleted tasks tagged with "important"
-        - find_notes_with_tag("personal", task=False) - Find only regular notes tagged with "personal"
     """
     tag_name = validate_required_param(tag_name, "tag_name")
     limit = validate_limit(limit)
@@ -1324,23 +1238,9 @@ async def find_notes_in_notebook(
 ) -> str:
     """Find all notes in a specific notebook, with pagination support.
     
-    This is the MAIN function for finding notes by notebook. Use this when you want to find
-    all notes in a specific notebook.
+    ⭐ MAIN FUNCTION FOR NOTEBOOK SEARCHES!
     
-    📄 PAGINATION:
-    Use limit and offset together to page through large result sets:
-    - Page 1: limit=20, offset=0 (first 20 notes)
-    - Page 2: limit=20, offset=20 (next 20 notes)  
-    - Page 3: limit=20, offset=40 (next 20 notes)
-    
-    Parameters:
-        notebook_name (str): The notebook name to search in. Required.
-        limit (int): Maximum number of notes to return. Must be between 1 and 100. Default is 20.
-        offset (int): Number of notes to skip for pagination. Use multiples of limit. Default is 0.
-        task (bool, optional): Filter by task type. True = tasks only, False = regular notes only, None = all notes. Default is None.
-        completed (bool, optional): Filter by completion status (only relevant when task=True). 
-                                   True = completed tasks only, False = uncompleted tasks only, None = all tasks. 
-                                   Default is None.
+    Use this when you want to find all notes in a specific notebook.
     
     Returns:
         str: List of all notes in the specified notebook, with pagination information.
@@ -1350,7 +1250,6 @@ async def find_notes_in_notebook(
         - find_notes_in_notebook("Personal Notes", limit=10, offset=10) - Find notes in "Personal Notes" (page 2)
         - find_notes_in_notebook("Personal Notes", task=True) - Find only tasks in "Personal Notes"
         - find_notes_in_notebook("Projects", task=True, completed=False) - Find only uncompleted tasks in "Projects"
-        - find_notes_in_notebook("Archive", task=False) - Find only regular notes in "Archive"
     """
     notebook_name = validate_required_param(notebook_name, "notebook_name")
     limit = validate_limit(limit)
@@ -1388,14 +1287,10 @@ async def find_notes_in_notebook(
 async def list_notebooks() -> str:
     """List all notebooks/folders in your Joplin instance.
     
-    Retrieves and displays all notebooks (folders) in your Joplin application. Notebooks are
-    containers that hold your notes, similar to folders in a file system.
+    Retrieves and displays all notebooks (folders) in your Joplin application.
     
     Returns:
         str: Formatted list of all notebooks including title, unique ID, parent notebook (if sub-notebook), and creation date.
-             Returns "📁 No notebooks found" if no notebooks exist.
-    
-    Use case: Get notebook IDs for creating new notes or understanding your organizational structure.
     """
     client = get_joplin_client()
     fields_list = "id,title,created_time,updated_time,parent_id"
@@ -1411,20 +1306,15 @@ async def create_notebook(
 ) -> str:
     """Create a new notebook (folder) in Joplin to organize your notes.
     
-    Creates a new notebook that can be used to organize and contain notes. You can create top-level notebooks or sub-notebooks within existing notebooks.
-    
-    Parameters:
-        title (str): The name of the new notebook. Required.
-        parent_id (str, optional): The unique identifier of a parent notebook to create this as a sub-notebook.
-                                  Optional - defaults to None (creates a top-level notebook).
-                                  Use list_notebooks() to find available parent notebook IDs.
+    Creates a new notebook that can be used to organize and contain notes. You can create 
+    top-level notebooks or sub-notebooks within existing notebooks.
     
     Returns:
-        str: Success message containing the created notebook's title and unique ID that can be used to reference this notebook.
+        str: Success message containing the created notebook's title and unique ID.
     
     Examples:
-        - create_notebook("Work Projects") - Create a top-level notebook for work
-        - create_notebook("2024 Projects", "work_notebook_id") - Create a sub-notebook within work notebook
+        - create_notebook("Work Projects") - Create a top-level notebook
+        - create_notebook("2024 Projects", "work_notebook_id") - Create a sub-notebook
     """
     title = validate_required_param(title, "title")
     
@@ -1445,15 +1335,8 @@ async def update_notebook(
     
     Updates the title of an existing notebook. Currently only the title can be updated.
     
-    Parameters:
-        notebook_id (str): The unique identifier of the notebook to update. Required.
-        title (str): The new title for the notebook. Required.
-    
     Returns:
         str: Success message confirming the notebook was updated.
-    
-    Examples:
-        - update_notebook("notebook123", "New Notebook Name") - Update notebook title
     """
     notebook_id = validate_required_param(notebook_id, "notebook_id")
     title = validate_required_param(title, "title")
@@ -1470,14 +1353,8 @@ async def delete_notebook(
     
     Permanently removes a notebook from Joplin. This action cannot be undone.
     
-    Parameters:
-        notebook_id (str): The unique identifier of the notebook to delete. Required.
-    
     Returns:
         str: Success message confirming the notebook was deleted.
-    
-    Examples:
-        - delete_notebook("notebook123") - Delete the specified notebook
     
     Warning: This action is permanent and cannot be undone. All notes in the notebook will also be deleted.
     """
@@ -1501,9 +1378,6 @@ async def list_tags() -> str:
     
     Returns:
         str: Formatted list of all tags including title, unique ID, number of notes tagged with it, and creation date.
-             Returns "🏷️ No tags found" if no tags exist.
-    
-    Use case: Get tag IDs for applying to notes or searching. Understand your tagging system.
     """
     client = get_joplin_client()
     fields_list = "id,title,created_time,updated_time"
@@ -1520,11 +1394,8 @@ async def create_tag(
     
     Creates a new tag that can be applied to notes for categorization and organization.
     
-    Parameters:
-        title (str): The name of the new tag. Required.
-    
     Returns:
-        str: Success message with the created tag's title and unique ID that can be used to reference this tag.
+        str: Success message with the created tag's title and unique ID.
     
     Examples:
         - create_tag("work") - Create a new tag named "work"
@@ -1544,15 +1415,8 @@ async def update_tag(
     
     Updates the title of an existing tag. Currently only the title can be updated.
     
-    Parameters:
-        tag_id (str): The unique identifier of the tag to update. Required.
-        title (str): The new title for the tag. Required.
-    
     Returns:
         str: Success message confirming the tag was updated.
-    
-    Examples:
-        - update_tag("tag123", "work-urgent") - Update tag title to "work-urgent"
     """
     tag_id = validate_required_param(tag_id, "tag_id")
     title = validate_required_param(title, "title")
@@ -1570,14 +1434,8 @@ async def delete_tag(
     Permanently removes a tag from Joplin. This action cannot be undone.
     The tag will be removed from all notes that currently have it.
     
-    Parameters:
-        tag_id (str): The unique identifier of the tag to delete. Required.
-    
     Returns:
         str: Success message confirming the tag was deleted.
-    
-    Examples:
-        - delete_tag("tag123") - Delete the specified tag
     
     Warning: This action is permanent and cannot be undone. The tag will be removed from all notes.
     """
@@ -1596,15 +1454,8 @@ async def get_tags_by_note(
     
     Retrieves all tags that are currently applied to a specific note.
     
-    Parameters:
-        note_id (str): The unique identifier of the note to get tags from. Required.
-    
     Returns:
         str: Formatted list of tags applied to the note with title, ID, and creation date.
-             Returns "No tags found for note" if the note has no tags.
-    
-    Examples:
-        - get_tags_by_note("note123") - Get all tags for the specified note
     """
     note_id = validate_required_param(note_id, "note_id")
     
@@ -1673,12 +1524,6 @@ async def tag_note(
     Applies an existing tag to a specific note using the note's unique ID and the tag's name.
     Uses note ID for precise targeting and tag name for intuitive selection.
     
-    Parameters:
-        note_id (str): The unique identifier of the note to tag. Required.
-                      Use find_notes() or get_note() to find note IDs.
-        tag_name (str): The name of the tag to apply to the note. Required.
-                         Use list_tags() or create_tag() to find or create tag names.
-    
     Returns:
         str: Success message confirming the tag was added to the note.
     
@@ -1698,10 +1543,6 @@ async def untag_note(
     """Remove a tag from a note.
     
     Removes an existing tag from a specific note using the note's unique ID and the tag's name.
-    
-    Parameters:
-        note_id (str): The unique identifier of the note to remove a tag from. Required.
-        tag_name (str): The name of the tag to remove from the note. Required.
     
     Returns:
         str: Success message confirming the tag was removed from the note.
