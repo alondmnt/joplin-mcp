@@ -162,7 +162,7 @@ def build_search_filters(task: Optional[bool], completed: Optional[bool]) -> Lis
             search_parts.append("type:note")
     
     # Add completion filter if specified (only relevant for tasks)
-    if completed is not None and task is not False:
+    if completed is not None and task is True:
         if completed:
             search_parts.append("iscompleted:1")
         else:
