@@ -1,11 +1,10 @@
 """FastMCP-based Joplin MCP Server Implementation.
 
 📝 FINDING NOTES:
-- find_notes(query, task, completed) - Find notes containing specific text ⭐ MAIN FUNCTION FOR TEXT SEARCHES!
-- find_notes_with_tag(tag_name, task, completed) - Find all notes with a specific tag ⭐ MAIN FUNCTION FOR TAG SEARCHES!
-- find_notes_in_notebook(notebook_name, task, completed) - Find all notes in a specific notebook ⭐ MAIN FUNCTION FOR NOTEBOOK SEARCHES!
-- get_all_notes() - Get all notes, most recent first
-- find_notes(query, tag_name, notebook_name) - Search notes by text with optional filters
+- find_notes(query, limit, offset, task, completed) - Find notes by text OR list all notes with pagination ⭐ MAIN FUNCTION FOR TEXT SEARCHES AND LISTING ALL NOTES!
+- find_notes_with_tag(tag_name, limit, offset, task, completed) - Find all notes with a specific tag with pagination ⭐ MAIN FUNCTION FOR TAG SEARCHES!
+- find_notes_in_notebook(notebook_name, limit, offset, task, completed) - Find all notes in a specific notebook with pagination ⭐ MAIN FUNCTION FOR NOTEBOOK SEARCHES!
+- get_all_notes() - Get all notes, most recent first (simple version without pagination)
 
 📋 MANAGING NOTES:
 - create_note(title, notebook_name, body) - Create a new note
@@ -136,6 +135,67 @@ def validate_limit(limit: int) -> int:
     if not (1 <= limit <= 100):
         raise ValueError("Limit must be between 1 and 100")
     return limit
+
+def validate_offset(offset: int) -> int:
+    """Validate offset parameter."""
+    if offset < 0:
+        raise ValueError("Offset must be 0 or greater")
+    return offset
+
+def apply_pagination(notes: List[Any], limit: int, offset: int) -> tuple[List[Any], int]:
+    """Apply pagination to a list of notes and return paginated results with total count."""
+    total_count = len(notes)
+    start_index = offset
+    end_index = offset + limit
+    paginated_notes = notes[start_index:end_index]
+    return paginated_notes, total_count
+
+def build_search_filters(task: Optional[bool], completed: Optional[bool]) -> List[str]:
+    """Build search filter parts for task and completion status."""
+    search_parts = []
+    
+    # Add task filter if specified
+    if task is not None:
+        if task:
+            search_parts.append("type:todo")
+        else:
+            search_parts.append("type:note")
+    
+    # Add completion filter if specified (only relevant for tasks)
+    if completed is not None and task is not False:
+        if completed:
+            search_parts.append("iscompleted:1")
+        else:
+            search_parts.append("iscompleted:0")
+    
+    return search_parts
+
+def format_search_criteria(base_criteria: str, task: Optional[bool], completed: Optional[bool]) -> str:
+    """Format search criteria description with filters."""
+    criteria_parts = [base_criteria]
+    
+    if task is True:
+        criteria_parts.append("(tasks only)")
+    elif task is False:
+        criteria_parts.append("(regular notes only)")
+    
+    if completed is True:
+        criteria_parts.append("(completed)")
+    elif completed is False:
+        criteria_parts.append("(uncompleted)")
+    
+    return " ".join(criteria_parts)
+
+def format_no_results_with_pagination(item_type: str, criteria: str, offset: int, limit: int) -> str:
+    """Format no results message with pagination info."""
+    if offset > 0:
+        page_info = f" - Page {(offset // limit) + 1} (offset {offset})"
+        return format_no_results_message(item_type, criteria + page_info)
+    else:
+        return format_no_results_message(item_type, criteria)
+
+# Common fields list for note operations
+COMMON_NOTE_FIELDS = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
 
 def validate_boolean_param(value: Union[bool, str, None], param_name: str) -> Optional[bool]:
     """Validate and convert boolean parameter that might come as string."""
@@ -475,8 +535,9 @@ def format_note_details(note: Any, include_body: bool = True, context: str = "in
     
     return "\n".join(result_parts)
 
-def format_search_results(query: str, results: List[Any], context: str = "search_results") -> str:
-    """Format search results for display optimized for LLM comprehension."""
+
+def format_search_results_with_pagination(query: str, results: List[Any], total_count: int, limit: int, offset: int, context: str = "search_results") -> str:
+    """Format search results with pagination information for display optimized for LLM comprehension."""
     count = len(results)
     
     # Check content exposure settings
@@ -485,12 +546,31 @@ def format_search_results(query: str, results: List[Any], context: str = "search
     should_show_full_content = config.should_show_full_content(context)
     max_preview_length = config.get_max_preview_length()
     
-    # Start with structured header
+    # Calculate pagination info
+    current_page = (offset // limit) + 1
+    total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
+    start_result = offset + 1 if count > 0 else 0
+    end_result = offset + count
+    
+    # Start with structured header including pagination
     result_parts = [
         f"SEARCH_QUERY: {query}",
-        f"TOTAL_RESULTS: {count}",
+        f"TOTAL_RESULTS: {total_count}",
+        f"SHOWING_RESULTS: {start_result}-{end_result}",
+        f"CURRENT_PAGE: {current_page}",
+        f"TOTAL_PAGES: {total_pages}",
+        f"LIMIT: {limit}",
+        f"OFFSET: {offset}",
         ""
     ]
+    
+    # Add pagination guidance
+    if total_count > end_result:
+        next_offset = offset + limit
+        result_parts.extend([
+            f"NEXT_PAGE: Use offset={next_offset} to get the next {limit} results",
+            ""
+        ])
     
     for i, note in enumerate(results, 1):
         title = getattr(note, 'title', 'Untitled')
@@ -545,6 +625,23 @@ def format_search_results(query: str, results: List[Any], context: str = "search
         
         result_parts.append("")
     
+    # Add pagination summary at the end
+    if total_pages > 1:
+        result_parts.extend([
+            f"PAGINATION_SUMMARY:",
+            f"  showing_page: {current_page} of {total_pages}",
+            f"  showing_results: {start_result}-{end_result} of {total_count}",
+            f"  results_per_page: {limit}",
+        ])
+        
+        if current_page < total_pages:
+            next_offset = offset + limit
+            result_parts.append(f"  next_page_offset: {next_offset}")
+        
+        if current_page > 1:
+            prev_offset = max(0, offset - limit)
+            result_parts.append(f"  prev_page_offset: {prev_offset}")
+    
     return "\n".join(result_parts)
 
 def format_tag_list_with_counts(tags: List[Any], client: Any) -> str:
@@ -565,8 +662,7 @@ def format_tag_list_with_counts(tags: List[Any], client: Any) -> str:
         
         # Get note count for this tag
         try:
-            fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-            notes_result = client.get_notes(tag_id=tag_id, fields=fields_list)
+            notes_result = client.get_notes(tag_id=tag_id, fields=COMMON_NOTE_FIELDS)
             notes = process_search_results(notes_result)
             note_count = len(notes)
         except Exception:
@@ -663,8 +759,7 @@ async def get_note(
     client = get_joplin_client()
     
     # Use string format for fields (list format causes SQL errors)
-    fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-    note = client.get_note(note_id, fields=fields_list)
+    note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
     
     return format_note_details(note, include_body, "individual_notes")
 
@@ -696,8 +791,7 @@ async def get_links(
     client = get_joplin_client()
     
     # Get the note
-    fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-    note = client.get_note(note_id, fields=fields_list)
+    note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
     
     note_title = getattr(note, 'title', 'Untitled')
     body = getattr(note, 'body', '')
@@ -945,86 +1039,118 @@ async def delete_note(
 
 @create_tool("find_notes", "Find notes")
 async def find_notes(
-    query: Annotated[str, "Text to search for in note titles and content. Example: 'meeting' or 'project planning' or 'grocery list'"],
+    query: Annotated[str, "Text to search for in note titles and content. Use '*' to list all notes without specific text filtering. Examples: 'meeting', 'project planning', 'grocery list', or '*' for all notes."],
     limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20,
+    offset: Annotated[int, "Number of notes to skip for pagination. Use with limit for paging through results. Default is 0."] = 0,
     task: Annotated[Union[bool, str, None], "Filter by task type. True for tasks only, False for regular notes only, None for all notes. Default is None (all notes)."] = None,
     completed: Annotated[Union[bool, str, None], "Filter by completion status (only relevant when task=True). True for completed tasks, False for uncompleted tasks, None for all tasks. Default is None (all tasks)."] = None
 ) -> str:
-    """Find notes by searching their titles and content for specific text.
+    """Find notes by searching their titles and content, with support for listing all notes and pagination.
     
-    Simple text search through all notes. Use this when you want to find notes containing
-    specific words or phrases, regardless of which notebook or tag they have.
+    Versatile search function that can find specific text in notes OR list all notes with filtering and pagination.
+    Use this when you want to find notes containing specific words/phrases, or to browse through all notes.
+    
+    📝 LISTING ALL NOTES:
+    Use query="*" to list all notes without text filtering. Perfect for browsing your entire note collection.
+    
+    🔍 TEXT SEARCH:
+    Use specific text to find notes containing those words in titles or content.
+    
+    📄 PAGINATION:
+    Use limit and offset together to page through large result sets:
+    - Page 1: limit=20, offset=0 (first 20 notes)
+    - Page 2: limit=20, offset=20 (next 20 notes)  
+    - Page 3: limit=20, offset=40 (next 20 notes)
     
     Parameters:
-        query (str): Text to search for in note titles and content. Required.
+        query (str): Text to search for in note titles and content. Use '*' to list all notes. Required.
         limit (int): Maximum number of notes to return. Must be between 1 and 100. Default is 20.
+        offset (int): Number of notes to skip for pagination. Use multiples of limit. Default is 0.
         task (bool, optional): Filter by task type. True = tasks only, False = regular notes only, None = all notes. Default is None.
         completed (bool, optional): Filter by completion status (only relevant when task=True). 
                                    True = completed tasks only, False = uncompleted tasks only, None = all tasks. 
                                    Default is None.
     
     Returns:
-        str: List of notes containing the search text, with title, ID, content preview, and dates.
+        str: List of notes matching criteria, with title, ID, content preview, and dates. 
+             Includes pagination info (total results, current page range).
     
     Examples:
-        - find_notes("meeting") - Find all notes containing "meeting"
-        - find_notes("meeting", task=True) - Find only tasks containing "meeting"
-        - find_notes("meeting", task=True, completed=False) - Find only uncompleted tasks containing "meeting"
-        - find_notes("grocery list", task=False) - Find only regular notes containing "grocery list"
+        📝 LIST ALL NOTES:
+        - find_notes("*") - List first 20 notes (all notes)
+        - find_notes("*", limit=50) - List first 50 notes
+        - find_notes("*", limit=20, offset=20) - List notes 21-40 (page 2)
+        - find_notes("*", limit=20, offset=40) - List notes 41-60 (page 3)
         
-    💡 TIP: For tag-specific searches, use find_notes_with_tag("tag_name") instead.
-    💡 TIP: For notebook-specific searches, use find_notes_in_notebook("notebook_name") instead.
+        🔍 TEXT SEARCH:
+        - find_notes("meeting") - Find all notes containing "meeting"
+        - find_notes("meeting", limit=10, offset=10) - Find notes with "meeting" (page 2)
+        
+        🎯 FILTERED SEARCHES:
+        - find_notes("*", task=True) - List all tasks
+        - find_notes("*", task=True, completed=False) - List uncompleted tasks
+        - find_notes("project", task=False) - Find regular notes containing "project"
+        
+        💡 TIP: For tag-specific searches, use find_notes_with_tag("tag_name") instead.
+        💡 TIP: For notebook-specific searches, use find_notes_in_notebook("notebook_name") instead.
     """
     limit = validate_limit(limit)
+    offset = validate_offset(offset)
     task = validate_boolean_param(task, "task")
     completed = validate_boolean_param(completed, "completed")
     
     client = get_joplin_client()
     
-    # Build search query with filters
-    search_parts = [query]
-    
-    # Add task filter if specified
-    if task is not None:
-        if task:
-            search_parts.append("type:todo")
-        else:
-            search_parts.append("type:note")
-    
-    # Add completion filter if specified (only relevant for tasks)
-    if completed is not None and task is not False:
-        if completed:
-            search_parts.append("iscompleted:1")
-        else:
-            search_parts.append("iscompleted:0")
-    
-    search_query = " ".join(search_parts)
-    search_query = validate_required_param(search_query, "query")
-    
-    # Use search_all for full pagination support
-    fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-    results = client.search_all(query=search_query, fields=fields_list)
-    notes = process_search_results(results)
-    
-    # Apply limit
-    notes = notes[:limit]
-    
-    if not notes:
-        # Create descriptive message based on search criteria
-        criteria_parts = [f'containing "{query}"']
-        if task is True:
-            criteria_parts.append("(tasks only)")
-        elif task is False:
-            criteria_parts.append("(regular notes only)")
-        if completed is True:
-            criteria_parts.append("(completed)")
-        elif completed is False:
-            criteria_parts.append("(uncompleted)")
+    # Handle special case for listing all notes
+    if query.strip() == "*":
+        # List all notes with filters
+        search_filters = build_search_filters(task, completed)
         
-        criteria_str = " ".join(criteria_parts)
-        return format_no_results_message("note", criteria_str)
+        if search_filters:
+            # Use search with filters
+            search_query = " ".join(search_filters)
+            results = client.search_all(query=search_query, fields=COMMON_NOTE_FIELDS)
+            notes = process_search_results(results)
+        else:
+            # No filters, get all notes
+            results = client.get_all_notes(fields=COMMON_NOTE_FIELDS)
+            notes = process_search_results(results)
+            # Sort by updated time, newest first (consistent with get_all_notes)
+            notes = sorted(notes, key=lambda x: getattr(x, 'updated_time', 0), reverse=True)
+    else:
+        # Build search query with text and filters
+        search_parts = [query]
+        search_parts.extend(build_search_filters(task, completed))
+        
+        search_query = " ".join(search_parts)
+        search_query = validate_required_param(search_query, "query")
+        
+        # Use search_all for full pagination support
+        results = client.search_all(query=search_query, fields=COMMON_NOTE_FIELDS)
+        notes = process_search_results(results)
     
-    return format_search_results(f'text search: {search_query}', notes, "search_results")
+    # Apply pagination
+    paginated_notes, total_count = apply_pagination(notes, limit, offset)
+    
+    if not paginated_notes:
+        # Create descriptive message based on search criteria
+        if query.strip() == "*":
+            base_criteria = "(all notes)"
+        else:
+            base_criteria = f'containing "{query}"'
+        
+        criteria_str = format_search_criteria(base_criteria, task, completed)
+        return format_no_results_with_pagination("note", criteria_str, offset, limit)
+    
+    # Format results with pagination info
+    if query.strip() == "*":
+        search_description = "all notes"
+    else:
+        search_description = f'text search: {query}'
+    
+    return format_search_results_with_pagination(
+        search_description, paginated_notes, total_count, limit, offset, "search_results"
+    )
 
 @create_tool("get_all_notes", "Get all notes")
 async def get_all_notes(
@@ -1048,180 +1174,151 @@ async def get_all_notes(
     limit = validate_limit(limit)
     
     client = get_joplin_client()
-    fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-    results = client.get_all_notes(fields=fields_list)
+    results = client.get_all_notes(fields=COMMON_NOTE_FIELDS)
     notes = process_search_results(results)
     
     # Sort by updated time, newest first
     notes = sorted(notes, key=lambda x: getattr(x, 'updated_time', 0), reverse=True)
     
-    # Apply limit
+    # Apply limit (using consistent pattern but keeping simple offset=0)
     notes = notes[:limit]
     
     if not notes:
         return format_no_results_message("note")
     
-    return format_search_results("all notes", notes, "search_results")
+    return format_search_results_with_pagination("all notes", notes, len(notes), limit, 0, "search_results")
 
 @create_tool("find_notes_with_tag", "Find notes with tag")
 async def find_notes_with_tag(
     tag_name: Annotated[str, "The tag name to search for. Example: 'time-slip' or 'work' or 'important'"],
     limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20,
+    offset: Annotated[int, "Number of notes to skip for pagination. Use with limit for paging through results. Default is 0."] = 0,
     task: Annotated[Union[bool, str, None], "Filter by task type. True for tasks only, False for regular notes only, None for all notes. Default is None (all notes)."] = None,
     completed: Annotated[Union[bool, str, None], "Filter by completion status (only relevant when task=True). True for completed tasks, False for uncompleted tasks, None for all tasks. Default is None (all tasks)."] = None
 ) -> str:
-    """Find all notes that have a specific tag.
+    """Find all notes that have a specific tag, with pagination support.
     
     This is the MAIN function for finding notes by tag. Use this when you want to find
     all notes tagged with a specific tag name.
     
+    📄 PAGINATION:
+    Use limit and offset together to page through large result sets:
+    - Page 1: limit=20, offset=0 (first 20 notes)
+    - Page 2: limit=20, offset=20 (next 20 notes)  
+    - Page 3: limit=20, offset=40 (next 20 notes)
+    
     Parameters:
         tag_name (str): The tag name to search for. Required.
         limit (int): Maximum number of notes to return. Must be between 1 and 100. Default is 20.
+        offset (int): Number of notes to skip for pagination. Use multiples of limit. Default is 0.
         task (bool, optional): Filter by task type. True = tasks only, False = regular notes only, None = all notes. Default is None.
         completed (bool, optional): Filter by completion status (only relevant when task=True). 
                                    True = completed tasks only, False = uncompleted tasks only, None = all tasks. 
                                    Default is None.
     
     Returns:
-        str: List of all notes with the specified tag.
+        str: List of all notes with the specified tag, with pagination information.
     
     Examples:
         - find_notes_with_tag("time-slip") - Find all notes tagged with "time-slip"
+        - find_notes_with_tag("work", limit=10, offset=10) - Find notes tagged with "work" (page 2)
         - find_notes_with_tag("work", task=True) - Find only tasks tagged with "work"
         - find_notes_with_tag("important", task=True, completed=False) - Find only uncompleted tasks tagged with "important"
         - find_notes_with_tag("personal", task=False) - Find only regular notes tagged with "personal"
     """
     tag_name = validate_required_param(tag_name, "tag_name")
     limit = validate_limit(limit)
+    offset = validate_offset(offset)
     task = validate_boolean_param(task, "task")
     completed = validate_boolean_param(completed, "completed")
     
-    # Build search query with filters
+    # Build search query with tag and filters
     search_parts = [f"tag:{tag_name.strip()}"]
-    
-    # Add task filter if specified
-    if task is not None:
-        if task:
-            search_parts.append("type:todo")
-        else:
-            search_parts.append("type:note")
-    
-    # Add completion filter if specified (only relevant for tasks)
-    if completed is not None and task is not False:
-        if completed:
-            search_parts.append("iscompleted:1")
-        else:
-            search_parts.append("iscompleted:0")
-    
+    search_parts.extend(build_search_filters(task, completed))
     search_query = " ".join(search_parts)
     
     # Use search_all API with tag constraint for full pagination support
     client = get_joplin_client()
-    
-    fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-    results = client.search_all(query=search_query, fields=fields_list)
+    results = client.search_all(query=search_query, fields=COMMON_NOTE_FIELDS)
     notes = process_search_results(results)
     
-    # Apply limit
-    notes = notes[:limit]
+    # Apply pagination
+    paginated_notes, total_count = apply_pagination(notes, limit, offset)
     
-    if not notes:
-        # Create descriptive message based on search criteria
-        criteria_parts = [f'with tag "{tag_name}"']
-        if task is True:
-            criteria_parts.append("(tasks only)")
-        elif task is False:
-            criteria_parts.append("(regular notes only)")
-        if completed is True:
-            criteria_parts.append("(completed)")
-        elif completed is False:
-            criteria_parts.append("(uncompleted)")
-        
-        criteria_str = " ".join(criteria_parts)
-        return format_no_results_message("note", criteria_str)
+    if not paginated_notes:
+        base_criteria = f'with tag "{tag_name}"'
+        criteria_str = format_search_criteria(base_criteria, task, completed)
+        return format_no_results_with_pagination("note", criteria_str, offset, limit)
     
-    return format_search_results(f'tag search: {search_query}', notes, "search_results")
+    return format_search_results_with_pagination(
+        f'tag search: {search_query}', paginated_notes, total_count, limit, offset, "search_results"
+    )
 
 @create_tool("find_notes_in_notebook", "Find notes in notebook")  
 async def find_notes_in_notebook(
     notebook_name: Annotated[str, "The notebook name to search in. Example: 'Work Projects' or 'Personal Notes'"],
     limit: Annotated[int, "Maximum number of notes to return. Must be between 1 and 100. Default is 20."] = 20,
+    offset: Annotated[int, "Number of notes to skip for pagination. Use with limit for paging through results. Default is 0."] = 0,
     task: Annotated[Union[bool, str, None], "Filter by task type. True for tasks only, False for regular notes only, None for all notes. Default is None (all notes)."] = None,
     completed: Annotated[Union[bool, str, None], "Filter by completion status (only relevant when task=True). True for completed tasks, False for uncompleted tasks, None for all tasks. Default is None (all tasks)."] = None
 ) -> str:
-    """Find all notes in a specific notebook.
+    """Find all notes in a specific notebook, with pagination support.
     
     This is the MAIN function for finding notes by notebook. Use this when you want to find
     all notes in a specific notebook.
     
+    📄 PAGINATION:
+    Use limit and offset together to page through large result sets:
+    - Page 1: limit=20, offset=0 (first 20 notes)
+    - Page 2: limit=20, offset=20 (next 20 notes)  
+    - Page 3: limit=20, offset=40 (next 20 notes)
+    
     Parameters:
         notebook_name (str): The notebook name to search in. Required.
         limit (int): Maximum number of notes to return. Must be between 1 and 100. Default is 20.
+        offset (int): Number of notes to skip for pagination. Use multiples of limit. Default is 0.
         task (bool, optional): Filter by task type. True = tasks only, False = regular notes only, None = all notes. Default is None.
         completed (bool, optional): Filter by completion status (only relevant when task=True). 
                                    True = completed tasks only, False = uncompleted tasks only, None = all tasks. 
                                    Default is None.
     
     Returns:
-        str: List of all notes in the specified notebook.
+        str: List of all notes in the specified notebook, with pagination information.
     
     Examples:
         - find_notes_in_notebook("Work Projects") - Find all notes in "Work Projects"
+        - find_notes_in_notebook("Personal Notes", limit=10, offset=10) - Find notes in "Personal Notes" (page 2)
         - find_notes_in_notebook("Personal Notes", task=True) - Find only tasks in "Personal Notes"
         - find_notes_in_notebook("Projects", task=True, completed=False) - Find only uncompleted tasks in "Projects"
         - find_notes_in_notebook("Archive", task=False) - Find only regular notes in "Archive"
     """
     notebook_name = validate_required_param(notebook_name, "notebook_name")
     limit = validate_limit(limit)
+    offset = validate_offset(offset)
     task = validate_boolean_param(task, "task")
     completed = validate_boolean_param(completed, "completed")
     
-    # Build search query with filters
+    # Build search query with notebook and filters
     search_parts = [f"notebook:{notebook_name.strip()}"]
-    
-    # Add task filter if specified
-    if task is not None:
-        if task:
-            search_parts.append("type:todo")
-        else:
-            search_parts.append("type:note")
-    
-    # Add completion filter if specified (only relevant for tasks)
-    if completed is not None and task is not False:
-        if completed:
-            search_parts.append("iscompleted:1")
-        else:
-            search_parts.append("iscompleted:0")
-    
+    search_parts.extend(build_search_filters(task, completed))
     search_query = " ".join(search_parts)
     
     # Use search_all API with notebook constraint for full pagination support
     client = get_joplin_client()
-    
-    fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-    results = client.search_all(query=search_query, fields=fields_list)
+    results = client.search_all(query=search_query, fields=COMMON_NOTE_FIELDS)
     notes = process_search_results(results)
     
-    # Apply limit
-    notes = notes[:limit]
+    # Apply pagination
+    paginated_notes, total_count = apply_pagination(notes, limit, offset)
     
-    if not notes:
-        # Create descriptive message based on search criteria
-        criteria_parts = [f'in notebook "{notebook_name}"']
-        if task is True:
-            criteria_parts.append("(tasks only)")
-        elif task is False:
-            criteria_parts.append("(regular notes only)")
-        if completed is True:
-            criteria_parts.append("(completed)")
-        elif completed is False:
-            criteria_parts.append("(uncompleted)")
-        
-        criteria_str = " ".join(criteria_parts)
-        return format_no_results_message("note", criteria_str)
+    if not paginated_notes:
+        base_criteria = f'in notebook "{notebook_name}"'
+        criteria_str = format_search_criteria(base_criteria, task, completed)
+        return format_no_results_with_pagination("note", criteria_str, offset, limit)
     
-    return format_search_results(f'notebook search: {search_query}', notes, "search_results")
+    return format_search_results_with_pagination(
+        f'notebook search: {search_query}', paginated_notes, total_count, limit, offset, "search_results"
+    )
 
 
 
@@ -1474,8 +1571,7 @@ async def _tag_note_impl(note_id: str, tag_name: str) -> str:
     
     # Verify note exists by getting it
     try:
-        fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-        note = client.get_note(note_id, fields=fields_list)
+        note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
         note_title = getattr(note, 'title', 'Unknown Note')
     except Exception:
         raise ValueError(f"Note with ID '{note_id}' not found. Use find_notes to find available notes.")
@@ -1495,8 +1591,7 @@ async def _untag_note_impl(note_id: str, tag_name: str) -> str:
     
     # Verify note exists by getting it
     try:
-        fields_list = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
-        note = client.get_note(note_id, fields=fields_list)
+        note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
         note_title = getattr(note, 'title', 'Unknown Note')
     except Exception:
         raise ValueError(f"Note with ID '{note_id}' not found. Use find_notes to find available notes.")
