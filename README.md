@@ -15,7 +15,7 @@ A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://jop
 
 ## What You Can Do
 
-This MCP server provides **19 optimized tools** for comprehensive Joplin integration:
+This MCP server provides **21 optimized tools** for comprehensive Joplin integration:
 
 ### **Note Management**
 - **Find & Search**: `find_notes`, `find_notes_with_tag`, `find_notes_in_notebook`, `get_all_notes`
@@ -25,7 +25,7 @@ This MCP server provides **19 optimized tools** for comprehensive Joplin integra
 - **Organize**: `list_notebooks`, `create_notebook`, `update_notebook`, `delete_notebook`
 
 ### **Tag Management**
-- **Categorize**: `list_tags`, `create_tag`, `delete_tag`, `get_tags_by_note`
+- **Categorize**: `list_tags`, `create_tag`, `update_tag`, `delete_tag`, `get_tags_by_note`
 - **Link**: `tag_note`, `untag_note`
 
 ### **System**
@@ -179,6 +179,7 @@ Fine-tune which operations the AI can perform by editing your config:
     "create_notebook": true,
     "delete_notebook": false,
     "create_tag": true,
+    "update_tag": false,
     "delete_tag": false
   }
 }
@@ -266,7 +267,7 @@ python run_fastmcp_server.py --transport http --port 8000
 
 - **`run_fastmcp_server.py`** - FastMCP server launcher
 - **`src/joplin_mcp/`** - Main package directory
-  - `fastmcp_server.py` - Server implementation with 17 tools (by default)
+  - `fastmcp_server.py` - Server implementation with 21 tools (by default)
   - `models.py` - Data models and schemas
   - `config.py` - Configuration management
 - **`docs/`** - API documentation
@@ -290,7 +291,7 @@ Starting Joplin FastMCP Server...
 Successfully connected to Joplin!
 Found X notebooks, Y notes, Z tags
 FastMCP server starting...
-Available tools: 17 tools ready
+Available tools: 21 tools ready
 ```
 
 ## Complete Tool Reference
@@ -316,6 +317,7 @@ Available tools: 17 tools ready
 | **Managing Tags** | | |
 | `list_tags` | Read | View all available tags |
 | `create_tag` | Write | Create new tags |
+| `update_tag` | Update | Modify tag titles |
 | `delete_tag` | Delete | Remove tags |
 | `get_tags_by_note` | Read | List tags on specific note |
 | **Tag-Note Relationships** | | |
