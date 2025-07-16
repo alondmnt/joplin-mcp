@@ -876,7 +876,7 @@ async def get_links(
     try:
         # Search for notes containing this note's ID in link format
         search_query = f":/{note_id}"
-        backlink_results = client.search_all(query=search_query, fields=fields_list)
+        backlink_results = client.search_all(query=search_query, fields=COMMON_NOTE_FIELDS)
         backlink_notes = process_search_results(backlink_results)
         
         # Filter out the current note and parse backlinks
