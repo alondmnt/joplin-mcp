@@ -42,6 +42,7 @@ from joppy.client_api import ClientApi
 
 # Import our existing configuration for compatibility
 from joplin_mcp.config import JoplinMCPConfig
+from joplin_mcp import __version__ as MCP_VERSION
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -1566,7 +1567,7 @@ async def get_server_info() -> dict:
         return {
             "connected": bool(is_connected),
             "url": getattr(client, 'url', 'unknown'),
-            "version": "FastMCP-based Joplin Server v0.1.1"
+            "version": f"FastMCP-based Joplin Server v{MCP_VERSION}"
         }
     except Exception:
         return {"connected": False}
