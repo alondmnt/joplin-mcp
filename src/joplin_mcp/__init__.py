@@ -22,7 +22,7 @@ from typing import Optional
 # Import configuration
 from .config import JoplinMCPConfig
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __author__ = "Joplin MCP Contributors"
 __license__ = "MIT"
 __description__ = "Model Context Protocol server for Joplin note-taking application"
