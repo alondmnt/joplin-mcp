@@ -201,6 +201,165 @@ def format_no_results_with_pagination(item_type: str, criteria: str, offset: int
 # Common fields list for note operations
 COMMON_NOTE_FIELDS = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
 
+def parse_markdown_headings(body: str, start_line: int = 0) -> List[Dict[str, Any]]:
+    """Parse markdown headings from content, skipping those in code blocks.
+    
+    Args:
+        body: The markdown content to parse
+        start_line: Starting line index (for offset calculations)
+        
+    Returns:
+        List of heading dictionaries with keys:
+        - level: Heading level (1-6)
+        - title: Heading text (cleaned)
+        - line_idx: Absolute line index in original content
+        - relative_line_idx: Line index relative to start_line
+        - original_line: Full original line text
+        - markdown: Original markdown heading (e.g., "## Title")
+    """
+    if not body:
+        return []
+    
+    import re
+    
+    lines = body.split('\n')
+    headings = []
+    
+    # Regex patterns
+    heading_pattern = r'^(#{1,6})\s+(.+)$'
+    code_block_pattern = r'^(```|~~~)'
+    in_code_block = False
+    
+    for rel_line_idx, line in enumerate(lines):
+        line_stripped = line.strip()
+        abs_line_idx = start_line + rel_line_idx
+        
+        # Check for code block delimiters
+        if re.match(code_block_pattern, line_stripped):
+            in_code_block = not in_code_block
+            continue
+            
+        # Only process headings outside code blocks
+        if not in_code_block:
+            match = re.match(heading_pattern, line_stripped)
+            if match:
+                hashes = match.group(1)
+                title = match.group(2).strip()
+                level = len(hashes)
+                
+                headings.append({
+                    'level': level,
+                    'title': title,
+                    'line_idx': abs_line_idx,
+                    'relative_line_idx': rel_line_idx,
+                    'original_line': line,
+                    'markdown': f"{hashes} {title}"
+                })
+    
+    return headings
+
+def extract_section_content(body: str, section_identifier: str) -> tuple[str, str]:
+    """Extract a specific section from note content.
+    
+    Args:
+        body: The note content to extract from
+        section_identifier: Can be:
+            - Section number (1-based): "1", "2", etc. (highest priority)
+            - Heading text (case insensitive): "Introduction" (exact match)
+            - Slug format: "introduction" or "my-section" (intentional format)
+            - Partial text: "config" matches "Configuration" (fuzzy fallback)
+            
+    Priority order: Number → Exact → Slug → Partial
+            
+    Returns:
+        tuple: (extracted_content, section_title) or ("", "") if not found
+    """
+    if not body or not section_identifier:
+        return "", ""
+    
+    import re
+    
+    # Parse headings using helper function
+    headings = parse_markdown_headings(body)
+    
+    if not headings:
+        return "", ""
+    
+    # Split body into lines for content extraction
+    lines = body.split('\n')
+    
+    # Find target section
+    target_heading = None
+    
+    # Try to parse as section number first
+    try:
+        section_num = int(section_identifier)
+        if 1 <= section_num <= len(headings):
+            target_heading = headings[section_num - 1]
+        else:
+            # Number out of range, fall back to text matching
+            target_heading = None
+    except ValueError:
+        # Not a number, will try text matching below
+        target_heading = None
+    
+    # If no valid section number found, try text/slug matching
+    if target_heading is None:
+        identifier_lower = section_identifier.lower().strip()
+        
+        # Priority 1: Try exact matches first (case insensitive)
+        for heading in headings:
+            title_lower = heading['title'].lower()
+            if title_lower == identifier_lower:
+                target_heading = heading
+                break
+        
+        # Priority 2: Try slug matches only if no exact match found
+        if not target_heading:
+            # Convert identifier to slug format
+            identifier_slug = re.sub(r'[^\w\s-]', '', identifier_lower)
+            identifier_slug = re.sub(r'[-\s_]+', '-', identifier_slug).strip('-')
+            
+            for heading in headings:
+                title_lower = heading['title'].lower()
+                
+                # Convert title to slug and compare
+                title_slug = re.sub(r'[^\w\s-]', '', title_lower)  # Remove special chars
+                title_slug = re.sub(r'[-\s]+', '-', title_slug).strip('-')  # Normalize spaces/hyphens
+                
+                # Only exact slug matches, not partial slug matches
+                if title_slug == identifier_slug:
+                    target_heading = heading
+                    break
+        
+        # Priority 3: Try partial matches only if no slug match found
+        if not target_heading:
+            for heading in headings:
+                title_lower = heading['title'].lower()
+                if identifier_lower in title_lower:
+                    target_heading = heading
+                    break
+    
+    if not target_heading:
+        return "", ""
+    
+    # Find content boundaries based on hierarchy
+    start_line = target_heading['line_idx']
+    end_line = len(lines)
+    target_level = target_heading['level']
+    
+    # Find end of section: next heading at same level or higher
+    for heading in headings:
+        if heading['line_idx'] > start_line and heading['level'] <= target_level:
+            end_line = heading['line_idx']
+            break
+    
+    # Extract the section content
+    section_lines = lines[start_line:end_line]
+    section_content = '\n'.join(section_lines).strip()
+    
+    return section_content, target_heading['title']
+
 def create_content_preview(body: str, max_length: int, include_toc: bool = True) -> str:
     """Create a content preview that preserves front matter if present and optionally includes table of contents.
     
@@ -252,31 +411,19 @@ def create_content_preview(body: str, max_length: int, include_toc: bool = True)
     remaining_content = '\n'.join(remaining_lines)
     
     if include_toc:
-        # Parse headings using regex, but skip headings inside code blocks
-        heading_pattern = r'^(#{1,6})\s+(.+)$'
-        code_block_pattern = r'^(```|~~~)'
-        toc_entries = []
-        in_code_block = False
+        # Parse headings from remaining content using helper function
+        remaining_content = '\n'.join(remaining_lines)
+        headings = parse_markdown_headings(remaining_content, content_start_index)
         
-        for line in remaining_lines:
-            line_stripped = line.strip()
+        # Create TOC entries
+        toc_entries = []
+        for heading in headings:
+            level = heading['level']
+            title = heading['title']
             
-            # Check for code block delimiters (``` or ~~~)
-            if re.match(code_block_pattern, line_stripped):
-                in_code_block = not in_code_block
-                continue
-            
-            # Only process headings if we're not inside a code block
-            if not in_code_block:
-                match = re.match(heading_pattern, line_stripped)
-                if match:
-                    hashes = match.group(1)
-                    heading_text = match.group(2).strip()
-                    level = len(hashes)
-                    
-                    # Create indentation based on heading level (level 1 = no indent, level 2 = 2 spaces, etc.)
-                    indent = '  ' * (level - 1)
-                    toc_entries.append(f"{indent}- {heading_text}")
+            # Create indentation based on heading level (level 1 = no indent, level 2 = 2 spaces, etc.)
+            indent = '  ' * (level - 1)
+            toc_entries.append(f"{indent}- {title}")
         
         # Add TOC if we found headings
         if toc_entries:
@@ -284,9 +431,9 @@ def create_content_preview(body: str, max_length: int, include_toc: bool = True)
             toc_content = '\n'.join(toc_entries)
             toc_section = f"{toc_header}\n{toc_content}"
             
-            # Calculate dynamic TOC limit (up to full max_length, minimum 80 chars, maximum 300 chars)
+            # Calculate dynamic TOC limit (up to full max_length, minimum 80 chars)
             # This allows TOC to use the full preview space when needed, while preventing excessive TOC size
-            toc_max_length = max(80, min(300, int(max_length)))
+            toc_max_length = max(80, int(max_length))
             
             if len(toc_section) > toc_max_length:
                 # Truncate TOC entries if too long
@@ -866,17 +1013,33 @@ MESSAGE: Unable to reach Joplin server - check connection settings"""
 @create_tool("get_note", "Get note")
 async def get_note(
     note_id: Annotated[str, Field(description="Note ID to retrieve")], 
-    include_body: Annotated[Union[bool, str], Field(description="Include note content (default: True)")] = True
+    include_body: Annotated[Union[bool, str], Field(description="Include note content (default: True)")] = True,
+    section: Annotated[Optional[str], Field(description="Extract specific section (heading text, slug, or number)")] = None
 ) -> str:
-    """Retrieve a specific note by its unique identifier.
+    """Retrieve a specific note by its unique identifier, optionally extracting a specific section.
     
     Fetches a single note from Joplin and returns its title, content, dates, and metadata.
+    If a section is specified, extracts only that section's content based on markdown headings.
+    
+    Args:
+        note_id: Unique identifier of the note
+        include_body: Whether to include note content (default: True)
+        section: Optional section to extract. Can be:
+            - Section number: "1" (first heading), "2" (second heading), etc.
+            - Heading text (case insensitive): "Introduction", "Getting Started"
+            - Slug format: "introduction", "getting-started", "my_section"
+            - Partial text: "config" matches "Configuration"
+            Priority: Number → Exact → Slug → Partial
     
     Returns:
         str: Formatted note details including title, ID, content (if requested), and dates.
+             If section is specified and found, only that section's content is included.
     
     Examples:
-        - get_note("a1b2c3d4e5f6...", True) - Get full note with content
+        - get_note("a1b2c3d4e5f6...") - Get full note with content
+        - get_note("a1b2c3d4e5f6...", True, "Introduction") - Get only Introduction section
+        - get_note("a1b2c3d4e5f6...", True, "getting-started") - Get section by slug
+        - get_note("a1b2c3d4e5f6...", True, "1") - Get first section
         - get_note("a1b2c3d4e5f6...", False) - Get metadata only
     """
     note_id = validate_required_param(note_id, "note_id")
@@ -885,6 +1048,57 @@ async def get_note(
     
     # Use string format for fields (list format causes SQL errors)
     note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
+    
+    # Handle section extraction if requested
+    if section and include_body:
+        body = getattr(note, 'body', '')
+        if body:
+            section_content, section_title = extract_section_content(body, section)
+            if section_content:
+                # Create a modified note object with only the section content
+                # We'll modify the body attribute for display
+                note_dict = {
+                    'id': getattr(note, 'id', ''),
+                    'title': getattr(note, 'title', ''),
+                    'body': section_content,
+                    'created_time': getattr(note, 'created_time', None),
+                    'updated_time': getattr(note, 'updated_time', None),
+                    'parent_id': getattr(note, 'parent_id', None),
+                    'is_todo': getattr(note, 'is_todo', 0),
+                    'todo_completed': getattr(note, 'todo_completed', 0)
+                }
+                
+                # Create a simple object to hold the modified data
+                class SectionNote:
+                    def __init__(self, data):
+                        for key, value in data.items():
+                            setattr(self, key, value)
+                
+                modified_note = SectionNote(note_dict)
+                result = format_note_details(modified_note, include_body, "individual_notes")
+                
+                # Add section info to the result
+                section_info = f"EXTRACTED_SECTION: {section_title}\nSECTION_QUERY: {section}\n"
+                return section_info + result
+            else:
+                # Section not found, return error with available sections
+                headings = parse_markdown_headings(body)
+                
+                # Format available sections with numbering and indentation
+                section_list = []
+                for i, heading in enumerate(headings, 1):
+                    level = heading['level']
+                    title = heading['title']
+                    indent = '  ' * (level - 1)
+                    section_list.append(f"{indent}{i}. {title}")
+                
+                available_sections = "\n".join(section_list) if section_list else "No sections found"
+                return f"""SECTION_NOT_FOUND: {section}
+NOTE_ID: {note_id}
+NOTE_TITLE: {getattr(note, 'title', 'Untitled')}
+AVAILABLE_SECTIONS:
+{available_sections}
+ERROR: Section '{section}' not found in note"""
     
     return format_note_details(note, include_body, "individual_notes")
 
