@@ -201,30 +201,34 @@ def format_no_results_with_pagination(item_type: str, criteria: str, offset: int
 # Common fields list for note operations
 COMMON_NOTE_FIELDS = "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
 
-def create_content_preview(body: str, max_length: int) -> str:
-    """Create a content preview that preserves front matter if present.
+def create_content_preview(body: str, max_length: int, include_toc: bool = True) -> str:
+    """Create a content preview that preserves front matter if present and optionally includes table of contents.
     
     If the content starts with front matter (delimited by ---), includes the entire
-    front matter in the preview, then continues with the regular preview logic for
-    the remaining content.
+    front matter in the preview. Then optionally extracts headings to create a table of contents,
+    followed by regular content preview with remaining character budget.
     
     Args:
         body: The note content to create a preview for
         max_length: Maximum length for the preview (excluding front matter)
+        include_toc: Whether to include table of contents in the preview
     
     Returns:
-        str: The content preview with front matter preserved if present
+        str: The content preview with front matter, optional TOC, and content preview
     """
     if not body:
         return ""
     
+    import re
+    
+    lines = body.split('\n')
+    preview_parts = []
+    front_matter_end = -1
+    content_start_index = 0
+    
     # Check if content starts with front matter
     if body.startswith('---'):
         # Find the closing front matter delimiter
-        lines = body.split('\n')
-        front_matter_end = -1
-        
-        # Look for the closing --- (skip the first line which is the opening ---)
         for i, line in enumerate(lines[1:], 1):
             if line.strip() == '---':
                 front_matter_end = i
@@ -238,29 +242,94 @@ def create_content_preview(body: str, max_length: int) -> str:
                 # Keep opening --- + 18 lines of content + closing --- = 20 lines total
                 front_matter_lines = lines[:19]  # Opening --- + 18 lines of content
                 front_matter_lines.append('---')  # Add back the closing delimiter
+            
             front_matter = '\n'.join(front_matter_lines)
+            preview_parts.append(front_matter)
+            content_start_index = front_matter_end + 1
+    
+    # Extract headings for table of contents from remaining content (if enabled)
+    remaining_lines = lines[content_start_index:]
+    remaining_content = '\n'.join(remaining_lines)
+    
+    if include_toc:
+        # Parse headings using regex, but skip headings inside code blocks
+        heading_pattern = r'^(#{1,6})\s+(.+)$'
+        code_block_pattern = r'^(```|~~~)'
+        toc_entries = []
+        in_code_block = False
+        
+        for line in remaining_lines:
+            line_stripped = line.strip()
             
-            # Get the remaining content after front matter
-            remaining_content = '\n'.join(lines[front_matter_end + 1:])
+            # Check for code block delimiters (``` or ~~~)
+            if re.match(code_block_pattern, line_stripped):
+                in_code_block = not in_code_block
+                continue
             
-            # Apply preview logic to the remaining content
-            if remaining_content:
-                remaining_content = remaining_content.strip()
-                if len(remaining_content) > max_length:
-                    remaining_content = remaining_content[:max_length] + "..."
+            # Only process headings if we're not inside a code block
+            if not in_code_block:
+                match = re.match(heading_pattern, line_stripped)
+                if match:
+                    hashes = match.group(1)
+                    heading_text = match.group(2).strip()
+                    level = len(hashes)
+                    
+                    # Create indentation based on heading level (level 1 = no indent, level 2 = 2 spaces, etc.)
+                    indent = '  ' * (level - 1)
+                    toc_entries.append(f"{indent}- {heading_text}")
+        
+        # Add TOC if we found headings
+        if toc_entries:
+            toc_header = "TOC:"
+            toc_content = '\n'.join(toc_entries)
+            toc_section = f"{toc_header}\n{toc_content}"
+            
+            # Calculate dynamic TOC limit (up to full max_length, minimum 80 chars, maximum 300 chars)
+            # This allows TOC to use the full preview space when needed, while preventing excessive TOC size
+            toc_max_length = max(80, min(300, int(max_length)))
+            
+            if len(toc_section) > toc_max_length:
+                # Truncate TOC entries if too long
+                truncated_entries = []
+                current_length = len(toc_header) + 1  # +1 for newline
+                remaining_space = toc_max_length - current_length - 3  # Leave 3 chars for "..."
                 
-                # Combine front matter with remaining content preview
-                return front_matter + '\n' + remaining_content
-            else:
-                # Only front matter, no additional content
-                return front_matter
+                for entry in toc_entries:
+                    if current_length + len(entry) + 1 <= remaining_space:
+                        truncated_entries.append(entry)
+                        current_length += len(entry) + 1
+                    else:
+                        break
+                
+                if len(truncated_entries) < len(toc_entries):
+                    truncated_entries.append("  ...")
+                
+                toc_section = f"{toc_header}\n" + '\n'.join(truncated_entries)
+            
+            preview_parts.append(toc_section)
     
-    # No front matter, use regular preview logic
-    preview = body[:max_length]
-    if len(body) > max_length:
-        preview += "..."
+    # Calculate remaining space for content preview
+    used_space = sum(len(part) + 1 for part in preview_parts)  # +1 for newlines between parts
+    remaining_space = max(50, max_length - used_space)  # Ensure at least 50 chars for content
     
-    return preview
+    # Add content preview with remaining space
+    if remaining_content:
+        content_preview = remaining_content.strip()
+        if len(content_preview) > remaining_space:
+            content_preview = content_preview[:remaining_space] + "..."
+        
+        # Only add content preview if it's meaningful (more than just "...")
+        if len(content_preview.replace("...", "").strip()) > 10:
+            preview_parts.append(content_preview)
+    
+    # If no meaningful content remains after TOC, and no front matter, show regular preview
+    if not preview_parts:
+        preview = body[:max_length]
+        if len(body) > max_length:
+            preview += "..."
+        return preview
+    
+    return '\n\n'.join(preview_parts)
 
 def validate_boolean_param(value: Union[bool, str, None], param_name: str) -> Optional[bool]:
     """Validate and convert boolean parameter that might come as string."""
@@ -591,7 +660,8 @@ def format_note_details(note: Any, include_body: bool = True, context: str = "in
             else:
                 # Show preview only
                 max_length = config.get_max_preview_length()
-                preview = create_content_preview(body, max_length)
+                include_toc = config.should_include_toc()
+                preview = create_content_preview(body, max_length, include_toc)
                 result_parts.append(f"CONTENT_PREVIEW: {preview}")
         else:
             result_parts.append("CONTENT: (empty)")
@@ -608,6 +678,7 @@ def format_search_results_with_pagination(query: str, results: List[Any], total_
     should_show_content = config.should_show_content(context)
     should_show_full_content = config.should_show_full_content(context)
     max_preview_length = config.get_max_preview_length()
+    include_toc = config.should_include_toc()
     
     # Calculate pagination info
     current_page = (offset // limit) + 1
@@ -681,7 +752,7 @@ def format_search_results_with_pagination(query: str, results: List[Any], total_
                     result_parts.append(f"  content: {body}")
                 else:
                     # Show preview only
-                    preview = create_content_preview(body, max_preview_length)
+                    preview = create_content_preview(body, max_preview_length, include_toc)
                     result_parts.append(f"  content_preview: {preview}")
         
         result_parts.append("")

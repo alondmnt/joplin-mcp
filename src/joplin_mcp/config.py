@@ -254,7 +254,8 @@ class JoplinMCPConfig:
         "search_results": "preview",  # Search results show previews
         "individual_notes": "full",   # Individual note retrieval shows full content
         "listings": "none",           # Note listings show no content
-        "max_preview_length": 200     # Maximum preview length in characters
+        "max_preview_length": 200,    # Maximum preview length in characters
+        "include_toc": True           # Include table of contents in previews
     }
 
     def __init__(
@@ -313,6 +314,10 @@ class JoplinMCPConfig:
     def get_max_preview_length(self) -> int:
         """Get maximum preview length for content snippets."""
         return self.content_exposure.get("max_preview_length", 200)
+
+    def should_include_toc(self) -> bool:
+        """Check if table of contents should be included in previews."""
+        return self.content_exposure.get("include_toc", True)
 
     def should_show_content(self, context: str) -> bool:
         """Check if content should be shown for a specific context."""
@@ -416,6 +421,9 @@ class JoplinMCPConfig:
             if key == "max_preview_length":
                 if not isinstance(value, int) or value < 0:
                     raise ConfigError(f"max_preview_length must be a non-negative integer, got {type(value)}")
+            elif key == "include_toc":
+                if not isinstance(value, bool):
+                    raise ConfigError(f"include_toc must be a boolean, got {type(value)}")
             elif key in ["search_results", "individual_notes", "listings"]:
                 if value not in self.CONTENT_EXPOSURE_LEVELS:
                     raise ConfigError(f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}")
@@ -624,6 +632,11 @@ class JoplinMCPConfig:
                             raise ConfigError(
                                 f"Invalid value for 'max_preview_length': expected non-negative integer, got {type(value)}"
                             )
+                    elif key == "include_toc":
+                        if not isinstance(value, bool):
+                            raise ConfigError(
+                                f"Invalid value for 'include_toc': expected boolean, got {type(value)}"
+                            )
                     elif key in ["search_results", "individual_notes", "listings"]:
                         if not isinstance(value, str):
                             raise ConfigError(
@@ -797,6 +810,9 @@ class JoplinMCPConfig:
                 if key == "max_preview_length":
                     if not isinstance(value, int) or value < 0:
                         errors.append(ConfigError(f"max_preview_length must be a non-negative integer, got {type(value)}"))
+                elif key == "include_toc":
+                    if not isinstance(value, bool):
+                        errors.append(ConfigError(f"include_toc must be a boolean, got {type(value)}"))
                 elif key in ["search_results", "individual_notes", "listings"]:
                     if value not in self.CONTENT_EXPOSURE_LEVELS:
                         errors.append(ConfigError(f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}"))
