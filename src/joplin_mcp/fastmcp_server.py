@@ -1108,13 +1108,16 @@ async def get_links(
 ) -> str:
     """Extract all links to other notes from a given note and find backlinks from other notes.
     
-    Scans the note's content for links in the format [text](:/noteId) and searches for backlinks
-    (other notes that link to this note). Returns link text, target/source note info, and line context.
+    Scans the note's content for links in the format [text](:/noteId) or [text](:/noteId#section-slug)
+    and searches for backlinks (other notes that link to this note). Returns link text, target/source 
+    note info, section slugs (if present), and line context.
     
     Returns:
-        str: Formatted list of outgoing links and backlinks with titles, IDs, and line context.
+        str: Formatted list of outgoing links and backlinks with titles, IDs, section slugs, and line context.
         
-    Link format: [link text](:/targetNoteId)
+    Link formats: 
+    - [link text](:/targetNoteId) - Link to note
+    - [link text](:/targetNoteId#section-slug) - Link to specific section in note
     """
     note_id = validate_required_param(note_id, "note_id")
     client = get_joplin_client()
@@ -1125,9 +1128,9 @@ async def get_links(
     note_title = getattr(note, 'title', 'Untitled')
     body = getattr(note, 'body', '')
     
-    # Parse outgoing links using regex
+    # Parse outgoing links using regex (with optional section slugs)
     import re
-    link_pattern = r'\[([^\]]+)\]\(:/([a-zA-Z0-9]+)\)'
+    link_pattern = r'\[([^\]]+)\]\(:/([a-zA-Z0-9]+)(?:#([^)]+))?\)'
     
     outgoing_links = []
     if body:
@@ -1137,6 +1140,7 @@ async def get_links(
             for match in matches:
                 link_text = match.group(1)
                 target_note_id = match.group(2)
+                section_slug = match.group(3) if match.group(3) else None
                 
                 # Try to get the target note title
                 try:
@@ -1147,14 +1151,20 @@ async def get_links(
                     target_title = "Note not found"
                     target_exists = False
                 
-                outgoing_links.append({
+                link_data = {
                     'text': link_text,
                     'target_id': target_note_id,
                     'target_title': target_title,
                     'target_exists': target_exists,
                     'line_number': line_num,
                     'line_context': line.strip()
-                })
+                }
+                
+                # Add section slug if present
+                if section_slug:
+                    link_data['section_slug'] = section_slug
+                
+                outgoing_links.append(link_data)
     
     # Search for backlinks - notes that link to this note
     backlinks = []
@@ -1182,16 +1192,23 @@ async def get_links(
                     for match in matches:
                         link_text = match.group(1)
                         target_note_id = match.group(2)
+                        section_slug = match.group(3) if match.group(3) else None
                         
                         # Only include if this link points to our note
                         if target_note_id == note_id:
-                            backlinks.append({
+                            backlink_data = {
                                 'text': link_text,
                                 'source_id': source_note_id,
                                 'source_title': source_note_title,
                                 'line_number': line_num,
                                 'line_context': line.strip()
-                            })
+                            }
+                            
+                            # Add section slug if present
+                            if section_slug:
+                                backlink_data['section_slug'] = section_slug
+                            
+                            backlinks.append(backlink_data)
     except Exception as e:
         # If backlink search fails, continue without backlinks
         logger.warning(f"Failed to search for backlinks: {e}")
@@ -1210,16 +1227,25 @@ async def get_links(
         result_parts.append("OUTGOING_LINKS:")
         for i, link in enumerate(outgoing_links, 1):
             status = "VALID" if link['target_exists'] else "BROKEN"
-            result_parts.extend([
+            link_details = [
                 f"  LINK_{i}:",
                 f"    link_text: {link['text']}",
                 f"    target_note_id: {link['target_id']}",
                 f"    target_note_title: {link['target_title']}",
                 f"    link_status: {status}",
+            ]
+            
+            # Add section slug if present
+            if 'section_slug' in link:
+                link_details.append(f"    section_slug: {link['section_slug']}")
+            
+            link_details.extend([
                 f"    line_number: {link['line_number']}",
                 f"    line_context: {link['line_context']}",
                 ""
             ])
+            
+            result_parts.extend(link_details)
     else:
         result_parts.extend([
             "OUTGOING_LINKS: None",
@@ -1230,15 +1256,24 @@ async def get_links(
     if backlinks:
         result_parts.append("BACKLINKS:")
         for i, backlink in enumerate(backlinks, 1):
-            result_parts.extend([
+            backlink_details = [
                 f"  BACKLINK_{i}:",
                 f"    link_text: {backlink['text']}",
                 f"    source_note_id: {backlink['source_id']}",
                 f"    source_note_title: {backlink['source_title']}",
+            ]
+            
+            # Add section slug if present
+            if 'section_slug' in backlink:
+                backlink_details.append(f"    section_slug: {backlink['section_slug']}")
+            
+            backlink_details.extend([
                 f"    line_number: {backlink['line_number']}",
                 f"    line_context: {backlink['line_context']}",
                 ""
             ])
+            
+            result_parts.extend(backlink_details)
     else:
         result_parts.extend([
             "BACKLINKS: None",
