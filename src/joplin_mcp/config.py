@@ -254,7 +254,7 @@ class JoplinMCPConfig:
         "search_results": "preview",  # Search results show previews
         "individual_notes": "full",   # Individual note retrieval shows full content
         "listings": "none",           # Note listings show no content
-        "max_preview_length": 200,    # Maximum preview length in characters
+        "max_preview_length": 400,    # Maximum preview length in characters
         "include_toc": True           # Include table of contents in previews
     }
 
