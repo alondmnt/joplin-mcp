@@ -261,7 +261,7 @@ python run_fastmcp_server.py --transport http --port 8000
 | `content_exposure.search_results` | `"preview"` | Content visibility in search results: `"none"`, `"preview"`, `"full"` |
 | `content_exposure.individual_notes` | `"full"` | Content visibility for individual notes: `"none"`, `"preview"`, `"full"` |
 | `content_exposure.listings` | `"none"` | Content visibility in note listings: `"none"`, `"preview"`, `"full"` |
-| `content_exposure.max_preview_length` | `200` | Maximum length of content previews (characters) |
+| `content_exposure.max_preview_length` | `300` | Maximum length of content previews (characters) |
 
 ## Project Structure
 

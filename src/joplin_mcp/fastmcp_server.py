@@ -360,20 +360,18 @@ def extract_section_content(body: str, section_identifier: str) -> tuple[str, st
     
     return section_content, target_heading['title']
 
-def create_content_preview(body: str, max_length: int, include_toc: bool = True) -> str:
-    """Create a content preview that preserves front matter if present and optionally includes table of contents.
+def create_content_preview(body: str, max_length: int) -> str:
+    """Create a content preview that preserves front matter if present.
     
     If the content starts with front matter (delimited by ---), includes the entire
-    front matter in the preview. Then optionally extracts headings to create a table of contents,
-    followed by regular content preview with remaining character budget.
+    front matter in the preview, followed by regular content preview.
     
     Args:
         body: The note content to create a preview for
         max_length: Maximum length for the preview (excluding front matter)
-        include_toc: Whether to include table of contents in the preview
     
     Returns:
-        str: The content preview with front matter, optional TOC, and content preview
+        str: The content preview with front matter and content preview
     """
     if not body:
         return ""
@@ -406,54 +404,9 @@ def create_content_preview(body: str, max_length: int, include_toc: bool = True)
             preview_parts.append(front_matter)
             content_start_index = front_matter_end + 1
     
-    # Extract headings for table of contents from remaining content (if enabled)
+    # Get remaining content after front matter
     remaining_lines = lines[content_start_index:]
     remaining_content = '\n'.join(remaining_lines)
-    
-    if include_toc:
-        # Parse headings from remaining content using helper function
-        remaining_content = '\n'.join(remaining_lines)
-        headings = parse_markdown_headings(remaining_content, content_start_index)
-        
-        # Create TOC entries
-        toc_entries = []
-        for heading in headings:
-            level = heading['level']
-            title = heading['title']
-            
-            # Create indentation based on heading level (level 1 = no indent, level 2 = 2 spaces, etc.)
-            indent = '  ' * (level - 1)
-            toc_entries.append(f"{indent}- {title}")
-        
-        # Add TOC if we found headings
-        if toc_entries:
-            toc_header = "TOC:"
-            toc_content = '\n'.join(toc_entries)
-            toc_section = f"{toc_header}\n{toc_content}"
-            
-            # Calculate dynamic TOC limit (up to full max_length, minimum 80 chars)
-            # This allows TOC to use the full preview space when needed, while preventing excessive TOC size
-            toc_max_length = max(80, int(max_length))
-            
-            if len(toc_section) > toc_max_length:
-                # Truncate TOC entries if too long
-                truncated_entries = []
-                current_length = len(toc_header) + 1  # +1 for newline
-                remaining_space = toc_max_length - current_length - 3  # Leave 3 chars for "..."
-                
-                for entry in toc_entries:
-                    if current_length + len(entry) + 1 <= remaining_space:
-                        truncated_entries.append(entry)
-                        current_length += len(entry) + 1
-                    else:
-                        break
-                
-                if len(truncated_entries) < len(toc_entries):
-                    truncated_entries.append("  ...")
-                
-                toc_section = f"{toc_header}\n" + '\n'.join(truncated_entries)
-            
-            preview_parts.append(toc_section)
     
     # Calculate remaining space for content preview
     used_space = sum(len(part) + 1 for part in preview_parts)  # +1 for newlines between parts
@@ -469,7 +422,7 @@ def create_content_preview(body: str, max_length: int, include_toc: bool = True)
         if len(content_preview.replace("...", "").strip()) > 10:
             preview_parts.append(content_preview)
     
-    # If no meaningful content remains after TOC, and no front matter, show regular preview
+    # If no meaningful content remains and no front matter, show regular preview
     if not preview_parts:
         preview = body[:max_length]
         if len(body) > max_length:
@@ -477,6 +430,38 @@ def create_content_preview(body: str, max_length: int, include_toc: bool = True)
         return preview
     
     return '\n\n'.join(preview_parts)
+
+def create_toc_only(body: str) -> str:
+    """Create a table of contents only from note content.
+    
+    Args:
+        body: The note content to extract TOC from
+        
+    Returns:
+        str: Table of contents with heading structure, or empty string if no headings
+    """
+    if not body:
+        return ""
+    
+    headings = parse_markdown_headings(body)
+    
+    if not headings:
+        return ""
+    
+    # Create TOC entries
+    toc_entries = []
+    for i, heading in enumerate(headings, 1):
+        level = heading['level']
+        title = heading['title']
+        
+        # Create indentation based on heading level (level 1 = no indent, level 2 = 2 spaces, etc.)
+        indent = '  ' * (level - 1)
+        toc_entries.append(f"{indent}{i}. {title}")
+    
+    toc_header = "TABLE_OF_CONTENTS:"
+    toc_content = '\n'.join(toc_entries)
+    
+    return f"{toc_header}\n{toc_content}"
 
 def validate_boolean_param(value: Union[bool, str, None], param_name: str) -> Optional[bool]:
     """Validate and convert boolean parameter that might come as string."""
@@ -783,7 +768,7 @@ def format_item_details(item: Any, item_type: ItemType) -> str:
     
     return "\n".join(result_parts)
 
-def format_note_details(note: Any, include_body: bool = True, context: str = "individual_notes") -> str:
+def format_note_details(note: Any, include_body: bool = True, context: str = "individual_notes", original_body: Optional[str] = None) -> str:
     """Format a note for detailed display optimized for LLM comprehension."""
     title = getattr(note, 'title', 'Untitled')
     note_id = getattr(note, 'id', 'unknown')
@@ -826,27 +811,35 @@ def format_note_details(note: Any, include_body: bool = True, context: str = "in
     else:
         result_parts.append("IS_TODO: false")
     
-    # Add content size statistics
+    # Add content size statistics (use original_body for stats if provided)
     body = getattr(note, 'body', '')
-    content_stats = calculate_content_stats(body)
+    stats_body = original_body if original_body is not None else body
+    content_stats = calculate_content_stats(stats_body)
     result_parts.append(f"CONTENT_SIZE_CHARS: {content_stats['characters']}")
     result_parts.append(f"CONTENT_SIZE_WORDS: {content_stats['words']}")
     result_parts.append(f"CONTENT_SIZE_LINES: {content_stats['lines']}")
     
     # Add content last to avoid breaking metadata flow
-    if include_body and should_show_content:
+    if include_body:
         body = getattr(note, 'body', '')
-        if body:
-            if should_show_full_content:
-                result_parts.append(f"CONTENT: {body}")
+        if should_show_content:
+            if body:
+                if should_show_full_content:
+                    # Standard full content display
+                    result_parts.append(f"CONTENT: {body}")
+                else:
+                    # Show preview only (for search results context)
+                    max_length = config.get_max_preview_length()
+                    preview = create_content_preview(body, max_length)
+                    result_parts.append(f"CONTENT_PREVIEW: {preview}")
             else:
-                # Show preview only
-                max_length = config.get_max_preview_length()
-                include_toc = config.should_include_toc()
-                preview = create_content_preview(body, max_length, include_toc)
-                result_parts.append(f"CONTENT_PREVIEW: {preview}")
+                result_parts.append("CONTENT: (empty)")
         else:
-            result_parts.append("CONTENT: (empty)")
+            # Content hidden due to privacy settings, but show status
+            if body:
+                result_parts.append("CONTENT: (hidden by privacy settings)")
+            else:
+                result_parts.append("CONTENT: (empty)")
     
     return "\n".join(result_parts)
 
@@ -860,7 +853,6 @@ def format_search_results_with_pagination(query: str, results: List[Any], total_
     should_show_content = config.should_show_content(context)
     should_show_full_content = config.should_show_full_content(context)
     max_preview_length = config.get_max_preview_length()
-    include_toc = config.should_include_toc()
     
     # Calculate pagination info
     current_page = (offset // limit) + 1
@@ -934,15 +926,23 @@ def format_search_results_with_pagination(query: str, results: List[Any], total_
         result_parts.append(f"  content_size_lines: {content_stats['lines']}")
         
         # Handle content last to avoid breaking metadata flow
+        body = getattr(note, 'body', '')
         if should_show_content:
-            body = getattr(note, 'body', '')
             if body:
                 if should_show_full_content:
                     result_parts.append(f"  content: {body}")
                 else:
-                    # Show preview only
-                    preview = create_content_preview(body, max_preview_length, include_toc)
+                    # Show preview only 
+                    preview = create_content_preview(body, max_preview_length)
                     result_parts.append(f"  content_preview: {preview}")
+            else:
+                result_parts.append(f"  content: (empty)")
+        else:
+            # Content hidden due to privacy settings, but show status
+            if body:
+                result_parts.append(f"  content: (hidden by privacy settings)")
+            else:
+                result_parts.append(f"  content: (empty)")
         
         result_parts.append("")
     
@@ -1055,37 +1055,36 @@ MESSAGE: Unable to reach Joplin server - check connection settings"""
 @create_tool("get_note", "Get note")
 async def get_note(
     note_id: Annotated[str, Field(description="Note ID to retrieve")], 
-    include_body: Annotated[Union[bool, str], Field(description="Include note content (default: True)")] = True,
-    section: Annotated[Optional[str], Field(description="Extract specific section (heading text, slug, or number)")] = None
+    section: Annotated[Optional[str], Field(description="Extract specific section (heading text, slug, or number)")] = None,
+    toc_only: Annotated[Union[bool, str], Field(description="Show only table of contents (default: False)")] = False,
+    force_full: Annotated[Union[bool, str], Field(description="Force full content even for long notes (default: False)")] = False,
+    metadata_only: Annotated[Union[bool, str], Field(description="Show only metadata without content (default: False)")] = False
 ) -> str:
-    """Retrieve a specific note by its unique identifier, optionally extracting a specific section.
+    """Retrieve a note with smart content display to manage context efficiently.
     
-    Fetches a single note from Joplin and returns its title, content, dates, and metadata.
-    If a section is specified, extracts only that section's content based on markdown headings.
+    Smart behavior: Short notes show full content, long notes show TOC only.
     
     Args:
-        note_id: Unique identifier of the note
-        include_body: Whether to include note content (default: True)
-        section: Optional section to extract. Can be:
-            - Section number: "1" (first heading), "2" (second heading), etc.
-            - Heading text (case insensitive): "Introduction", "Getting Started"
-            - Slug format: "introduction", "getting-started", "my_section"
-            - Partial text: "config" matches "Configuration"
-            Priority: Number → Exact → Slug → Partial
-    
-    Returns:
-        str: Formatted note details including title, ID, content (if requested), and dates.
-             If section is specified and found, only that section's content is included.
+        note_id: Note identifier
+        section: Extract specific section (number, heading text, or slug)
+        toc_only: Show only TOC and metadata  
+        force_full: Force full content even for long notes
+        metadata_only: Show only metadata without content
     
     Examples:
-        - get_note("a1b2c3d4e5f6...") - Get full note with content
-        - get_note("a1b2c3d4e5f6...", True, "Introduction") - Get only Introduction section
-        - get_note("a1b2c3d4e5f6...", True, "getting-started") - Get section by slug
-        - get_note("a1b2c3d4e5f6...", True, "1") - Get first section
-        - get_note("a1b2c3d4e5f6...", False) - Get metadata only
+        get_note("id") - Smart display (full if short, TOC if long)
+        get_note("id", section="1") - Get first section
+        get_note("id", toc_only=True) - TOC only
+        get_note("id", force_full=True) - Force full content
     """
     note_id = validate_required_param(note_id, "note_id")
-    include_body = validate_boolean_param(include_body, "include_body")
+    toc_only = validate_boolean_param(toc_only, "toc_only")
+    force_full = validate_boolean_param(force_full, "force_full")
+    metadata_only = validate_boolean_param(metadata_only, "metadata_only")
+    
+    # Determine if we need body content based on parameters
+    include_body = not metadata_only  # Include body unless metadata_only is True
+    
     client = get_joplin_client()
     
     # Use string format for fields (list format causes SQL errors)
@@ -1141,6 +1140,115 @@ NOTE_TITLE: {getattr(note, 'title', 'Untitled')}
 AVAILABLE_SECTIONS:
 {available_sections}
 ERROR: Section '{section}' not found in note"""
+    
+    # Handle explicit TOC-only mode
+    if toc_only and include_body:
+        body = getattr(note, 'body', '')
+        if body:
+            # Create TOC-only display
+            toc = create_toc_only(body)
+            if toc:
+                # Format with metadata but TOC instead of content
+                note_dict = {
+                    'id': getattr(note, 'id', ''),
+                    'title': getattr(note, 'title', ''),
+                    'body': '',  # Empty body for metadata-only display
+                    'created_time': getattr(note, 'created_time', None),
+                    'updated_time': getattr(note, 'updated_time', None),
+                    'parent_id': getattr(note, 'parent_id', None),
+                    'is_todo': getattr(note, 'is_todo', 0),
+                    'todo_completed': getattr(note, 'todo_completed', 0)
+                }
+                
+                class TocNote:
+                    def __init__(self, data):
+                        for key, value in data.items():
+                            setattr(self, key, value)
+                
+                toc_note = TocNote(note_dict)
+                metadata_result = format_note_details(toc_note, include_body=False, context="individual_notes", original_body=body)
+                
+                # Add TOC and smart navigation info
+                toc_info = f"""DISPLAY_MODE: toc_only
+
+{toc}
+
+NEXT_STEPS: 
+- To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="Introduction")
+- To get full content: get_note("{note_id}", force_full=True)"""
+                
+                return metadata_result + "\n\n" + toc_info
+    
+    # Handle smart TOC behavior for individual notes (only if not forcing full content)
+    if include_body and not force_full:
+        config = _module_config
+        if config.is_smart_toc_enabled():
+            body = getattr(note, 'body', '')
+            if body:
+                body_length = len(body)
+                toc_threshold = config.get_smart_toc_threshold()
+                
+                if body_length > toc_threshold:
+                    # For long notes, show TOC only (prevent context flooding)
+                    toc = create_toc_only(body)
+                    if toc:
+                        # Format with metadata but TOC instead of content
+                        note_dict = {
+                            'id': getattr(note, 'id', ''),
+                            'title': getattr(note, 'title', ''),
+                            'body': '',  # Empty body for metadata-only display
+                            'created_time': getattr(note, 'created_time', None),
+                            'updated_time': getattr(note, 'updated_time', None),
+                            'parent_id': getattr(note, 'parent_id', None),
+                            'is_todo': getattr(note, 'is_todo', 0),
+                            'todo_completed': getattr(note, 'todo_completed', 0)
+                        }
+                        
+                        class SmartTocNote:
+                            def __init__(self, data):
+                                for key, value in data.items():
+                                    setattr(self, key, value)
+                        
+                        toc_note = SmartTocNote(note_dict)
+                        metadata_result = format_note_details(toc_note, include_body=False, context="individual_notes", original_body=body)
+                        
+                        # Add smart TOC info
+                        toc_info = f"""DISPLAY_MODE: smart_toc_auto
+
+{toc}
+
+NEXT_STEPS:
+- To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="Introduction")
+- To force full content: get_note("{note_id}", force_full=True)"""
+                        
+                        return metadata_result + "\n\n" + toc_info
+                    else:
+                        # No headings found, but still too long - show truncated content with warning
+                        truncated_content = body[:toc_threshold] + "..." if len(body) > toc_threshold else body
+                        
+                        # Create a note with truncated content
+                        note_dict = {
+                            'id': getattr(note, 'id', ''),
+                            'title': getattr(note, 'title', ''),
+                            'body': truncated_content,
+                            'created_time': getattr(note, 'created_time', None),
+                            'updated_time': getattr(note, 'updated_time', None),
+                            'parent_id': getattr(note, 'parent_id', None),
+                            'is_todo': getattr(note, 'is_todo', 0),
+                            'todo_completed': getattr(note, 'todo_completed', 0)
+                        }
+                        
+                        class TruncatedNote:
+                            def __init__(self, data):
+                                for key, value in data.items():
+                                    setattr(self, key, value)
+                        
+                        truncated_note = TruncatedNote(note_dict)
+                        result = format_note_details(truncated_note, include_body, "individual_notes", original_body=body)
+                        
+                        # Add truncation info
+                        truncation_info = f"CONTENT_TRUNCATED: Note is long ({body_length} chars) but has no headings for navigation\nNEXT_STEPS: To force full content: get_note(\"{note_id}\", force_full=True)\n"
+                        return truncation_info + result
     
     return format_note_details(note, include_body, "individual_notes")
 

@@ -255,7 +255,8 @@ class JoplinMCPConfig:
         "individual_notes": "full",   # Individual note retrieval shows full content
         "listings": "none",           # Note listings show no content
         "max_preview_length": 400,    # Maximum preview length in characters
-        "include_toc": True           # Include table of contents in previews
+        "smart_toc_threshold": 2000,  # Show TOC for notes longer than this (in characters)
+        "enable_smart_toc": True      # Enable smart TOC behavior in get_note
     }
 
     def __init__(
@@ -315,9 +316,13 @@ class JoplinMCPConfig:
         """Get maximum preview length for content snippets."""
         return self.content_exposure.get("max_preview_length", 200)
 
-    def should_include_toc(self) -> bool:
-        """Check if table of contents should be included in previews."""
-        return self.content_exposure.get("include_toc", True)
+    def get_smart_toc_threshold(self) -> int:
+        """Get the character threshold for showing TOC in individual notes."""
+        return self.content_exposure.get("smart_toc_threshold", 2000)
+
+    def is_smart_toc_enabled(self) -> bool:
+        """Check if smart TOC behavior is enabled."""
+        return self.content_exposure.get("enable_smart_toc", True)
 
     def should_show_content(self, context: str) -> bool:
         """Check if content should be shown for a specific context."""
@@ -421,9 +426,12 @@ class JoplinMCPConfig:
             if key == "max_preview_length":
                 if not isinstance(value, int) or value < 0:
                     raise ConfigError(f"max_preview_length must be a non-negative integer, got {type(value)}")
-            elif key == "include_toc":
+            elif key == "smart_toc_threshold":
+                if not isinstance(value, int) or value < 0:
+                    raise ConfigError(f"smart_toc_threshold must be a non-negative integer, got {type(value)}")
+            elif key == "enable_smart_toc":
                 if not isinstance(value, bool):
-                    raise ConfigError(f"include_toc must be a boolean, got {type(value)}")
+                    raise ConfigError(f"enable_smart_toc must be a boolean, got {type(value)}")
             elif key in ["search_results", "individual_notes", "listings"]:
                 if value not in self.CONTENT_EXPOSURE_LEVELS:
                     raise ConfigError(f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}")
@@ -632,10 +640,15 @@ class JoplinMCPConfig:
                             raise ConfigError(
                                 f"Invalid value for 'max_preview_length': expected non-negative integer, got {type(value)}"
                             )
-                    elif key == "include_toc":
+                    elif key == "smart_toc_threshold":
+                        if not isinstance(value, int) or value < 0:
+                            raise ConfigError(
+                                f"Invalid value for 'smart_toc_threshold': expected non-negative integer, got {type(value)}"
+                            )
+                    elif key == "enable_smart_toc":
                         if not isinstance(value, bool):
                             raise ConfigError(
-                                f"Invalid value for 'include_toc': expected boolean, got {type(value)}"
+                                f"Invalid value for 'enable_smart_toc': expected boolean, got {type(value)}"
                             )
                     elif key in ["search_results", "individual_notes", "listings"]:
                         if not isinstance(value, str):
@@ -810,9 +823,12 @@ class JoplinMCPConfig:
                 if key == "max_preview_length":
                     if not isinstance(value, int) or value < 0:
                         errors.append(ConfigError(f"max_preview_length must be a non-negative integer, got {type(value)}"))
-                elif key == "include_toc":
+                elif key == "smart_toc_threshold":
+                    if not isinstance(value, int) or value < 0:
+                        errors.append(ConfigError(f"smart_toc_threshold must be a non-negative integer, got {type(value)}"))
+                elif key == "enable_smart_toc":
                     if not isinstance(value, bool):
-                        errors.append(ConfigError(f"include_toc must be a boolean, got {type(value)}"))
+                        errors.append(ConfigError(f"enable_smart_toc must be a boolean, got {type(value)}"))
                 elif key in ["search_results", "individual_notes", "listings"]:
                     if value not in self.CONTENT_EXPOSURE_LEVELS:
                         errors.append(ConfigError(f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}"))

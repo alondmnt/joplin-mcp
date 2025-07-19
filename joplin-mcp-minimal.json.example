@@ -35,6 +35,9 @@
     "search_results": "preview",
     "individual_notes": "preview",
     "listings": "none",
-    "max_preview_length": 150
+    "max_preview_length": 150,
+    "include_toc": false,
+    "smart_toc_threshold": 2000,
+    "enable_smart_toc": true
   }
 } 
