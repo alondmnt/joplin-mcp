@@ -394,7 +394,7 @@ server = JoplinMCPServer(config=config)
 #### 1. Optimize Search Queries
 ```python
 # Use smaller limits for better performance
-results = await server.handle_search_notes({
+results = await server.handle_find_notes({
     "query": "specific terms",
     "limit": 20,  # Instead of 100
     "notebook_id": "specific_notebook"  # Narrow scope
@@ -427,7 +427,7 @@ print(f"Memory usage: {process.memory_info().rss / 1024 / 1024:.2f} MB")
 ```python
 async with JoplinMCPServer(token="your_token") as server:
     # Server automatically cleaned up
-    results = await server.handle_search_notes({"query": "test"})
+    results = await server.handle_find_notes({"query": "test"})
 ```
 
 #### 2. Clear Caches Periodically

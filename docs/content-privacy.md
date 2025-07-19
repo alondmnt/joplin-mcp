@@ -41,6 +41,23 @@ Controls content visibility in note listings:
 
 **Default:** `none`
 
+## Smart TOC Controls
+
+### `smart_toc_threshold`
+Character count threshold for automatic TOC display in individual notes.
+- Notes shorter than this threshold show full content immediately
+- Notes longer than this threshold show TOC + metadata only (prevents context flooding)
+- Users can override with `force_full=True` parameter
+
+**Default:** `2000`
+
+### `enable_smart_toc`
+Global toggle for smart TOC behavior.
+- `true`: Enable smart TOC system for efficient context management
+- `false`: Always show full content (legacy behavior)
+
+**Default:** `true`
+
 ## Configuration Examples
 
 ### 1. Privacy-Focused Configuration
@@ -50,7 +67,9 @@ Controls content visibility in note listings:
     "search_results": "none",
     "individual_notes": "none",
     "listings": "none",
-    "max_preview_length": 0
+    "max_preview_length": 0,
+    "smart_toc_threshold": 2000,
+    "enable_smart_toc": false
   }
 }
 ```
@@ -62,7 +81,9 @@ Controls content visibility in note listings:
     "search_results": "preview",
     "individual_notes": "full",
     "listings": "none",
-    "max_preview_length": 200
+    "max_preview_length": 300,
+    "smart_toc_threshold": 2000,
+    "enable_smart_toc": true
   }
 }
 ```
@@ -74,7 +95,9 @@ Controls content visibility in note listings:
     "search_results": "full",
     "individual_notes": "full",
     "listings": "preview",
-    "max_preview_length": 300
+    "max_preview_length": 500,
+    "smart_toc_threshold": 2000,
+    "enable_smart_toc": true
   }
 }
 ```
@@ -88,6 +111,8 @@ export JOPLIN_CONTENT_SEARCH_RESULTS=none
 export JOPLIN_CONTENT_INDIVIDUAL_NOTES=preview
 export JOPLIN_CONTENT_LISTINGS=none
 export JOPLIN_MAX_PREVIEW_LENGTH=150
+export JOPLIN_SMART_TOC_THRESHOLD=2000
+export JOPLIN_ENABLE_SMART_TOC=true
 ```
 
 ## Security Best Practices
@@ -169,6 +194,8 @@ If you're upgrading from a version without content exposure controls:
 The system validates content exposure settings:
 - Content levels must be `none`, `preview`, or `full`
 - `max_preview_length` must be a non-negative integer
+- `smart_toc_threshold` must be a positive integer
+- `enable_smart_toc` must be a boolean value
 - Unknown settings will cause validation errors
 
 Invalid configuration example:

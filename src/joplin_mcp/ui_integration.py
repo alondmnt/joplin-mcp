@@ -17,6 +17,9 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Type, Union
 
+# Import defaults from config module
+from .config import JoplinMCPConfig
+
 # Color codes for terminal output
 class Colors:
     RED = '\033[91m'
@@ -202,9 +205,10 @@ def get_content_privacy_settings() -> Dict[str, Union[str, int]]:
     print()
     
     while True:
-        search_level = input("Search results content level (none/preview/full) [default: preview]: ").lower().strip()
-        if search_level in ('', 'preview'):
-            content_exposure["search_results"] = "preview"
+        default_search = JoplinMCPConfig.DEFAULT_CONTENT_EXPOSURE["search_results"]
+        search_level = input(f"Search results content level (none/preview/full) [default: {default_search}]: ").lower().strip()
+        if search_level in ('', default_search):
+            content_exposure["search_results"] = default_search
             break
         elif search_level in ('none', 'preview', 'full'):
             content_exposure["search_results"] = search_level
@@ -220,9 +224,10 @@ def get_content_privacy_settings() -> Dict[str, Union[str, int]]:
     print()
     
     while True:
-        note_level = input("Individual note content level (none/preview/full) [default: full]: ").lower().strip()
-        if note_level in ('', 'full'):
-            content_exposure["individual_notes"] = "full"
+        default_notes = JoplinMCPConfig.DEFAULT_CONTENT_EXPOSURE["individual_notes"]
+        note_level = input(f"Individual note content level (none/preview/full) [default: {default_notes}]: ").lower().strip()
+        if note_level in ('', default_notes):
+            content_exposure["individual_notes"] = default_notes
             break
         elif note_level in ('none', 'preview', 'full'):
             content_exposure["individual_notes"] = note_level
@@ -238,9 +243,10 @@ def get_content_privacy_settings() -> Dict[str, Union[str, int]]:
     print()
     
     while True:
-        listing_level = input("Note listings content level (none/preview/full) [default: none]: ").lower().strip()
-        if listing_level in ('', 'none'):
-            content_exposure["listings"] = "none"
+        default_listings = JoplinMCPConfig.DEFAULT_CONTENT_EXPOSURE["listings"]
+        listing_level = input(f"Note listings content level (none/preview/full) [default: {default_listings}]: ").lower().strip()
+        if listing_level in ('', default_listings):
+            content_exposure["listings"] = default_listings
             break
         elif listing_level in ('none', 'preview', 'full'):
             content_exposure["listings"] = listing_level
@@ -257,9 +263,10 @@ def get_content_privacy_settings() -> Dict[str, Union[str, int]]:
         
         while True:
             try:
-                length_input = input("Preview length (50-500) [default: 200]: ").strip()
+                default_length = JoplinMCPConfig.DEFAULT_CONTENT_EXPOSURE["max_preview_length"]
+                length_input = input(f"Preview length (50-500) [default: {default_length}]: ").strip()
                 if length_input == '':
-                    content_exposure["max_preview_length"] = 200
+                    content_exposure["max_preview_length"] = default_length
                     break
                 length = int(length_input)
                 if 50 <= length <= 500:
@@ -270,7 +277,7 @@ def get_content_privacy_settings() -> Dict[str, Union[str, int]]:
             except ValueError:
                 print_warning("Please enter a valid number.")
     else:
-        content_exposure["max_preview_length"] = 200
+        content_exposure["max_preview_length"] = JoplinMCPConfig.DEFAULT_CONTENT_EXPOSURE["max_preview_length"]
     
     # Summary
     print()

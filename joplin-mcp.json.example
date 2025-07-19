@@ -30,8 +30,7 @@
     "search_results": "preview",
     "individual_notes": "full",
     "listings": "none",
-    "max_preview_length": 400,
-    "include_toc": false,
+    "max_preview_length": 300,
     "smart_toc_threshold": 2000,
     "enable_smart_toc": true
   }

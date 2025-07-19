@@ -35,10 +35,7 @@ def create_joplin_config(token: str) -> Path:
     config = JoplinMCPConfig.create_interactively(
         token=token,
         include_permissions=True,
-        host="localhost",
-        port=41184,
-        timeout=30,
-        verify_ssl=False
+        **JoplinMCPConfig.DEFAULT_CONNECTION
     )
     
     # Save configuration

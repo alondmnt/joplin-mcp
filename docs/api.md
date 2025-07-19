@@ -5,7 +5,7 @@ This document provides comprehensive API documentation for all 18 MCP tools avai
 ## Table of Contents
 
 - [Note Management](#note-management)
-  - [search_notes](#search_notes)
+  - [find_notes](#find_notes)
   - [get_note](#get_note)
   - [create_note](#create_note)
   - [update_note](#update_note)
@@ -28,7 +28,7 @@ This document provides comprehensive API documentation for all 18 MCP tools avai
 
 ## Note Management
 
-### search_notes
+### find_notes
 
 Search for notes using full-text query with advanced filtering options.
 
@@ -76,31 +76,83 @@ Search for notes using full-text query with advanced filtering options.
 
 ### get_note
 
-Retrieve a specific note by its ID with full content and metadata.
+Retrieve a specific note by its ID with smart content display to manage context efficiently.
 
 #### Parameters
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `note_id` | string | ✅ | - | Unique identifier of the note to retrieve |
-| `include_body` | boolean | ❌ | true | Whether to include the note body in the response |
+| `section` | string | ❌ | - | Extract specific section (heading text, slug, or number) |
+| `toc_only` | boolean | ❌ | false | Show only table of contents and metadata |
+| `force_full` | boolean | ❌ | false | Force full content even for long notes |
+| `metadata_only` | boolean | ❌ | false | Show only metadata without content |
 
-#### Example Request
+#### Smart Behavior
+
+- **Short notes (<2000 chars):** Shows full content immediately
+- **Long notes (≥2000 chars):** Shows TOC + metadata only (prevents context flooding)
+- **Section extraction:** Get specific sections by heading text, slug, or number
+- **Override options:** Force full content or TOC-only display
+
+#### Example Requests
 
 ```json
+// Smart display (auto-detects long notes)
+{
+  "note_id": "note_789xyz"
+}
+
+// Get specific section
 {
   "note_id": "note_789xyz",
-  "include_body": true
+  "section": "Action Items"
+}
+
+// Force full content for long notes
+{
+  "note_id": "note_789xyz",
+  "force_full": true
+}
+
+// TOC only
+{
+  "note_id": "note_789xyz", 
+  "toc_only": true
 }
 ```
 
-#### Example Response
+#### Example Responses
+
+**Smart TOC Display (for long notes):**
+
+```json
+{
+  "content": [{
+    "type": "text", 
+    "text": "NOTE_ID: note_789xyz\nTITLE: Weekly Team Meeting\nCREATED: 2024-01-15 14:30:00\nUPDATED: 2024-01-15 16:45:00\nNOTEBOOK_ID: notebook_456\nIS_TODO: false\nCONTENT_SIZE_CHARS: 2543\nCONTENT_SIZE_WORDS: 387\nCONTENT_SIZE_LINES: 45\n\nDISPLAY_MODE: smart_toc_auto\n\nTABLE_OF_CONTENTS:\n1. Attendees\n2. Agenda Items\n  3. Project Status Update\n  4. Upcoming Deadlines\n  5. Action Items\n6. Next Meeting\n\nNEXT_STEPS:\n- To get specific section: get_note(\"note_789xyz\", section=\"1\") or get_note(\"note_789xyz\", section=\"Attendees\")\n- To force full content: get_note(\"note_789xyz\", force_full=True)"
+  }]
+}
+```
+
+**Section Extraction Response:**
 
 ```json
 {
   "content": [{
     "type": "text",
-    "text": "📝 **Weekly Team Meeting**\n\n**Note ID:** note_789xyz\n**Notebook:** Work Projects (notebook_456)\n**Created:** January 15, 2024 at 2:30 PM\n**Updated:** January 15, 2024 at 4:45 PM\n**Tags:** important, work, weekly\n\n---\n\n# Weekly Team Meeting - January 15, 2024\n\n## Attendees\n- Alice Johnson (Project Manager)\n- Bob Smith (Developer)\n- Carol Davis (Designer)\n\n## Agenda Items\n\n### 1. Project Status Update\n- Backend API development: 80% complete\n- Frontend implementation: 60% complete\n- Testing phase: Starting next week\n\n### 2. Upcoming Deadlines\n- Feature freeze: January 22, 2024\n- Beta release: January 29, 2024\n- Production release: February 5, 2024\n\n### 3. Action Items\n- [ ] Bob: Complete user authentication module\n- [ ] Carol: Finalize UI mockups for dashboard\n- [ ] Alice: Schedule client demo for January 25\n\n## Next Meeting\nJanuary 22, 2024 at 2:00 PM"
+    "text": "EXTRACTED_SECTION: Action Items\nSECTION_QUERY: Action Items\nNOTE_ID: note_789xyz\nTITLE: Weekly Team Meeting\n...\nCONTENT: ### 3. Action Items\n- [ ] Bob: Complete user authentication module\n- [ ] Carol: Finalize UI mockups for dashboard\n- [ ] Alice: Schedule client demo for January 25"
+  }]
+}
+```
+
+**Full Content Response (short notes or force_full=true):**
+
+```json
+{
+  "content": [{
+    "type": "text",
+    "text": "NOTE_ID: note_789xyz\nTITLE: Weekly Team Meeting\n...\nCONTENT: # Weekly Team Meeting - January 15, 2024\n\n## Attendees\n- Alice Johnson (Project Manager)\n- Bob Smith (Developer)\n- Carol Davis (Designer)\n\n[...full content...]"
   }]
 }
 ```

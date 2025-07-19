@@ -245,8 +245,16 @@ class JoplinMCPConfig:
     # Content exposure levels for privacy control
     CONTENT_EXPOSURE_LEVELS = {
         "none": "No content shown - titles and metadata only",
-        "preview": "Short preview snippets (200 characters)",
+        "preview": "Short preview snippets (300 characters)",
         "full": "Full content access"
+    }
+
+    # Default connection settings
+    DEFAULT_CONNECTION = {
+        "host": "localhost",
+        "port": 41184,
+        "timeout": 30,
+        "verify_ssl": False
     }
 
     # Default content exposure settings
@@ -254,27 +262,28 @@ class JoplinMCPConfig:
         "search_results": "preview",  # Search results show previews
         "individual_notes": "full",   # Individual note retrieval shows full content
         "listings": "none",           # Note listings show no content
-        "max_preview_length": 400,    # Maximum preview length in characters
+        "max_preview_length": 300,    # Maximum preview length in characters
         "smart_toc_threshold": 2000,  # Show TOC for notes longer than this (in characters)
         "enable_smart_toc": True      # Enable smart TOC behavior in get_note
     }
 
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 41184,
+        host: str = None,
+        port: int = None,
         token: Optional[str] = None,
-        timeout: int = 60,
-        verify_ssl: bool = True,
+        timeout: int = None,
+        verify_ssl: bool = None,
         tools: Optional[Dict[str, bool]] = None,
         content_exposure: Optional[Dict[str, Union[str, int]]] = None,
     ):
         """Initialize configuration with default values."""
-        self.host = host
-        self.port = port
+        # Use centralized defaults if not provided
+        self.host = host if host is not None else self.DEFAULT_CONNECTION["host"]
+        self.port = port if port is not None else self.DEFAULT_CONNECTION["port"]
         self.token = token
-        self.timeout = timeout
-        self.verify_ssl = verify_ssl
+        self.timeout = timeout if timeout is not None else self.DEFAULT_CONNECTION["timeout"]
+        self.verify_ssl = verify_ssl if verify_ssl is not None else self.DEFAULT_CONNECTION["verify_ssl"]
         
         # Initialize tools configuration
         self.tools = self.DEFAULT_TOOLS.copy()
@@ -1074,11 +1083,11 @@ class JoplinMCPConfig:
         
         # Create configuration with user choices and defaults
         config_kwargs = {
-            "host": defaults.get("host", "localhost"),
-            "port": defaults.get("port", 41184),
+            "host": defaults.get("host", cls.DEFAULT_CONNECTION["host"]),
+            "port": defaults.get("port", cls.DEFAULT_CONNECTION["port"]),
             "token": token,
-            "timeout": defaults.get("timeout", 30),
-            "verify_ssl": defaults.get("verify_ssl", False),
+            "timeout": defaults.get("timeout", cls.DEFAULT_CONNECTION["timeout"]),
+            "verify_ssl": defaults.get("verify_ssl", cls.DEFAULT_CONNECTION["verify_ssl"]),
             "tools": tool_permissions,
             "content_exposure": content_privacy
         }
