@@ -513,6 +513,34 @@ def format_timestamp(timestamp: Optional[Union[int, datetime.datetime]], format_
     except:
         return None
 
+def calculate_content_stats(body: str) -> Dict[str, int]:
+    """Calculate content statistics for a note body.
+    
+    Args:
+        body: The note content to analyze
+        
+    Returns:
+        Dict with keys: 'characters', 'words', 'lines'
+    """
+    if not body:
+        return {'characters': 0, 'words': 0, 'lines': 0}
+    
+    # Character count (including whitespace and special characters)
+    char_count = len(body)
+    
+    # Line count
+    line_count = len(body.split('\n'))
+    
+    # Word count (split by whitespace and filter empty strings)
+    words = [word for word in body.split() if word.strip()]
+    word_count = len(words)
+    
+    return {
+        'characters': char_count,
+        'words': word_count, 
+        'lines': line_count
+    }
+
 def process_search_results(results: Any) -> List[Any]:
     """Process search results from joppy client into a consistent list format."""
     if hasattr(results, 'items'):
@@ -798,6 +826,13 @@ def format_note_details(note: Any, include_body: bool = True, context: str = "in
     else:
         result_parts.append("IS_TODO: false")
     
+    # Add content size statistics
+    body = getattr(note, 'body', '')
+    content_stats = calculate_content_stats(body)
+    result_parts.append(f"CONTENT_SIZE_CHARS: {content_stats['characters']}")
+    result_parts.append(f"CONTENT_SIZE_WORDS: {content_stats['words']}")
+    result_parts.append(f"CONTENT_SIZE_LINES: {content_stats['lines']}")
+    
     # Add content last to avoid breaking metadata flow
     if include_body and should_show_content:
         body = getattr(note, 'body', '')
@@ -890,6 +925,13 @@ def format_search_results_with_pagination(query: str, results: List[Any], total_
             result_parts.append(f"  todo_completed: {'true' if todo_completed else 'false'}")
         else:
             result_parts.append(f"  is_todo: false")
+        
+        # Add content size statistics
+        body = getattr(note, 'body', '')
+        content_stats = calculate_content_stats(body)
+        result_parts.append(f"  content_size_chars: {content_stats['characters']}")
+        result_parts.append(f"  content_size_words: {content_stats['words']}")
+        result_parts.append(f"  content_size_lines: {content_stats['lines']}")
         
         # Handle content last to avoid breaking metadata flow
         if should_show_content:
