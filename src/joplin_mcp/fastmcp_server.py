@@ -537,6 +537,28 @@ def extract_text_terms_from_query(query: str) -> List[str]:
     
     return all_terms
 
+def _find_matching_lines(content_lines: List[str], search_terms: List[str], content_start_index: int) -> tuple[List[tuple[int, str]], List[tuple[int, str]]]:
+    """Find lines matching search terms, separated by AND vs OR logic."""
+    search_terms_lower = [term.lower() for term in search_terms]
+    
+    and_matches = []
+    or_matches = []
+    and_indices = set()
+    
+    for i, line in enumerate(content_lines):
+        line_index = i + content_start_index
+        line_lower = line.lower()
+        
+        # Check for AND matches (all terms present)
+        if all(term in line_lower for term in search_terms_lower):
+            and_matches.append((line_index, line))
+            and_indices.add(line_index)
+        # Check for OR matches (any terms present), excluding AND matches
+        elif any(term in line_lower for term in search_terms_lower):
+            or_matches.append((line_index, line))
+    
+    return and_matches, or_matches
+
 def create_matching_lines_preview(body: str, search_terms: List[str], max_length: int = 300, max_lines: int = 10, context_lines: int = 0) -> tuple[str, List[int], int, int]:
     """Create a preview showing only lines that match search terms with priority system.
     
@@ -558,63 +580,28 @@ def create_matching_lines_preview(body: str, search_terms: List[str], max_length
     if not body or not search_terms:
         return "", [], 0, 0
     
-    import re
-    
     lines = body.split('\n')
-    matching_lines = []
-    line_numbers = []
-    
-    # Skip front matter if present
     _, content_start_index = extract_frontmatter(body)
-    
     content_lines = lines[content_start_index:]
     
-    # Priority 1: Find lines matching ALL terms (AND logic)
-    and_matches = []
-    and_line_numbers = []
+    # Find all matching lines
+    and_matches, or_matches = _find_matching_lines(content_lines, search_terms, content_start_index)
+    and_count, or_count = len(and_matches), len(or_matches)
     
-    for i, line in enumerate(content_lines):
-        line_lower = line.lower()
-        if all(term.lower() in line_lower for term in search_terms):
-            and_matches.append((i + content_start_index, line))
-            and_line_numbers.append(i + content_start_index + 1)  # 1-based line numbers
+    # Combine matches with priority (AND first, then OR)
+    all_matches = and_matches + or_matches
+    if not all_matches:
+        return "", [], 0, 0
     
-    # Priority 2: Find lines matching ANY terms (OR logic), excluding AND matches
-    or_matches = []
-    or_line_numbers = []
-    
-    and_indices = set(match[0] for match in and_matches)
-    
-    for i, line in enumerate(content_lines):
-        line_index = i + content_start_index
-        if line_index in and_indices:
-            continue  # Skip lines already matched by AND logic
-            
-        line_lower = line.lower()
-        if any(term.lower() in line_lower for term in search_terms):
-            or_matches.append((line_index, line))
-            or_line_numbers.append(line_index + 1)  # 1-based line numbers
-    
-    # Calculate separate counts for AND and OR matches
-    and_matches_count = len(and_matches)
-    or_matches_count = len(or_matches)
-    
-    # Build preview incrementally, checking length as we go
-    # Priority: AND matches first, then OR matches
-    all_potential_matches = and_matches + or_matches
-    all_potential_line_numbers = and_line_numbers + or_line_numbers
-    
-    if not all_potential_matches:
-        return "", [], 0, 0  # No matches found
-    
+    # Build preview incrementally
     preview_parts = []
     included_line_numbers = []
     used_indices = set()
     current_length = 0
     
-    for i, (line_index, matching_line) in enumerate(all_potential_matches):
+    for line_index, _ in all_matches:
         if len(included_line_numbers) >= max_lines:
-            break  # Hit max lines limit
+            break
             
         # Calculate what this match would add to the preview
         context_block = []
@@ -626,46 +613,37 @@ def create_matching_lines_preview(body: str, search_terms: List[str], max_length
         
         # Build context block for this match
         for ctx_i in range(start_context, end_context):
-            if ctx_i in used_indices:
-                continue  # Skip if already included
-            block_indices.append(ctx_i)
-            
-            line_num = ctx_i + 1  # 1-based
-            line_content = lines[ctx_i]
-            
-            # Mark the actual matching line
-            if ctx_i == line_index:
-                context_block.append(f"[L{line_num}] {line_content}")
-            else:
-                context_block.append(f" L{line_num}  {line_content}")
+            if ctx_i not in used_indices:
+                block_indices.append(ctx_i)
+                line_num = ctx_i + 1  # 1-based
+                line_content = lines[ctx_i]
+                
+                # Mark the actual matching line vs context
+                if ctx_i == line_index:
+                    context_block.append(f"[L{line_num}] {line_content}")
+                else:
+                    context_block.append(f" L{line_num}  {line_content}")
         
-        # Calculate length this block would add (including separator)
         if context_block:
             block_content = '\n'.join(context_block)
-            separator = "\n" if preview_parts else ""  # No separator for first block
-            block_length = len(separator + block_content)
+            separator_length = 1 if preview_parts else 0  # Newline separator
+            block_length = len(block_content) + separator_length
             
-            # Check if adding this block would exceed length limit
+            # Check length limit
             if current_length + block_length > max_length and preview_parts:
-                break  # Would exceed limit, stop here
+                break
             
-            # Add this block
+            # Add block with separator
             if preview_parts:
-                preview_parts.append("")  # Separator between blocks
-                current_length += 1  # For the separator newline
-            
+                preview_parts.append("")
             preview_parts.extend(context_block)
-            current_length += len(block_content)
             
-            # Mark indices as used
+            current_length += block_length
             used_indices.update(block_indices)
-            included_line_numbers.append(all_potential_line_numbers[i])
+            included_line_numbers.append(line_index + 1)  # 1-based
     
-    if not preview_parts:
-        return "", [], and_matches_count, or_matches_count  # Nothing fit within limits, but return counts
-    
-    preview_content = '\n'.join(preview_parts)
-    return preview_content, included_line_numbers, and_matches_count, or_matches_count
+    preview_content = '\n'.join(preview_parts) if preview_parts else ""
+    return preview_content, included_line_numbers, and_count, or_count
 
 def create_content_preview_with_search(body: str, max_length: int, search_query: str = "") -> str:
     """Create a content preview that shows matching lines for search queries, with fallback.
@@ -684,58 +662,56 @@ def create_content_preview_with_search(body: str, max_length: int, search_query:
     if not body:
         return ""
     
-    # Extract search terms from query
     search_terms = extract_text_terms_from_query(search_query)
+    if not search_terms:
+        return create_content_preview(body, max_length)
     
-    # Try to create matching lines preview
+    # Extract frontmatter and calculate available space
+    front_matter, _ = extract_frontmatter(body, max_lines=10)
+    available_length = max(50, max_length - len(front_matter))
+    
+    matching_preview, line_numbers, and_matches, or_matches = create_matching_lines_preview(
+        body, search_terms, max_length=available_length, max_lines=8, context_lines=0
+    )
+    
+    if not matching_preview:
+        return create_content_preview(body, max_length)
+    
+    # Build preview with metadata
+    preview_parts = []
+    
+    if front_matter:
+        preview_parts.append(front_matter)
+    
+    # Build match quality description
+    displayed_matches = len(line_numbers)
+    total_matches = and_matches + or_matches
+    
+    if and_matches > 0 and or_matches > 0:
+        quality_info = f"({and_matches} match all terms, {or_matches} match any terms)"
+    elif and_matches > 0:
+        quality_info = "(all match all search terms)"
+    else:
+        quality_info = "(all match some search terms)"
+    
+    # Build main message with truncation info
+    if displayed_matches < total_matches:
+        match_info = f"MATCHING_LINES: {total_matches} total lines match search terms {quality_info} - showing first {displayed_matches}"
+    else:
+        match_info = f"MATCHING_LINES: {total_matches} lines match search terms {quality_info}"
+    
+    # Add search terms info
     if search_terms:
-        # Extract frontmatter first to calculate available space accurately
-        front_matter, _ = extract_frontmatter(body, max_lines=10)
-        available_length = max(50, max_length - len(front_matter))  # Ensure at least 50 chars for matching lines
-        
-        matching_preview, line_numbers, and_matches, or_matches = create_matching_lines_preview(
-            body, search_terms, max_length=available_length, max_lines=8, context_lines=0
-        )
-        
-        if matching_preview:
-            # Format the result with metadata
-            preview_parts = []
-            
-            if front_matter:
-                preview_parts.append(front_matter)
-            
-            # Add matching lines info with clear total vs displayed counts and match quality breakdown
-            displayed_matches = len(line_numbers)
-            total_matches = and_matches + or_matches
-            
-            # Build match quality description
-            if and_matches > 0 and or_matches > 0:
-                quality_info = f"({and_matches} match all terms, {or_matches} match any terms)"
-            elif and_matches > 0:
-                quality_info = f"(all match all search terms)"
-            else:
-                quality_info = f"(all match some search terms)"
-            
-            # Build main message with truncation info
-            if displayed_matches < total_matches:
-                match_info = f"MATCHING_LINES: {total_matches} total lines match search terms {quality_info} - showing first {displayed_matches}"
-            else:
-                match_info = f"MATCHING_LINES: {total_matches} lines match search terms {quality_info}"
-            
-            if search_terms:
-                terms_str = ", ".join(f'"{term}"' for term in search_terms[:3])
-                if len(search_terms) > 3:
-                    terms_str += f" (+{len(search_terms)-3} more)"
-                match_info += f" [{terms_str}]"
-            
-            preview_parts.append(match_info)
-            preview_parts.append("")
-            preview_parts.append(matching_preview)
-            
-            return '\n'.join(preview_parts)
+        terms_str = ", ".join(f'"{term}"' for term in search_terms[:3])
+        if len(search_terms) > 3:
+            terms_str += f" (+{len(search_terms)-3} more)"
+        match_info += f" [{terms_str}]"
     
-    # Fallback to regular preview if no search terms found
-    return create_content_preview(body, max_length)
+    preview_parts.append(match_info)
+    preview_parts.append("")
+    preview_parts.append(matching_preview)
+    
+    return '\n'.join(preview_parts)
 
 def validate_boolean_param(value: Union[bool, str, None], param_name: str) -> Optional[bool]:
     """Validate and convert boolean parameter that might come as string."""
@@ -1117,25 +1093,15 @@ def format_note_details(note: Any, include_body: bool = True, context: str = "in
     
     return "\n".join(result_parts)
 
-
-def format_search_results_with_pagination(query: str, results: List[Any], total_count: int, limit: int, offset: int, context: str = "search_results", original_query: Optional[str] = None) -> str:
-    """Format search results with pagination information for display optimized for LLM comprehension."""
-    count = len(results)
-    
-    # Check content exposure settings
-    config = _module_config
-    should_show_content = config.should_show_content(context)
-    should_show_full_content = config.should_show_full_content(context)
-    max_preview_length = config.get_max_preview_length()
-    
-    # Calculate pagination info
+def _build_pagination_header(query: str, total_count: int, limit: int, offset: int) -> List[str]:
+    """Build pagination header with search and pagination info."""
+    count = min(limit, total_count - offset) if total_count > offset else 0
     current_page = (offset // limit) + 1
     total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
     start_result = offset + 1 if count > 0 else 0
     end_result = offset + count
     
-    # Start with structured header including pagination
-    result_parts = [
+    header = [
         f"SEARCH_QUERY: {query}",
         f"TOTAL_RESULTS: {total_count}",
         f"SHOWING_RESULTS: {start_result}-{end_result}",
@@ -1146,98 +1112,115 @@ def format_search_results_with_pagination(query: str, results: List[Any], total_
         ""
     ]
     
-    # Add pagination guidance
+    # Add next page guidance
     if total_count > end_result:
         next_offset = offset + limit
-        result_parts.extend([
-            f"NEXT_PAGE: Use offset={next_offset} to get the next {limit} results",
-            ""
-        ])
+        header.extend([f"NEXT_PAGE: Use offset={next_offset} to get the next {limit} results", ""])
     
+    return header
+
+def _format_note_entry(note: Any, index: int, config: Any, context: str, original_query: Optional[str], query: str) -> List[str]:
+    """Format a single note entry for search results."""
+    title = getattr(note, 'title', 'Untitled')
+    note_id = getattr(note, 'id', 'unknown')
+    body = getattr(note, 'body', '')
+    
+    # Start with basic info
+    entry = [
+        f"RESULT_{index}:",
+        f"  note_id: {note_id}",
+        f"  title: {title}",
+    ]
+    
+    # Add timestamps
+    for time_field, label in [('created_time', 'created'), ('updated_time', 'updated')]:
+        timestamp = getattr(note, time_field, None)
+        if timestamp:
+            formatted_date = format_timestamp(timestamp, "%Y-%m-%d %H:%M")
+            if formatted_date:
+                entry.append(f"  {label}: {formatted_date}")
+    
+    # Add notebook reference
+    parent_id = getattr(note, 'parent_id', None)
+    if parent_id:
+        entry.append(f"  notebook_id: {parent_id}")
+    
+    # Add todo status
+    is_todo = getattr(note, 'is_todo', 0)
+    if is_todo:
+        todo_completed = getattr(note, 'todo_completed', 0)
+        entry.extend([
+            "  is_todo: true",
+            f"  todo_completed: {'true' if todo_completed else 'false'}"
+        ])
+    else:
+        entry.append("  is_todo: false")
+    
+    # Add content statistics
+    content_stats = calculate_content_stats(body)
+    entry.extend([
+        f"  content_size_chars: {content_stats['characters']}",
+        f"  content_size_words: {content_stats['words']}",
+        f"  content_size_lines: {content_stats['lines']}"
+    ])
+    
+    # Add content based on privacy settings
+    should_show_content = config.should_show_content(context)
+    if should_show_content and body:
+        if config.should_show_full_content(context):
+            entry.append(f"  content: {body}")
+        else:
+            search_query_for_terms = original_query if original_query is not None else query
+            preview = create_content_preview_with_search(body, config.get_max_preview_length(), search_query_for_terms)
+            entry.append(f"  content_preview: {preview}")
+    elif should_show_content:
+        entry.append("  content: (empty)")
+    else:
+        content_status = "(hidden by privacy settings)" if body else "(empty)"
+        entry.append(f"  content: {content_status}")
+    
+    entry.append("")  # Empty line separator
+    return entry
+
+def _build_pagination_summary(total_count: int, limit: int, offset: int) -> List[str]:
+    """Build pagination summary footer."""
+    count = min(limit, total_count - offset) if total_count > offset else 0
+    current_page = (offset // limit) + 1
+    total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
+    start_result = offset + 1 if count > 0 else 0
+    end_result = offset + count
+    
+    if total_pages <= 1:
+        return []
+    
+    summary = [
+        "PAGINATION_SUMMARY:",
+        f"  showing_page: {current_page} of {total_pages}",
+        f"  showing_results: {start_result}-{end_result} of {total_count}",
+        f"  results_per_page: {limit}",
+    ]
+    
+    if current_page < total_pages:
+        summary.append(f"  next_page_offset: {offset + limit}")
+    
+    if current_page > 1:
+        summary.append(f"  prev_page_offset: {max(0, offset - limit)}")
+    
+    return summary
+
+def format_search_results_with_pagination(query: str, results: List[Any], total_count: int, limit: int, offset: int, context: str = "search_results", original_query: Optional[str] = None) -> str:
+    """Format search results with pagination information for display optimized for LLM comprehension."""
+    config = _module_config
+    
+    # Build all parts
+    result_parts = _build_pagination_header(query, total_count, limit, offset)
+    
+    # Add note entries
     for i, note in enumerate(results, 1):
-        title = getattr(note, 'title', 'Untitled')
-        note_id = getattr(note, 'id', 'unknown')
-        
-        # Structured note entry - metadata first
-        result_parts.extend([
-            f"RESULT_{i}:",
-            f"  note_id: {note_id}",
-            f"  title: {title}",
-        ])
-        
-        # Add structured timestamps
-        created_time = getattr(note, 'created_time', None)
-        if created_time:
-            created_date = format_timestamp(created_time, "%Y-%m-%d %H:%M")
-            if created_date:
-                result_parts.append(f"  created: {created_date}")
-        
-        updated_time = getattr(note, 'updated_time', None)
-        if updated_time:
-            updated_date = format_timestamp(updated_time, "%Y-%m-%d %H:%M")
-            if updated_date:
-                result_parts.append(f"  updated: {updated_date}")
-        
-        # Add notebook reference if available
-        parent_id = getattr(note, 'parent_id', None)
-        if parent_id:
-            result_parts.append(f"  notebook_id: {parent_id}")
-        
-        # Add todo status
-        is_todo = getattr(note, 'is_todo', 0)
-        if is_todo:
-            todo_completed = getattr(note, 'todo_completed', 0)
-            result_parts.append(f"  is_todo: true")
-            result_parts.append(f"  todo_completed: {'true' if todo_completed else 'false'}")
-        else:
-            result_parts.append(f"  is_todo: false")
-        
-        # Add content size statistics
-        body = getattr(note, 'body', '')
-        content_stats = calculate_content_stats(body)
-        result_parts.append(f"  content_size_chars: {content_stats['characters']}")
-        result_parts.append(f"  content_size_words: {content_stats['words']}")
-        result_parts.append(f"  content_size_lines: {content_stats['lines']}")
-        
-        # Handle content last to avoid breaking metadata flow
-        body = getattr(note, 'body', '')
-        if should_show_content:
-            if body:
-                if should_show_full_content:
-                    result_parts.append(f"  content: {body}")
-                else:
-                    # Show preview only with search-aware matching lines
-                    # Use original_query for term extraction if provided, otherwise use display query
-                    search_query_for_terms = original_query if original_query is not None else query
-                    preview = create_content_preview_with_search(body, max_preview_length, search_query_for_terms)
-                    result_parts.append(f"  content_preview: {preview}")
-            else:
-                result_parts.append(f"  content: (empty)")
-        else:
-            # Content hidden due to privacy settings, but show status
-            if body:
-                result_parts.append(f"  content: (hidden by privacy settings)")
-            else:
-                result_parts.append(f"  content: (empty)")
-        
-        result_parts.append("")
+        result_parts.extend(_format_note_entry(note, i, config, context, original_query, query))
     
-    # Add pagination summary at the end
-    if total_pages > 1:
-        result_parts.extend([
-            f"PAGINATION_SUMMARY:",
-            f"  showing_page: {current_page} of {total_pages}",
-            f"  showing_results: {start_result}-{end_result} of {total_count}",
-            f"  results_per_page: {limit}",
-        ])
-        
-        if current_page < total_pages:
-            next_offset = offset + limit
-            result_parts.append(f"  next_page_offset: {next_offset}")
-        
-        if current_page > 1:
-            prev_offset = max(0, offset - limit)
-            result_parts.append(f"  prev_page_offset: {prev_offset}")
+    # Add pagination summary
+    result_parts.extend(_build_pagination_summary(total_count, limit, offset))
     
     return "\n".join(result_parts)
 
@@ -1328,6 +1311,97 @@ MESSAGE: Unable to reach Joplin server - check connection settings"""
 
 # === NOTE OPERATIONS ===
 
+def _create_note_object(note: Any, body_override: str = None) -> Any:
+    """Create a note object with optional body override."""
+    class ModifiedNote:
+        def __init__(self, original_note, body_override=None):
+            for attr in ['id', 'title', 'created_time', 'updated_time', 'parent_id', 'is_todo', 'todo_completed']:
+                setattr(self, attr, getattr(original_note, attr, None))
+            self.body = body_override if body_override is not None else getattr(original_note, 'body', '')
+    
+    return ModifiedNote(note, body_override)
+
+def _handle_section_extraction(note: Any, section: str, note_id: str, include_body: bool) -> Optional[str]:
+    """Handle section extraction logic, returning formatted result or None if no section handling needed."""
+    if not (section and include_body):
+        return None
+    
+    body = getattr(note, 'body', '')
+    if not body:
+        return None
+    
+    section_content, section_title = extract_section_content(body, section)
+    if section_content:
+        modified_note = _create_note_object(note, section_content)
+        result = format_note_details(modified_note, include_body, "individual_notes")
+        return f"EXTRACTED_SECTION: {section_title}\nSECTION_QUERY: {section}\n{result}"
+    
+    # Section not found - show available sections
+    headings = parse_markdown_headings(body)
+    section_list = [
+        f"{'  ' * (heading['level'] - 1)}{i}. {heading['title']}"
+        for i, heading in enumerate(headings, 1)
+    ]
+    available_sections = "\n".join(section_list) if section_list else "No sections found"
+    
+    return f"""SECTION_NOT_FOUND: {section}
+NOTE_ID: {note_id}
+NOTE_TITLE: {getattr(note, 'title', 'Untitled')}
+AVAILABLE_SECTIONS:
+{available_sections}
+ERROR: Section '{section}' not found in note"""
+
+def _handle_toc_display(note: Any, note_id: str, display_mode: str, original_body: str = None) -> str:
+    """Handle TOC display with metadata and navigation info."""
+    toc = create_toc_only(original_body or getattr(note, 'body', ''))
+    if not toc:
+        return None
+    
+    # Create note with empty body for metadata-only display
+    toc_note = _create_note_object(note, "")
+    metadata_result = format_note_details(toc_note, include_body=False, context="individual_notes", original_body=original_body)
+    
+    # Build navigation steps based on display mode
+    if display_mode == "explicit":
+        steps = f"""NEXT_STEPS: 
+- To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="Introduction")
+- To get full content: get_note("{note_id}", force_full=True)"""
+    else:  # smart_toc_auto
+        steps = f"""NEXT_STEPS:
+- To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="Introduction")
+- To force full content: get_note("{note_id}", force_full=True)"""
+    
+    toc_info = f"DISPLAY_MODE: {display_mode}\n\n{toc}\n\n{steps}"
+    return f"{metadata_result}\n\n{toc_info}"
+
+def _handle_smart_toc_behavior(note: Any, note_id: str, config: Any) -> Optional[str]:
+    """Handle smart TOC behavior for long notes."""
+    if not config.is_smart_toc_enabled():
+        return None
+    
+    body = getattr(note, 'body', '')
+    if not body:
+        return None
+    
+    body_length = len(body)
+    toc_threshold = config.get_smart_toc_threshold()
+    
+    if body_length <= toc_threshold:
+        return None  # Not long enough for smart TOC
+    
+    # Try TOC first
+    toc_result = _handle_toc_display(note, note_id, "smart_toc_auto", body)
+    if toc_result:
+        return toc_result
+    
+    # No headings found - show truncated content with warning
+    truncated_content = body[:toc_threshold] + ("..." if body_length > toc_threshold else "")
+    truncated_note = _create_note_object(note, truncated_content)
+    result = format_note_details(truncated_note, True, "individual_notes", original_body=body)
+    
+    truncation_info = f"CONTENT_TRUNCATED: Note is long ({body_length} chars) but has no headings for navigation\nNEXT_STEPS: To force full content: get_note(\"{note_id}\", force_full=True)\n"
+    return f"{truncation_info}{result}"
+
 @create_tool("get_note", "Get note")
 async def get_note(
     note_id: Annotated[str, Field(description="Note ID to retrieve")], 
@@ -1358,174 +1432,31 @@ async def get_note(
     force_full = validate_boolean_param(force_full, "force_full")
     metadata_only = validate_boolean_param(metadata_only, "metadata_only")
     
-    # Determine if we need body content based on parameters
-    include_body = not metadata_only  # Include body unless metadata_only is True
+    include_body = not metadata_only
     
     client = get_joplin_client()
-    
-    # Use string format for fields (list format causes SQL errors)
     note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
     
-    # Handle section extraction if requested
-    if section and include_body:
-        body = getattr(note, 'body', '')
-        if body:
-            section_content, section_title = extract_section_content(body, section)
-            if section_content:
-                # Create a modified note object with only the section content
-                # We'll modify the body attribute for display
-                note_dict = {
-                    'id': getattr(note, 'id', ''),
-                    'title': getattr(note, 'title', ''),
-                    'body': section_content,
-                    'created_time': getattr(note, 'created_time', None),
-                    'updated_time': getattr(note, 'updated_time', None),
-                    'parent_id': getattr(note, 'parent_id', None),
-                    'is_todo': getattr(note, 'is_todo', 0),
-                    'todo_completed': getattr(note, 'todo_completed', 0)
-                }
-                
-                # Create a simple object to hold the modified data
-                class SectionNote:
-                    def __init__(self, data):
-                        for key, value in data.items():
-                            setattr(self, key, value)
-                
-                modified_note = SectionNote(note_dict)
-                result = format_note_details(modified_note, include_body, "individual_notes")
-                
-                # Add section info to the result
-                section_info = f"EXTRACTED_SECTION: {section_title}\nSECTION_QUERY: {section}\n"
-                return section_info + result
-            else:
-                # Section not found, return error with available sections
-                headings = parse_markdown_headings(body)
-                
-                # Format available sections with numbering and indentation
-                section_list = []
-                for i, heading in enumerate(headings, 1):
-                    level = heading['level']
-                    title = heading['title']
-                    indent = '  ' * (level - 1)
-                    section_list.append(f"{indent}{i}. {title}")
-                
-                available_sections = "\n".join(section_list) if section_list else "No sections found"
-                return f"""SECTION_NOT_FOUND: {section}
-NOTE_ID: {note_id}
-NOTE_TITLE: {getattr(note, 'title', 'Untitled')}
-AVAILABLE_SECTIONS:
-{available_sections}
-ERROR: Section '{section}' not found in note"""
+    # Handle section extraction first
+    section_result = _handle_section_extraction(note, section, note_id, include_body)
+    if section_result:
+        return section_result
     
     # Handle explicit TOC-only mode
     if toc_only and include_body:
         body = getattr(note, 'body', '')
         if body:
-            # Create TOC-only display
-            toc = create_toc_only(body)
-            if toc:
-                # Format with metadata but TOC instead of content
-                note_dict = {
-                    'id': getattr(note, 'id', ''),
-                    'title': getattr(note, 'title', ''),
-                    'body': '',  # Empty body for metadata-only display
-                    'created_time': getattr(note, 'created_time', None),
-                    'updated_time': getattr(note, 'updated_time', None),
-                    'parent_id': getattr(note, 'parent_id', None),
-                    'is_todo': getattr(note, 'is_todo', 0),
-                    'todo_completed': getattr(note, 'todo_completed', 0)
-                }
-                
-                class TocNote:
-                    def __init__(self, data):
-                        for key, value in data.items():
-                            setattr(self, key, value)
-                
-                toc_note = TocNote(note_dict)
-                metadata_result = format_note_details(toc_note, include_body=False, context="individual_notes", original_body=body)
-                
-                # Add TOC and smart navigation info
-                toc_info = f"""DISPLAY_MODE: toc_only
-
-{toc}
-
-NEXT_STEPS: 
-- To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="Introduction")
-- To get full content: get_note("{note_id}", force_full=True)"""
-                
-                return metadata_result + "\n\n" + toc_info
+            toc_result = _handle_toc_display(note, note_id, "toc_only", body)
+            if toc_result:
+                return toc_result
     
-    # Handle smart TOC behavior for individual notes (only if not forcing full content)
+    # Handle smart TOC behavior (only if not forcing full content)
     if include_body and not force_full:
-        config = _module_config
-        if config.is_smart_toc_enabled():
-            body = getattr(note, 'body', '')
-            if body:
-                body_length = len(body)
-                toc_threshold = config.get_smart_toc_threshold()
-                
-                if body_length > toc_threshold:
-                    # For long notes, show TOC only (prevent context flooding)
-                    toc = create_toc_only(body)
-                    if toc:
-                        # Format with metadata but TOC instead of content
-                        note_dict = {
-                            'id': getattr(note, 'id', ''),
-                            'title': getattr(note, 'title', ''),
-                            'body': '',  # Empty body for metadata-only display
-                            'created_time': getattr(note, 'created_time', None),
-                            'updated_time': getattr(note, 'updated_time', None),
-                            'parent_id': getattr(note, 'parent_id', None),
-                            'is_todo': getattr(note, 'is_todo', 0),
-                            'todo_completed': getattr(note, 'todo_completed', 0)
-                        }
-                        
-                        class SmartTocNote:
-                            def __init__(self, data):
-                                for key, value in data.items():
-                                    setattr(self, key, value)
-                        
-                        toc_note = SmartTocNote(note_dict)
-                        metadata_result = format_note_details(toc_note, include_body=False, context="individual_notes", original_body=body)
-                        
-                        # Add smart TOC info
-                        toc_info = f"""DISPLAY_MODE: smart_toc_auto
-
-{toc}
-
-NEXT_STEPS:
-- To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="Introduction")
-- To force full content: get_note("{note_id}", force_full=True)"""
-                        
-                        return metadata_result + "\n\n" + toc_info
-                    else:
-                        # No headings found, but still too long - show truncated content with warning
-                        truncated_content = body[:toc_threshold] + "..." if len(body) > toc_threshold else body
-                        
-                        # Create a note with truncated content
-                        note_dict = {
-                            'id': getattr(note, 'id', ''),
-                            'title': getattr(note, 'title', ''),
-                            'body': truncated_content,
-                            'created_time': getattr(note, 'created_time', None),
-                            'updated_time': getattr(note, 'updated_time', None),
-                            'parent_id': getattr(note, 'parent_id', None),
-                            'is_todo': getattr(note, 'is_todo', 0),
-                            'todo_completed': getattr(note, 'todo_completed', 0)
-                        }
-                        
-                        class TruncatedNote:
-                            def __init__(self, data):
-                                for key, value in data.items():
-                                    setattr(self, key, value)
-                        
-                        truncated_note = TruncatedNote(note_dict)
-                        result = format_note_details(truncated_note, include_body, "individual_notes", original_body=body)
-                        
-                        # Add truncation info
-                        truncation_info = f"CONTENT_TRUNCATED: Note is long ({body_length} chars) but has no headings for navigation\nNEXT_STEPS: To force full content: get_note(\"{note_id}\", force_full=True)\n"
-                        return truncation_info + result
+        smart_toc_result = _handle_smart_toc_behavior(note, note_id, _module_config)
+        if smart_toc_result:
+            return smart_toc_result
     
+    # Default: return full note details
     return format_note_details(note, include_body, "individual_notes")
 
 @create_tool("get_links", "Get links")
