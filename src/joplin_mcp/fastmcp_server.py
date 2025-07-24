@@ -8,10 +8,15 @@
 
 📋 MANAGING NOTES:
 - create_note(title, notebook_name, body) - Create a new note
-- get_note(note_id) - Get a specific note by ID
+- get_note(note_id) - Get a specific note by ID with smart display (sections, line ranges, TOC)
 - get_links(note_id) - Extract all links to other notes from a note
 - update_note(note_id, title, body) - Update an existing note
 - delete_note(note_id) - Delete a note
+
+📖 SEQUENTIAL READING (for long notes):
+- get_note(note_id, start_line=1) - Start reading from line 1 (default: 50 lines)
+- get_note(note_id, start_line=51) - Continue from line 51
+- get_note(note_id, start_line=1, line_count=100) - Get specific number of lines
 
 🏷️ MANAGING TAGS:
 - list_tags() - List all available tags
@@ -1374,6 +1379,64 @@ def _handle_toc_display(note: Any, note_id: str, display_mode: str, original_bod
     toc_info = f"DISPLAY_MODE: {display_mode}\n\n{toc}\n\n{steps}"
     return f"{metadata_result}\n\n{toc_info}"
 
+def _handle_line_extraction(note: Any, start_line: int, line_count: Optional[int], note_id: str, include_body: bool) -> Optional[str]:
+    """Handle line-based extraction for sequential reading."""
+    if not include_body:
+        return None
+    
+    body = getattr(note, 'body', '')
+    if not body:
+        return None
+    
+    lines = body.split('\n')
+    total_lines = len(lines)
+    
+    # Validate start_line (1-based)
+    if start_line < 1 or start_line > total_lines:
+        return f"""LINE_EXTRACTION_ERROR: Invalid start_line
+NOTE_ID: {note_id}
+NOTE_TITLE: {getattr(note, 'title', 'Untitled')}
+START_LINE: {start_line}
+TOTAL_LINES: {total_lines}
+ERROR: start_line must be between 1 and {total_lines}"""
+    
+    # Determine end line
+    if line_count is not None:
+        if line_count < 1:
+            return f"""LINE_EXTRACTION_ERROR: Invalid line_count
+NOTE_ID: {note_id}
+LINE_COUNT: {line_count}
+ERROR: line_count must be >= 1"""
+        actual_end_line = min(start_line + line_count - 1, total_lines)
+    else:
+        # Default to 50 lines if line_count not specified
+        actual_end_line = min(start_line + 49, total_lines)
+    
+    # Extract lines (convert to 0-based indexing)
+    start_idx = start_line - 1
+    end_idx = actual_end_line  # end_line is inclusive, so we don't subtract 1
+    extracted_lines = lines[start_idx:end_idx]
+    extracted_content = '\n'.join(extracted_lines)
+    
+    # Create modified note with extracted content
+    modified_note = _create_note_object(note, extracted_content)
+    result = format_note_details(modified_note, include_body, "individual_notes", original_body=body)
+    
+    # Add extraction metadata
+    lines_extracted = len(extracted_lines)
+    next_line = actual_end_line + 1 if actual_end_line < total_lines else None
+    
+    extraction_info = f"""EXTRACTED_LINES: {start_line}-{actual_end_line} ({lines_extracted} lines)
+TOTAL_LINES: {total_lines}
+EXTRACTION_TYPE: sequential_reading"""
+    
+    if next_line:
+        extraction_info += f"\nNEXT_CHUNK: get_note(\"{note_id}\", start_line={next_line}) for continuation"
+    else:
+        extraction_info += f"\nSTATUS: End of note reached"
+    
+    return f"{extraction_info}\n\n{result}"
+
 def _handle_smart_toc_behavior(note: Any, note_id: str, config: Any) -> Optional[str]:
     """Handle smart TOC behavior for long notes."""
     if not config.is_smart_toc_enabled():
@@ -1399,24 +1462,29 @@ def _handle_smart_toc_behavior(note: Any, note_id: str, config: Any) -> Optional
     truncated_note = _create_note_object(note, truncated_content)
     result = format_note_details(truncated_note, True, "individual_notes", original_body=body)
     
-    truncation_info = f"CONTENT_TRUNCATED: Note is long ({body_length} chars) but has no headings for navigation\nNEXT_STEPS: To force full content: get_note(\"{note_id}\", force_full=True)\n"
+    truncation_info = f"CONTENT_TRUNCATED: Note is long ({body_length} chars) but has no headings for navigation\nNEXT_STEPS: To force full content: get_note(\"{note_id}\", force_full=True) or start sequential reading: get_note(\"{note_id}\", start_line=1)\n"
     return f"{truncation_info}{result}"
 
 @create_tool("get_note", "Get note")
 async def get_note(
     note_id: Annotated[str, Field(description="Note ID to retrieve")], 
     section: Annotated[Optional[str], Field(description="Extract specific section (heading text, slug, or number)")] = None,
+    start_line: Annotated[Optional[int], Field(description="Start line for sequential reading (1-based)")] = None,
+    line_count: Annotated[Optional[int], Field(description="Number of lines to extract from start_line (default: 50)")] = None,
     toc_only: Annotated[Union[bool, str], Field(description="Show only table of contents (default: False)")] = False,
     force_full: Annotated[Union[bool, str], Field(description="Force full content even for long notes (default: False)")] = False,
     metadata_only: Annotated[Union[bool, str], Field(description="Show only metadata without content (default: False)")] = False
 ) -> str:
-    """Retrieve a note with smart content display to manage context efficiently.
+    """Retrieve a note with smart content display and sequential reading support.
     
     Smart behavior: Short notes show full content, long notes show TOC only.
+    Sequential reading: Extract specific line ranges for progressive consumption.
     
     Args:
         note_id: Note identifier
-        section: Extract specific section (number, heading text, or slug)
+        section: Extract specific section (heading text, slug, or number)
+        start_line: Start line for sequential reading (1-based, line numbers)
+        line_count: Number of lines to extract (default: 50 if start_line specified)
         toc_only: Show only TOC and metadata  
         force_full: Force full content even for long notes
         metadata_only: Show only metadata without content
@@ -1424,6 +1492,8 @@ async def get_note(
     Examples:
         get_note("id") - Smart display (full if short, TOC if long)
         get_note("id", section="1") - Get first section
+        get_note("id", start_line=1) - Start sequential reading from line 1 (50 lines)
+        get_note("id", start_line=51, line_count=30) - Continue reading from line 51 (30 lines)
         get_note("id", toc_only=True) - TOC only
         get_note("id", force_full=True) - Force full content
     """
@@ -1434,10 +1504,27 @@ async def get_note(
     
     include_body = not metadata_only
     
+    # Validate line extraction parameters
+    if start_line is not None:
+        if start_line < 1:
+            raise ValueError("start_line must be >= 1 (line numbers are 1-based)")
+        if line_count is not None and line_count < 1:
+            raise ValueError("line_count must be >= 1")
+    
+    # If start_line is provided but we're extracting sections, that's an error
+    if start_line is not None and section is not None:
+        raise ValueError("Cannot specify both start_line and section - use one extraction method")
+    
     client = get_joplin_client()
     note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
     
-    # Handle section extraction first
+    # Handle line extraction first (for sequential reading)
+    if start_line is not None:
+        line_result = _handle_line_extraction(note, start_line, line_count, note_id, include_body)
+        if line_result:
+            return line_result
+    
+    # Handle section extraction second
     section_result = _handle_section_extraction(note, section, note_id, include_body)
     if section_result:
         return section_result
