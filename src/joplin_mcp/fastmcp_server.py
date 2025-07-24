@@ -380,29 +380,12 @@ def create_content_preview(body: str, max_length: int) -> str:
     
     lines = body.split('\n')
     preview_parts = []
-    front_matter_end = -1
-    content_start_index = 0
     
-    # Check if content starts with front matter
-    if body.startswith('---'):
-        # Find the closing front matter delimiter
-        for i, line in enumerate(lines[1:], 1):
-            if line.strip() == '---':
-                front_matter_end = i
-                break
-        
-        if front_matter_end != -1:
-            # Include the front matter up to 20 lines maximum
-            front_matter_lines = lines[:front_matter_end + 1]
-            if len(front_matter_lines) > 20:
-                # Truncate front matter if it exceeds 20 lines
-                # Keep opening --- + 18 lines of content + closing --- = 20 lines total
-                front_matter_lines = lines[:19]  # Opening --- + 18 lines of content
-                front_matter_lines.append('---')  # Add back the closing delimiter
-            
-            front_matter = '\n'.join(front_matter_lines)
-            preview_parts.append(front_matter)
-            content_start_index = front_matter_end + 1
+    # Extract frontmatter using utility function
+    front_matter, content_start_index = extract_frontmatter(body, max_lines=20)
+    
+    if front_matter:
+        preview_parts.append(front_matter)
     
     # Get remaining content after front matter
     remaining_lines = lines[content_start_index:]
@@ -462,6 +445,297 @@ def create_toc_only(body: str) -> str:
     toc_content = '\n'.join(toc_entries)
     
     return f"{toc_header}\n{toc_content}"
+
+def extract_frontmatter(body: str, max_lines: int = 20) -> tuple[str, int]:
+    """Extract frontmatter from note content if present.
+    
+    Args:
+        body: The note content to extract frontmatter from
+        max_lines: Maximum number of frontmatter lines to include
+        
+    Returns:
+        tuple: (frontmatter_content, content_start_index)
+    """
+    if not body or not body.startswith('---'):
+        return "", 0
+    
+    lines = body.split('\n')
+    
+    # Find the closing front matter delimiter
+    for i, line in enumerate(lines[1:], 1):
+        if line.strip() == '---':
+            front_matter_end = i
+            break
+    else:
+        return "", 0  # No closing delimiter found
+    
+    # Get frontmatter lines with limit
+    front_matter_lines = lines[:front_matter_end + 1]
+    
+    if len(front_matter_lines) > max_lines:
+        # Truncate front matter if it exceeds max_lines
+        # Keep opening --- + (max_lines-2) lines of content + closing ---
+        front_matter_lines = lines[:max_lines - 1]  # Opening --- + content lines
+        front_matter_lines.append('---')  # Add back the closing delimiter
+    
+    front_matter = '\n'.join(front_matter_lines)
+    content_start_index = front_matter_end + 1
+    
+    return front_matter, content_start_index
+
+def extract_text_terms_from_query(query: str) -> List[str]:
+    """Extract text search terms from a Joplin search query, removing operators.
+    
+    Removes Joplin search operators like tag:, notebook:, type:, iscompleted:, etc.
+    and extracts the actual text terms for content matching.
+    
+    Args:
+        query: The search query that may contain operators and text terms
+        
+    Returns:
+        List of text terms for content matching
+    """
+    import re
+    
+    if not query or query.strip() == "*":
+        return []
+    
+    # Known Joplin search operators to remove
+    operator_patterns = [
+        r'tag:\S+',          # tag:work
+        r'notebook:\S+',     # notebook:project
+        r'type:\S+',         # type:todo
+        r'iscompleted:\d+',  # iscompleted:1
+        r'created:\S+',      # created:20231201
+        r'updated:\S+',      # updated:20231201
+        r'latitude:\S+',     # latitude:123.456
+        r'longitude:\S+',    # longitude:123.456
+        r'altitude:\S+',     # altitude:123.456
+        r'resource:\S+',     # resource:image
+        r'sourceurl:\S+',    # sourceurl:http
+        r'any:\d+',          # any:1
+    ]
+    
+    # Remove all operators
+    cleaned_query = query
+    for pattern in operator_patterns:
+        cleaned_query = re.sub(pattern, '', cleaned_query, flags=re.IGNORECASE)
+    
+    # Handle quoted phrases - extract them as single terms
+    phrase_pattern = r'"([^"]+)"'
+    phrases = re.findall(phrase_pattern, cleaned_query)
+    
+    # Remove quoted phrases from the query to avoid double processing
+    for phrase in phrases:
+        cleaned_query = cleaned_query.replace(f'"{phrase}"', '')
+    
+    # Split remaining text into individual words
+    individual_words = cleaned_query.split()
+    
+    # Combine phrases and individual words, filtering out empty strings
+    all_terms = phrases + [word.strip() for word in individual_words if word.strip()]
+    
+    return all_terms
+
+def create_matching_lines_preview(body: str, search_terms: List[str], max_length: int = 300, max_lines: int = 10, context_lines: int = 0) -> tuple[str, List[int], int, int]:
+    """Create a preview showing only lines that match search terms with priority system.
+    
+    Priority system:
+    1. Lines matching ALL search terms (AND logic) - highest priority
+    2. Lines matching any search terms (OR logic) - lower priority
+    3. Builds incrementally while respecting max_length limit
+    
+    Args:
+        body: The note content to search in
+        search_terms: List of terms to search for
+        max_length: Maximum length for the preview content
+        max_lines: Maximum number of matching lines to include
+        context_lines: Number of context lines to show around matches
+        
+    Returns:
+        tuple: (preview_content, list_of_displayed_line_numbers, and_matches_count, or_matches_count)
+    """
+    if not body or not search_terms:
+        return "", [], 0, 0
+    
+    import re
+    
+    lines = body.split('\n')
+    matching_lines = []
+    line_numbers = []
+    
+    # Skip front matter if present
+    _, content_start_index = extract_frontmatter(body)
+    
+    content_lines = lines[content_start_index:]
+    
+    # Priority 1: Find lines matching ALL terms (AND logic)
+    and_matches = []
+    and_line_numbers = []
+    
+    for i, line in enumerate(content_lines):
+        line_lower = line.lower()
+        if all(term.lower() in line_lower for term in search_terms):
+            and_matches.append((i + content_start_index, line))
+            and_line_numbers.append(i + content_start_index + 1)  # 1-based line numbers
+    
+    # Priority 2: Find lines matching ANY terms (OR logic), excluding AND matches
+    or_matches = []
+    or_line_numbers = []
+    
+    and_indices = set(match[0] for match in and_matches)
+    
+    for i, line in enumerate(content_lines):
+        line_index = i + content_start_index
+        if line_index in and_indices:
+            continue  # Skip lines already matched by AND logic
+            
+        line_lower = line.lower()
+        if any(term.lower() in line_lower for term in search_terms):
+            or_matches.append((line_index, line))
+            or_line_numbers.append(line_index + 1)  # 1-based line numbers
+    
+    # Calculate separate counts for AND and OR matches
+    and_matches_count = len(and_matches)
+    or_matches_count = len(or_matches)
+    
+    # Build preview incrementally, checking length as we go
+    # Priority: AND matches first, then OR matches
+    all_potential_matches = and_matches + or_matches
+    all_potential_line_numbers = and_line_numbers + or_line_numbers
+    
+    if not all_potential_matches:
+        return "", [], 0, 0  # No matches found
+    
+    preview_parts = []
+    included_line_numbers = []
+    used_indices = set()
+    current_length = 0
+    
+    for i, (line_index, matching_line) in enumerate(all_potential_matches):
+        if len(included_line_numbers) >= max_lines:
+            break  # Hit max lines limit
+            
+        # Calculate what this match would add to the preview
+        context_block = []
+        block_indices = []
+        
+        # Calculate context range
+        start_context = max(content_start_index, line_index - context_lines)
+        end_context = min(len(lines), line_index + context_lines + 1)
+        
+        # Build context block for this match
+        for ctx_i in range(start_context, end_context):
+            if ctx_i in used_indices:
+                continue  # Skip if already included
+            block_indices.append(ctx_i)
+            
+            line_num = ctx_i + 1  # 1-based
+            line_content = lines[ctx_i]
+            
+            # Mark the actual matching line
+            if ctx_i == line_index:
+                context_block.append(f"[L{line_num}] {line_content}")
+            else:
+                context_block.append(f" L{line_num}  {line_content}")
+        
+        # Calculate length this block would add (including separator)
+        if context_block:
+            block_content = '\n'.join(context_block)
+            separator = "\n" if preview_parts else ""  # No separator for first block
+            block_length = len(separator + block_content)
+            
+            # Check if adding this block would exceed length limit
+            if current_length + block_length > max_length and preview_parts:
+                break  # Would exceed limit, stop here
+            
+            # Add this block
+            if preview_parts:
+                preview_parts.append("")  # Separator between blocks
+                current_length += 1  # For the separator newline
+            
+            preview_parts.extend(context_block)
+            current_length += len(block_content)
+            
+            # Mark indices as used
+            used_indices.update(block_indices)
+            included_line_numbers.append(all_potential_line_numbers[i])
+    
+    if not preview_parts:
+        return "", [], and_matches_count, or_matches_count  # Nothing fit within limits, but return counts
+    
+    preview_content = '\n'.join(preview_parts)
+    return preview_content, included_line_numbers, and_matches_count, or_matches_count
+
+def create_content_preview_with_search(body: str, max_length: int, search_query: str = "") -> str:
+    """Create a content preview that shows matching lines for search queries, with fallback.
+    
+    Enhancement to create_content_preview that prioritizes showing lines matching
+    the search query instead of just the first lines of content.
+    
+    Args:
+        body: The note content to create a preview for
+        max_length: Maximum length for the preview (excluding front matter)
+        search_query: The search query to extract terms from
+    
+    Returns:
+        str: The content preview with matching lines or fallback to regular preview
+    """
+    if not body:
+        return ""
+    
+    # Extract search terms from query
+    search_terms = extract_text_terms_from_query(search_query)
+    
+    # Try to create matching lines preview
+    if search_terms:
+        # Extract frontmatter first to calculate available space accurately
+        front_matter, _ = extract_frontmatter(body, max_lines=10)
+        available_length = max(50, max_length - len(front_matter))  # Ensure at least 50 chars for matching lines
+        
+        matching_preview, line_numbers, and_matches, or_matches = create_matching_lines_preview(
+            body, search_terms, max_length=available_length, max_lines=8, context_lines=0
+        )
+        
+        if matching_preview:
+            # Format the result with metadata
+            preview_parts = []
+            
+            if front_matter:
+                preview_parts.append(front_matter)
+            
+            # Add matching lines info with clear total vs displayed counts and match quality breakdown
+            displayed_matches = len(line_numbers)
+            total_matches = and_matches + or_matches
+            
+            # Build match quality description
+            if and_matches > 0 and or_matches > 0:
+                quality_info = f"({and_matches} match all terms, {or_matches} match any terms)"
+            elif and_matches > 0:
+                quality_info = f"(all match all search terms)"
+            else:
+                quality_info = f"(all match some search terms)"
+            
+            # Build main message with truncation info
+            if displayed_matches < total_matches:
+                match_info = f"MATCHING_LINES: {total_matches} total lines match search terms {quality_info} - showing first {displayed_matches}"
+            else:
+                match_info = f"MATCHING_LINES: {total_matches} lines match search terms {quality_info}"
+            
+            if search_terms:
+                terms_str = ", ".join(f'"{term}"' for term in search_terms[:3])
+                if len(search_terms) > 3:
+                    terms_str += f" (+{len(search_terms)-3} more)"
+                match_info += f" [{terms_str}]"
+            
+            preview_parts.append(match_info)
+            preview_parts.append("")
+            preview_parts.append(matching_preview)
+            
+            return '\n'.join(preview_parts)
+    
+    # Fallback to regular preview if no search terms found
+    return create_content_preview(body, max_length)
 
 def validate_boolean_param(value: Union[bool, str, None], param_name: str) -> Optional[bool]:
     """Validate and convert boolean parameter that might come as string."""
@@ -844,7 +1118,7 @@ def format_note_details(note: Any, include_body: bool = True, context: str = "in
     return "\n".join(result_parts)
 
 
-def format_search_results_with_pagination(query: str, results: List[Any], total_count: int, limit: int, offset: int, context: str = "search_results") -> str:
+def format_search_results_with_pagination(query: str, results: List[Any], total_count: int, limit: int, offset: int, context: str = "search_results", original_query: Optional[str] = None) -> str:
     """Format search results with pagination information for display optimized for LLM comprehension."""
     count = len(results)
     
@@ -932,8 +1206,10 @@ def format_search_results_with_pagination(query: str, results: List[Any], total_
                 if should_show_full_content:
                     result_parts.append(f"  content: {body}")
                 else:
-                    # Show preview only 
-                    preview = create_content_preview(body, max_preview_length)
+                    # Show preview only with search-aware matching lines
+                    # Use original_query for term extraction if provided, otherwise use display query
+                    search_query_for_terms = original_query if original_query is not None else query
+                    preview = create_content_preview_with_search(body, max_preview_length, search_query_for_terms)
                     result_parts.append(f"  content_preview: {preview}")
             else:
                 result_parts.append(f"  content: (empty)")
@@ -1612,7 +1888,7 @@ async def find_notes(
         search_description = f'text search: {query}'
     
     return format_search_results_with_pagination(
-        search_description, paginated_notes, total_count, limit, offset, "search_results"
+        search_description, paginated_notes, total_count, limit, offset, "search_results", original_query=query
     )
 
 @create_tool("get_all_notes", "Get all notes")
@@ -1696,7 +1972,7 @@ async def find_notes_with_tag(
         return format_no_results_with_pagination("note", criteria_str, offset, limit)
     
     return format_search_results_with_pagination(
-        f'tag search: {search_query}', paginated_notes, total_count, limit, offset, "search_results"
+        f'tag search: {search_query}', paginated_notes, total_count, limit, offset, "search_results", original_query=tag_name
     )
 
 @create_tool("find_notes_in_notebook", "Find notes in notebook")  
@@ -1747,7 +2023,7 @@ async def find_notes_in_notebook(
         return format_no_results_with_pagination("note", criteria_str, offset, limit)
     
     return format_search_results_with_pagination(
-        f'notebook search: {search_query}', paginated_notes, total_count, limit, offset, "search_results"
+        f'notebook search: {search_query}', paginated_notes, total_count, limit, offset, "search_results", original_query=notebook_name
     )
 
 
