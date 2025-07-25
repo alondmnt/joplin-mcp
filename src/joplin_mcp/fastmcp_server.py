@@ -444,13 +444,13 @@ def create_content_preview(body: str, max_length: int) -> str:
     return '\n\n'.join(preview_parts)
 
 def create_toc_only(body: str) -> str:
-    """Create a table of contents only from note content.
+    """Create a table of contents with line numbers from note content.
     
     Args:
         body: The note content to extract TOC from
         
     Returns:
-        str: Table of contents with heading structure, or empty string if no headings
+        str: Table of contents with heading structure and line numbers, or empty string if no headings
     """
     if not body:
         return ""
@@ -460,15 +460,16 @@ def create_toc_only(body: str) -> str:
     if not headings:
         return ""
     
-    # Create TOC entries
+    # Create TOC entries with line numbers
     toc_entries = []
     for i, heading in enumerate(headings, 1):
         level = heading['level']
         title = heading['title']
+        line_num = heading['line_idx']  # 1-based line number
         
         # Create indentation based on heading level (level 1 = no indent, level 2 = 2 spaces, etc.)
         indent = '  ' * (level - 1)
-        toc_entries.append(f"{indent}{i}. {title}")
+        toc_entries.append(f"{indent}{i}. {title} (line {line_num})")
     
     toc_header = "TABLE_OF_CONTENTS:"
     toc_content = '\n'.join(toc_entries)
@@ -1382,10 +1383,10 @@ def _handle_section_extraction(note: Any, section: str, note_id: str, include_bo
         result = format_note_details(modified_note, include_body, "individual_notes")
         return f"EXTRACTED_SECTION: {section_title}\nSECTION_QUERY: {section}\n{result}"
     
-    # Section not found - show available sections
+    # Section not found - show available sections with line numbers
     headings = parse_markdown_headings(body)
     section_list = [
-        f"{'  ' * (heading['level'] - 1)}{i}. {heading['title']}"
+        f"{'  ' * (heading['level'] - 1)}{i}. {heading['title']} (line {heading['line_idx']})"
         for i, heading in enumerate(headings, 1)
     ]
     available_sections = "\n".join(section_list) if section_list else "No sections found"
@@ -1411,10 +1412,12 @@ def _handle_toc_display(note: Any, note_id: str, display_mode: str, original_bod
     if display_mode == "explicit":
         steps = f"""NEXT_STEPS: 
 - To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="Introduction")
+- To jump to line number: get_note("{note_id}", start_line=45) (using line numbers from TOC above)
 - To get full content: get_note("{note_id}", force_full=True)"""
     else:  # smart_toc_auto
         steps = f"""NEXT_STEPS:
 - To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="Introduction")
+- To jump to line number: get_note("{note_id}", start_line=45) (using line numbers from TOC above)
 - To force full content: get_note("{note_id}", force_full=True)"""
     
     toc_info = f"DISPLAY_MODE: {display_mode}\n\n{toc}\n\n{steps}"
