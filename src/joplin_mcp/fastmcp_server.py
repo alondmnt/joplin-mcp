@@ -139,14 +139,38 @@ def validate_required_param(value: str, param_name: str) -> str:
         raise ValueError(f"{param_name} parameter is required and cannot be empty")
     return value.strip()
 
-def validate_limit(limit: int) -> int:
-    """Validate limit parameter."""
+def validate_limit(limit: Union[int, str]) -> int:
+    """Validate limit parameter with string conversion support."""
+    # Convert string to int if needed
+    if isinstance(limit, str):
+        try:
+            limit = int(limit.strip())
+        except ValueError:
+            raise ValueError("Limit must be an integer or string representation of an integer")
+    elif not isinstance(limit, int):
+        try:
+            limit = int(limit)
+        except (ValueError, TypeError):
+            raise ValueError("Limit must be an integer or string representation of an integer")
+    
     if not (1 <= limit <= 100):
         raise ValueError("Limit must be between 1 and 100")
     return limit
 
-def validate_offset(offset: int) -> int:
-    """Validate offset parameter."""
+def validate_offset(offset: Union[int, str]) -> int:
+    """Validate offset parameter with string conversion support."""
+    # Convert string to int if needed
+    if isinstance(offset, str):
+        try:
+            offset = int(offset.strip())
+        except ValueError:
+            raise ValueError("Offset must be an integer or string representation of an integer")
+    elif not isinstance(offset, int):
+        try:
+            offset = int(offset)
+        except (ValueError, TypeError):
+            raise ValueError("Offset must be an integer or string representation of an integer")
+    
     if offset < 0:
         raise ValueError("Offset must be 0 or greater")
     return offset
@@ -738,6 +762,23 @@ def validate_boolean_param(value: Union[bool, str, None], param_name: str) -> Op
     elif value is True:
         return True
     raise ValueError(f"{param_name} must be a boolean value or string representation")
+
+def validate_int_param(value: Union[int, str, None], param_name: str) -> Optional[int]:
+    """Validate and convert integer parameter that might come as string."""
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            raise ValueError(f"{param_name} must be an integer or string representation of an integer")
+    # Handle other numeric types that might be passed
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        raise ValueError(f"{param_name} must be an integer or string representation of an integer")
 
 def format_timestamp(timestamp: Optional[Union[int, datetime.datetime]], format_str: str = "%Y-%m-%d %H:%M:%S") -> Optional[str]:
     """Format a timestamp safely."""
@@ -1469,8 +1510,8 @@ def _handle_smart_toc_behavior(note: Any, note_id: str, config: Any) -> Optional
 async def get_note(
     note_id: Annotated[str, Field(description="Note ID to retrieve")], 
     section: Annotated[Optional[str], Field(description="Extract specific section (heading text, slug, or number)")] = None,
-    start_line: Annotated[Optional[int], Field(description="Start line for sequential reading (1-based)")] = None,
-    line_count: Annotated[Optional[int], Field(description="Number of lines to extract from start_line (default: 50)")] = None,
+    start_line: Annotated[Union[int, str, None], Field(description="Start line for sequential reading (1-based)")] = None,
+    line_count: Annotated[Union[int, str, None], Field(description="Number of lines to extract from start_line (default: 50)")] = None,
     toc_only: Annotated[Union[bool, str], Field(description="Show only table of contents (default: False)")] = False,
     force_full: Annotated[Union[bool, str], Field(description="Force full content even for long notes (default: False)")] = False,
     metadata_only: Annotated[Union[bool, str], Field(description="Show only metadata without content (default: False)")] = False
@@ -1498,6 +1539,8 @@ async def get_note(
         get_note("id", force_full=True) - Force full content
     """
     note_id = validate_required_param(note_id, "note_id")
+    start_line = validate_int_param(start_line, "start_line")
+    line_count = validate_int_param(line_count, "line_count")
     toc_only = validate_boolean_param(toc_only, "toc_only")
     force_full = validate_boolean_param(force_full, "force_full")
     metadata_only = validate_boolean_param(metadata_only, "metadata_only")
@@ -1826,8 +1869,8 @@ async def delete_note(
 @create_tool("find_notes", "Find notes")
 async def find_notes(
     query: Annotated[str, Field(description="Search text or '*' for all notes")],
-    limit: Annotated[int, Field(description="Max results (1-100, default: 20)")] = 20,
-    offset: Annotated[int, Field(description="Skip count for pagination (default: 0)")] = 0,
+    limit: Annotated[Union[int, str], Field(description="Max results (1-100, default: 20)")] = 20,
+    offset: Annotated[Union[int, str], Field(description="Skip count for pagination (default: 0)")] = 0,
     task: Annotated[Union[bool, str, None], Field(description="Filter by task type (default: None)")] = None,
     completed: Annotated[Union[bool, str, None], Field(description="Filter by completion status (default: None)")] = None
 ) -> str:
@@ -1911,7 +1954,7 @@ async def find_notes(
 
 @create_tool("get_all_notes", "Get all notes")
 async def get_all_notes(
-    limit: Annotated[int, Field(description="Max results (1-100, default: 20)")] = 20
+    limit: Annotated[Union[int, str], Field(description="Max results (1-100, default: 20)")] = 20
 ) -> str:
     """Get all notes in your Joplin instance.
     
@@ -1945,8 +1988,8 @@ async def get_all_notes(
 @create_tool("find_notes_with_tag", "Find notes with tag")
 async def find_notes_with_tag(
     tag_name: Annotated[str, Field(description="Tag name to search for")],
-    limit: Annotated[int, Field(description="Max results (1-100, default: 20)")] = 20,
-    offset: Annotated[int, Field(description="Skip count for pagination (default: 0)")] = 0,
+    limit: Annotated[Union[int, str], Field(description="Max results (1-100, default: 20)")] = 20,
+    offset: Annotated[Union[int, str], Field(description="Skip count for pagination (default: 0)")] = 0,
     task: Annotated[Union[bool, str, None], Field(description="Filter by task type (default: None)")] = None,
     completed: Annotated[Union[bool, str, None], Field(description="Filter by completion status (default: None)")] = None
 ) -> str:
@@ -1996,8 +2039,8 @@ async def find_notes_with_tag(
 @create_tool("find_notes_in_notebook", "Find notes in notebook")  
 async def find_notes_in_notebook(
     notebook_name: Annotated[str, Field(description="Notebook name to search in")],
-    limit: Annotated[int, Field(description="Max results (1-100, default: 20)")] = 20,
-    offset: Annotated[int, Field(description="Skip count for pagination (default: 0)")] = 0,
+    limit: Annotated[Union[int, str], Field(description="Max results (1-100, default: 20)")] = 20,
+    offset: Annotated[Union[int, str], Field(description="Skip count for pagination (default: 0)")] = 0,
     task: Annotated[Union[bool, str, None], Field(description="Filter by task type (default: None)")] = None,
     completed: Annotated[Union[bool, str, None], Field(description="Filter by completion status (default: None)")] = None
 ) -> str:
