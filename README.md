@@ -12,6 +12,7 @@ A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://jop
 - [Project Structure](#project-structure)
 - [Testing](#testing)
 - [Complete Tool Reference](#complete-tool-reference)
+- [Changelog](CHANGELOG.md)
 
 ## What You Can Do
 
