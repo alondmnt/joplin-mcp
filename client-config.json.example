@@ -7,15 +7,12 @@
         "JOPLIN_TOKEN": "your_joplin_api_token_here"
       }
     },
-    "joplin-dev": {
-      "_comment": "For development install:",
-      "command": "python",
-      "args": ["/path/to/your/joplin-mcp/run_fastmcp_server.py"],
-      "cwd": "/path/to/your/joplin-mcp",
+    "joplin-sse": {
+      "_comment": "For SSE transport (recommended for gemini-cli and OpenAI clients - better session compatibility) (requires running server separately):",
+      "transport": "sse",
+      "url": "http://localhost:8000/sse",
       "env": {
-        "PYTHONPATH": "/path/to/your/joplin-mcp",
-        "JOPLIN_TOKEN": "your_joplin_api_token_here",
-        "JOPLIN_VERIFY_SSL": "false"
+        "JOPLIN_TOKEN": "your_joplin_api_token_here"
       }
     },
     "joplin-http": {
@@ -24,15 +21,6 @@
       "url": "http://localhost:8000/mcp",
       "env": {
         "JOPLIN_TOKEN": "your_joplin_api_token_here"
-      }
-    },
-    "joplin-http-dev": {
-      "_comment": "For HTTP transport with development server:",
-      "transport": "http",
-      "url": "http://localhost:8000/mcp",
-      "env": {
-        "JOPLIN_TOKEN": "your_joplin_api_token_here",
-        "JOPLIN_VERIFY_SSL": "false"
       }
     },
     "joplin-streamable-http": {
@@ -44,4 +32,4 @@
       }
     }
   }
-} 
+}

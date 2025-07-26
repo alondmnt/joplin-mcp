@@ -1336,6 +1336,18 @@ def create_tool(tool_name: str, operation_name: str):
 
 # === CORE TOOLS ===
 
+# Add health check endpoint for better compatibility
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(request) -> dict:
+    """Health check endpoint for load balancers and monitoring."""
+    from starlette.responses import JSONResponse
+    return JSONResponse({
+        "status": "healthy",
+        "server": "Joplin MCP Server", 
+        "version": MCP_VERSION,
+        "transport": "ready"
+    }, status_code=200)
+
 @create_tool("ping_joplin", "Ping Joplin")
 async def ping_joplin() -> str:
     """Test connection to Joplin server.
@@ -2420,6 +2432,9 @@ def main(config_file: Optional[str] = None, transport: str = "stdio", host: str 
         elif transport.lower() == "streamable-http":
             logger.info(f"Starting FastMCP server with Streamable HTTP transport on {host}:{port}{path}")
             mcp.run(transport="streamable-http", host=host, port=port, path=path, log_level=log_level)
+        elif transport.lower() == "sse":
+            logger.info(f"Starting FastMCP server with SSE transport on {host}:{port}{path}")
+            mcp.run(transport="sse", host=host, port=port, path=path, log_level=log_level)
         else:
             logger.info("Starting FastMCP server with STDIO transport")
             mcp.run(transport="stdio")

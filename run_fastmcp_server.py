@@ -38,7 +38,7 @@ Examples:
     parser.add_argument(
         "--transport", "-t",
         type=str,
-        choices=["stdio", "http", "streamable-http"],
+        choices=["stdio", "http", "streamable-http", "sse"],
         default="stdio",
         help="Transport protocol to use (default: stdio)"
     )
