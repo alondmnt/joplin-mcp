@@ -14,10 +14,10 @@ def main():
     
     # Parse command line arguments for transport options
     parser = argparse.ArgumentParser(description="Joplin MCP Server")
-    parser.add_argument("--transport", "-t", choices=["stdio", "http"], default="stdio", help="Transport protocol")
-    parser.add_argument("--host", default="127.0.0.1", help="Host for HTTP transport")
-    parser.add_argument("--port", "-p", type=int, default=8000, help="Port for HTTP transport")
-    parser.add_argument("--path", default="/mcp", help="Path for HTTP transport")
+    parser.add_argument("--transport", "-t", choices=["stdio", "http", "streamable-http"], default="stdio", help="Transport protocol")
+    parser.add_argument("--host", default="127.0.0.1", help="Host for HTTP/Streamable HTTP transport")
+    parser.add_argument("--port", "-p", type=int, default=8000, help="Port for HTTP/Streamable HTTP transport")
+    parser.add_argument("--path", default="/mcp", help="Path for HTTP/Streamable HTTP transport")
     parser.add_argument("--log-level", choices=["debug", "info", "warning", "error"], default="info", help="Log level")
     args = parser.parse_args()
     

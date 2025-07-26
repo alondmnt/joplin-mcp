@@ -24,6 +24,7 @@ Examples:
   python run_fastmcp_server.py                          # Use default joplin-mcp.json with STDIO transport
   python run_fastmcp_server.py --config my-config.json  # Use custom config file with STDIO transport
   python run_fastmcp_server.py --transport http         # Use HTTP transport on default port 8000
+  python run_fastmcp_server.py --transport streamable-http  # Use Streamable HTTP transport (recommended for web clients)
   python run_fastmcp_server.py --transport http --port 9000 --host 0.0.0.0  # HTTP on custom port/host
         """
     )
@@ -37,7 +38,7 @@ Examples:
     parser.add_argument(
         "--transport", "-t",
         type=str,
-        choices=["stdio", "http"],
+        choices=["stdio", "http", "streamable-http"],
         default="stdio",
         help="Transport protocol to use (default: stdio)"
     )
@@ -46,21 +47,21 @@ Examples:
         "--host",
         type=str,
         default="127.0.0.1",
-        help="Host to bind to for HTTP transport (default: 127.0.0.1)"
+        help="Host to bind to for HTTP/Streamable HTTP transport (default: 127.0.0.1)"
     )
     
     parser.add_argument(
         "--port", "-p",
         type=int,
         default=8000,
-        help="Port to bind to for HTTP transport (default: 8000)"
+        help="Port to bind to for HTTP/Streamable HTTP transport (default: 8000)"
     )
     
     parser.add_argument(
         "--path",
         type=str,
         default="/mcp",
-        help="Path for HTTP transport endpoint (default: /mcp)"
+        help="Path for HTTP/Streamable HTTP transport endpoint (default: /mcp)"
     )
     
     parser.add_argument(

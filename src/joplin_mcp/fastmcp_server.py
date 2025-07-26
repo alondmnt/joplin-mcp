@@ -52,8 +52,11 @@ from joplin_mcp import __version__ as MCP_VERSION
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Create FastMCP server instance
-mcp = FastMCP("Joplin MCP Server")
+# Create FastMCP server instance with session configuration
+mcp = FastMCP(
+    name="Joplin MCP Server",
+    version=MCP_VERSION
+)
 
 # Type for generic functions
 T = TypeVar('T')
@@ -2414,6 +2417,9 @@ def main(config_file: Optional[str] = None, transport: str = "stdio", host: str 
         if transport.lower() == "http":
             logger.info(f"Starting FastMCP server with HTTP transport on {host}:{port}{path}")
             mcp.run(transport="http", host=host, port=port, path=path, log_level=log_level)
+        elif transport.lower() == "streamable-http":
+            logger.info(f"Starting FastMCP server with Streamable HTTP transport on {host}:{port}{path}")
+            mcp.run(transport="streamable-http", host=host, port=port, path=path, log_level=log_level)
         else:
             logger.info("Starting FastMCP server with STDIO transport")
             mcp.run(transport="stdio")

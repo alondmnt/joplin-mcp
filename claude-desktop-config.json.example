@@ -34,6 +34,14 @@
         "JOPLIN_TOKEN": "your_joplin_api_token_here",
         "JOPLIN_VERIFY_SSL": "false"
       }
+    },
+    "joplin-streamable-http": {
+      "_comment": "For Streamable HTTP transport (recommended for web clients - supports streaming and server notifications):",
+      "transport": "streamable-http",
+      "url": "http://localhost:8000/mcp",
+      "env": {
+        "JOPLIN_TOKEN": "your_joplin_api_token_here"
+      }
     }
   }
 } 
