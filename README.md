@@ -167,6 +167,16 @@ export JOPLIN_TOKEN="your_token_here"
 ollmcp --server "joplin:joplin-mcp-server" --model qwen3:4b
 ```
 
+#### 4. More Client Configuration Examples
+
+For additional client configurations including different transport options (HTTP, SSE, Streamable HTTP), see [client-config.json.example](client-config.json.example).
+
+This file includes configurations for:
+- **STDIO transport** (default, most compatible)
+- **HTTP transport** (basic HTTP server mode)
+- **SSE transport** (recommended for gemini-cli and OpenAI clients)
+- **Streamable HTTP transport** (advanced web clients)
+
 ### Tool Permission Configuration
 
 Fine-tune which operations the AI can perform by editing your config:
