@@ -10,7 +10,7 @@
     "joplin-sse": {
       "_comment": "For SSE transport (recommended for gemini-cli and OpenAI clients - better session compatibility) (requires running server separately):",
       "transport": "sse",
-      "url": "http://localhost:8000/sse",
+      "url": "http://localhost:8000/mcp",
       "env": {
         "JOPLIN_TOKEN": "your_joplin_api_token_here"
       }
