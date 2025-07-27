@@ -278,10 +278,11 @@ python run_fastmcp_server.py --transport http --port 8000
 
 - **`run_fastmcp_server.py`** - FastMCP server launcher
 - **`src/joplin_mcp/`** - Main package directory
-  - `fastmcp_server.py` - Server implementation with 21 tools (by default)
-  - `models.py` - Data models and schemas
+  - `fastmcp_server.py` - Server implementation with 21 tools and Pydantic validation types
   - `config.py` - Configuration management
-- **`docs/`** - API documentation
+  - `server.py` - Legacy server implementation  
+  - `ui_integration.py` - UI integration utilities
+- **`docs/`** - Documentation (troubleshooting, privacy controls, enhancement proposals)
 - **`tests/`** - Test suite
 
 ## Testing
