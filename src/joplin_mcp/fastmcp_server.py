@@ -40,7 +40,8 @@ from functools import wraps
 from fastmcp import FastMCP, Context
 
 # Pydantic imports for proper Field annotations
-from pydantic import Field
+from pydantic import Field, field_validator, BeforeValidator
+from typing_extensions import Annotated
 
 # Direct joppy import
 from joppy.client_api import ClientApi
@@ -116,6 +117,32 @@ class ItemType(str, Enum):
     notebook = "notebook"
     tag = "tag"
 
+# === PYDANTIC VALIDATION TYPES ===
+
+def flexible_bool_validator(v):
+    """Convert various string representations to boolean for API compatibility."""
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        value_lower = v.lower().strip()
+        if value_lower in ('true', '1', 'yes', 'on'):
+            return True
+        elif value_lower in ('false', '0', 'no', 'off'):
+            return False
+        else:
+            raise ValueError("Must be a boolean value or string representation (true/false, 1/0, yes/no, on/off)")
+    # Handle other truthy/falsy values
+    return bool(v)
+
+# Validation types - mix of Field constraints and custom validators as needed
+LimitType = Annotated[int, Field(ge=1, le=100)]         # Range validation + automatic string-to-int conversion
+OffsetType = Annotated[int, Field(ge=0)]                # Minimum validation + automatic string-to-int conversion
+RequiredStringType = Annotated[str, Field(min_length=1, pattern=r"^.*\S.*$")]  # Rejects empty/whitespace-only strings
+JoplinIdType = Annotated[str, Field(pattern=r"^[a-f0-9]{32}$")]  # Joplin ID: 32 hex characters (UUID without hyphens)
+OptionalBoolType = Annotated[Optional[Union[bool, str]], BeforeValidator(flexible_bool_validator)]  # Robust string-to-bool conversion
+
 # === UTILITY FUNCTIONS ===
 
 def get_joplin_client() -> ClientApi:
@@ -136,47 +163,7 @@ def get_joplin_client() -> ClientApi:
         url = os.getenv("JOPLIN_URL", "http://localhost:41184")
         return ClientApi(token=token, url=url)
 
-def validate_required_param(value: str, param_name: str) -> str:
-    """Validate that a parameter is provided and not empty."""
-    if not value or not value.strip():
-        raise ValueError(f"{param_name} parameter is required and cannot be empty")
-    return value.strip()
 
-def validate_limit(limit: Union[int, str]) -> int:
-    """Validate limit parameter with string conversion support."""
-    # Convert string to int if needed
-    if isinstance(limit, str):
-        try:
-            limit = int(limit.strip())
-        except ValueError:
-            raise ValueError("Limit must be an integer or string representation of an integer")
-    elif not isinstance(limit, int):
-        try:
-            limit = int(limit)
-        except (ValueError, TypeError):
-            raise ValueError("Limit must be an integer or string representation of an integer")
-    
-    if not (1 <= limit <= 100):
-        raise ValueError("Limit must be between 1 and 100")
-    return limit
-
-def validate_offset(offset: Union[int, str]) -> int:
-    """Validate offset parameter with string conversion support."""
-    # Convert string to int if needed
-    if isinstance(offset, str):
-        try:
-            offset = int(offset.strip())
-        except ValueError:
-            raise ValueError("Offset must be an integer or string representation of an integer")
-    elif not isinstance(offset, int):
-        try:
-            offset = int(offset)
-        except (ValueError, TypeError):
-            raise ValueError("Offset must be an integer or string representation of an integer")
-    
-    if offset < 0:
-        raise ValueError("Offset must be 0 or greater")
-    return offset
 
 def apply_pagination(notes: List[Any], limit: int, offset: int) -> tuple[List[Any], int]:
     """Apply pagination to a list of notes and return paginated results with total count."""
@@ -746,43 +733,7 @@ def create_content_preview_with_search(body: str, max_length: int, search_query:
     
     return '\n'.join(preview_parts)
 
-def validate_boolean_param(value: Union[bool, str, None], param_name: str) -> Optional[bool]:
-    """Validate and convert boolean parameter that might come as string."""
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        value_lower = value.lower().strip()
-        if value_lower in ('true', '1', 'yes', 'on'):
-            return True
-        elif value_lower in ('false', '0', 'no', 'off'):
-            return False
-        else:
-            raise ValueError(f"{param_name} must be a boolean value or string representation (true/false, 1/0, yes/no, on/off)")
-    # Handle non-None values that are not boolean or string (e.g., default values)
-    if value is False:
-        return False
-    elif value is True:
-        return True
-    raise ValueError(f"{param_name} must be a boolean value or string representation")
 
-def validate_int_param(value: Union[int, str, None], param_name: str) -> Optional[int]:
-    """Validate and convert integer parameter that might come as string."""
-    if value is None:
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        try:
-            return int(value.strip())
-        except ValueError:
-            raise ValueError(f"{param_name} must be an integer or string representation of an integer")
-    # Handle other numeric types that might be passed
-    try:
-        return int(value)
-    except (ValueError, TypeError):
-        raise ValueError(f"{param_name} must be an integer or string representation of an integer")
 
 def format_timestamp(timestamp: Optional[Union[int, datetime.datetime]], format_str: str = "%Y-%m-%d %H:%M:%S") -> Optional[str]:
     """Format a timestamp safely."""
@@ -885,7 +836,6 @@ def get_notebook_id_by_name(name: str) -> str:
     Raises:
         ValueError: If notebook not found or multiple matches
     """
-    name = validate_required_param(name, "notebook_name")
     client = get_joplin_client()
     
     # Find notebook by name
@@ -919,7 +869,6 @@ def get_tag_id_by_name(name: str) -> str:
     Raises:
         ValueError: If tag not found or multiple matches
     """
-    name = validate_required_param(name, "tag_name")
     client = get_joplin_client()
     
     # Find tag by name
@@ -1526,13 +1475,13 @@ def _handle_smart_toc_behavior(note: Any, note_id: str, config: Any) -> Optional
 
 @create_tool("get_note", "Get note")
 async def get_note(
-    note_id: Annotated[str, Field(description="Note ID to retrieve")], 
+    note_id: Annotated[JoplinIdType, Field(description="Note ID to retrieve")], 
     section: Annotated[Optional[str], Field(description="Extract specific section (heading text, slug, or number)")] = None,
-    start_line: Annotated[Union[int, str, None], Field(description="Start line for sequential reading (1-based)")] = None,
-    line_count: Annotated[Union[int, str, None], Field(description="Number of lines to extract from start_line (default: 50)")] = None,
-    toc_only: Annotated[Union[bool, str], Field(description="Show only table of contents (default: False)")] = False,
-    force_full: Annotated[Union[bool, str], Field(description="Force full content even for long notes (default: False)")] = False,
-    metadata_only: Annotated[Union[bool, str], Field(description="Show only metadata without content (default: False)")] = False
+    start_line: Annotated[Optional[int], Field(description="Start line for sequential reading (1-based)")] = None,
+    line_count: Annotated[Optional[int], Field(description="Number of lines to extract from start_line (default: 50)")] = None,
+    toc_only: Annotated[OptionalBoolType, Field(description="Show only table of contents (default: False)")] = False,
+    force_full: Annotated[OptionalBoolType, Field(description="Force full content even for long notes (default: False)")] = False,
+    metadata_only: Annotated[OptionalBoolType, Field(description="Show only metadata without content (default: False)")] = False
 ) -> str:
     """Retrieve a note with smart content display and sequential reading support.
     
@@ -1556,12 +1505,6 @@ async def get_note(
         get_note("id", toc_only=True) - TOC only
         get_note("id", force_full=True) - Force full content
     """
-    note_id = validate_required_param(note_id, "note_id")
-    start_line = validate_int_param(start_line, "start_line")
-    line_count = validate_int_param(line_count, "line_count")
-    toc_only = validate_boolean_param(toc_only, "toc_only")
-    force_full = validate_boolean_param(force_full, "force_full")
-    metadata_only = validate_boolean_param(metadata_only, "metadata_only")
     
     include_body = not metadata_only
     
@@ -1609,7 +1552,7 @@ async def get_note(
 
 @create_tool("get_links", "Get links")
 async def get_links(
-    note_id: Annotated[str, Field(description="Note ID to extract links from")]
+    note_id: Annotated[JoplinIdType, Field(description="Note ID to extract links from")]
 ) -> str:
     """Extract all links to other notes from a given note and find backlinks from other notes.
     
@@ -1624,7 +1567,6 @@ async def get_links(
     - [link text](:/targetNoteId) - Link to note
     - [link text](:/targetNoteId#section-slug) - Link to specific section in note
     """
-    note_id = validate_required_param(note_id, "note_id")
     client = get_joplin_client()
     
     # Get the note
@@ -1798,11 +1740,11 @@ async def get_links(
 
 @create_tool("create_note", "Create note")
 async def create_note(
-    title: Annotated[str, Field(description="Note title")], 
-    notebook_name: Annotated[str, Field(description="Notebook name")], 
+    title: Annotated[RequiredStringType, Field(description="Note title")], 
+    notebook_name: Annotated[RequiredStringType, Field(description="Notebook name")], 
     body: Annotated[str, Field(description="Note content")] = "",
-    is_todo: Annotated[Union[bool, str], Field(description="Create as todo (default: False)")] = False,
-    todo_completed: Annotated[Union[bool, str], Field(description="Mark todo as completed (default: False)")] = False
+    is_todo: Annotated[OptionalBoolType, Field(description="Create as todo (default: False)")] = False,
+    todo_completed: Annotated[OptionalBoolType, Field(description="Mark todo as completed (default: False)")] = False
 ) -> str:
     """Create a new note in a specified notebook in Joplin.
     
@@ -1816,9 +1758,6 @@ async def create_note(
         - create_note("Shopping List", "Personal Notes", "- Milk\n- Eggs", True, False) - Create uncompleted todo
         - create_note("Meeting Notes", "Work Projects", "# Meeting with Client") - Create regular note
     """
-    title = validate_required_param(title, "title")
-    is_todo = validate_boolean_param(is_todo, "is_todo")
-    todo_completed = validate_boolean_param(todo_completed, "todo_completed")
     
     # Use helper function to get notebook ID
     parent_id = get_notebook_id_by_name(notebook_name)
@@ -1832,11 +1771,11 @@ async def create_note(
 
 @create_tool("update_note", "Update note")
 async def update_note(
-    note_id: Annotated[str, Field(description="Note ID to update")],
+    note_id: Annotated[JoplinIdType, Field(description="Note ID to update")],
     title: Annotated[Optional[str], Field(description="New title (optional)")] = None,
     body: Annotated[Optional[str], Field(description="New content (optional)")] = None,
-    is_todo: Annotated[Union[bool, str, None], Field(description="Convert to/from todo (optional)")] = None,
-    todo_completed: Annotated[Union[bool, str, None], Field(description="Mark todo completed (optional)")] = None
+    is_todo: Annotated[OptionalBoolType, Field(description="Convert to/from todo (optional)")] = None,
+    todo_completed: Annotated[OptionalBoolType, Field(description="Mark todo completed (optional)")] = None
 ) -> str:
     """Update an existing note in Joplin.
     
@@ -1849,9 +1788,6 @@ async def update_note(
         - update_note("note123", title="New Title") - Update only the title
         - update_note("note123", body="New content", is_todo=True) - Update content and convert to todo
     """
-    note_id = validate_required_param(note_id, "note_id")
-    is_todo = validate_boolean_param(is_todo, "is_todo")
-    todo_completed = validate_boolean_param(todo_completed, "todo_completed")
     
     update_data = {}
     if title is not None: update_data["title"] = title
@@ -1868,7 +1804,7 @@ async def update_note(
 
 @create_tool("delete_note", "Delete note")
 async def delete_note(
-    note_id: Annotated[str, Field(description="Note ID to delete")]
+    note_id: Annotated[JoplinIdType, Field(description="Note ID to delete")]
 ) -> str:
     """Delete a note from Joplin.
     
@@ -1879,7 +1815,6 @@ async def delete_note(
     
     Warning: This action is permanent and cannot be undone.
     """
-    note_id = validate_required_param(note_id, "note_id")
     client = get_joplin_client()
     client.delete_note(note_id)
     return format_delete_success(ItemType.note, note_id)
@@ -1887,10 +1822,10 @@ async def delete_note(
 @create_tool("find_notes", "Find notes")
 async def find_notes(
     query: Annotated[str, Field(description="Search text or '*' for all notes")],
-    limit: Annotated[Union[int, str], Field(description="Max results (1-100, default: 20)")] = 20,
-    offset: Annotated[Union[int, str], Field(description="Skip count for pagination (default: 0)")] = 0,
-    task: Annotated[Union[bool, str, None], Field(description="Filter by task type (default: None)")] = None,
-    completed: Annotated[Union[bool, str, None], Field(description="Filter by completion status (default: None)")] = None
+    limit: Annotated[LimitType, Field(description="Max results (1-100, default: 20)")] = 20,
+    offset: Annotated[OffsetType, Field(description="Skip count for pagination (default: 0)")] = 0,
+    task: Annotated[OptionalBoolType, Field(description="Filter by task type (default: None)")] = None,
+    completed: Annotated[OptionalBoolType, Field(description="Filter by completion status (default: None)")] = None
 ) -> str:
     """Find notes by searching their titles and content, with support for listing all notes and pagination.
     
@@ -1912,10 +1847,6 @@ async def find_notes(
         💡 TIP: For tag-specific searches, use find_notes_with_tag("tag_name") instead.
         💡 TIP: For notebook-specific searches, use find_notes_in_notebook("notebook_name") instead.
     """
-    limit = validate_limit(limit)
-    offset = validate_offset(offset)
-    task = validate_boolean_param(task, "task")
-    completed = validate_boolean_param(completed, "completed")
     
     client = get_joplin_client()
     
@@ -1941,7 +1872,6 @@ async def find_notes(
         search_parts.extend(build_search_filters(task, completed))
         
         search_query = " ".join(search_parts)
-        search_query = validate_required_param(search_query, "query")
         
         # Use search_all for full pagination support
         results = client.search_all(query=search_query, fields=COMMON_NOTE_FIELDS)
@@ -1972,7 +1902,7 @@ async def find_notes(
 
 @create_tool("get_all_notes", "Get all notes")
 async def get_all_notes(
-    limit: Annotated[Union[int, str], Field(description="Max results (1-100, default: 20)")] = 20
+    limit: Annotated[LimitType, Field(description="Max results (1-100, default: 20)")] = 20
 ) -> str:
     """Get all notes in your Joplin instance.
     
@@ -1986,7 +1916,6 @@ async def get_all_notes(
         - get_all_notes() - Get the 20 most recent notes
         - get_all_notes(50) - Get the 50 most recent notes
     """
-    limit = validate_limit(limit)
     
     client = get_joplin_client()
     results = client.get_all_notes(fields=COMMON_NOTE_FIELDS)
@@ -2005,11 +1934,11 @@ async def get_all_notes(
 
 @create_tool("find_notes_with_tag", "Find notes with tag")
 async def find_notes_with_tag(
-    tag_name: Annotated[str, Field(description="Tag name to search for")],
-    limit: Annotated[Union[int, str], Field(description="Max results (1-100, default: 20)")] = 20,
-    offset: Annotated[Union[int, str], Field(description="Skip count for pagination (default: 0)")] = 0,
-    task: Annotated[Union[bool, str, None], Field(description="Filter by task type (default: None)")] = None,
-    completed: Annotated[Union[bool, str, None], Field(description="Filter by completion status (default: None)")] = None
+    tag_name: Annotated[RequiredStringType, Field(description="Tag name to search for")],
+    limit: Annotated[LimitType, Field(description="Max results (1-100, default: 20)")] = 20,
+    offset: Annotated[OffsetType, Field(description="Skip count for pagination (default: 0)")] = 0,
+    task: Annotated[OptionalBoolType, Field(description="Filter by task type (default: None)")] = None,
+    completed: Annotated[OptionalBoolType, Field(description="Filter by completion status (default: None)")] = None
 ) -> str:
     """Find all notes that have a specific tag, with pagination support.
     
@@ -2026,14 +1955,9 @@ async def find_notes_with_tag(
         - find_notes_with_tag("work", task=True) - Find only tasks tagged with "work"
         - find_notes_with_tag("important", task=True, completed=False) - Find only uncompleted tasks tagged with "important"
     """
-    tag_name = validate_required_param(tag_name, "tag_name")
-    limit = validate_limit(limit)
-    offset = validate_offset(offset)
-    task = validate_boolean_param(task, "task")
-    completed = validate_boolean_param(completed, "completed")
     
     # Build search query with tag and filters
-    search_parts = [f"tag:{tag_name.strip()}"]
+    search_parts = [f"tag:{tag_name}"]
     search_parts.extend(build_search_filters(task, completed))
     search_query = " ".join(search_parts)
     
@@ -2056,11 +1980,11 @@ async def find_notes_with_tag(
 
 @create_tool("find_notes_in_notebook", "Find notes in notebook")  
 async def find_notes_in_notebook(
-    notebook_name: Annotated[str, Field(description="Notebook name to search in")],
-    limit: Annotated[Union[int, str], Field(description="Max results (1-100, default: 20)")] = 20,
-    offset: Annotated[Union[int, str], Field(description="Skip count for pagination (default: 0)")] = 0,
-    task: Annotated[Union[bool, str, None], Field(description="Filter by task type (default: None)")] = None,
-    completed: Annotated[Union[bool, str, None], Field(description="Filter by completion status (default: None)")] = None
+    notebook_name: Annotated[RequiredStringType, Field(description="Notebook name to search in")],
+    limit: Annotated[LimitType, Field(description="Max results (1-100, default: 20)")] = 20,
+    offset: Annotated[OffsetType, Field(description="Skip count for pagination (default: 0)")] = 0,
+    task: Annotated[OptionalBoolType, Field(description="Filter by task type (default: None)")] = None,
+    completed: Annotated[OptionalBoolType, Field(description="Filter by completion status (default: None)")] = None
 ) -> str:
     """Find all notes in a specific notebook, with pagination support.
     
@@ -2077,14 +2001,9 @@ async def find_notes_in_notebook(
         - find_notes_in_notebook("Personal Notes", task=True) - Find only tasks in "Personal Notes"
         - find_notes_in_notebook("Projects", task=True, completed=False) - Find only uncompleted tasks in "Projects"
     """
-    notebook_name = validate_required_param(notebook_name, "notebook_name")
-    limit = validate_limit(limit)
-    offset = validate_offset(offset)
-    task = validate_boolean_param(task, "task")
-    completed = validate_boolean_param(completed, "completed")
     
     # Build search query with notebook and filters
-    search_parts = [f"notebook:{notebook_name.strip()}"]
+    search_parts = [f"notebook:{notebook_name}"]
     search_parts.extend(build_search_filters(task, completed))
     search_query = " ".join(search_parts)
     
@@ -2127,7 +2046,7 @@ async def list_notebooks() -> str:
 
 @create_tool("create_notebook", "Create notebook")
 async def create_notebook(
-    title: Annotated[str, Field(description="Notebook title")], 
+    title: Annotated[RequiredStringType, Field(description="Notebook title")], 
     parent_id: Annotated[Optional[str], Field(description="Parent notebook ID (optional)")] = None
 ) -> str:
     """Create a new notebook (folder) in Joplin to organize your notes.
@@ -2142,7 +2061,6 @@ async def create_notebook(
         - create_notebook("Work Projects") - Create a top-level notebook
         - create_notebook("2024 Projects", "work_notebook_id") - Create a sub-notebook
     """
-    title = validate_required_param(title, "title")
     
     client = get_joplin_client()
     notebook_kwargs = {"title": title}
@@ -2154,8 +2072,8 @@ async def create_notebook(
 
 @create_tool("update_notebook", "Update notebook")
 async def update_notebook(
-    notebook_id: Annotated[str, Field(description="Notebook ID to update")],
-    title: Annotated[str, Field(description="New notebook title")]
+    notebook_id: Annotated[JoplinIdType, Field(description="Notebook ID to update")],
+    title: Annotated[RequiredStringType, Field(description="New notebook title")]
 ) -> str:
     """Update an existing notebook.
     
@@ -2164,16 +2082,13 @@ async def update_notebook(
     Returns:
         str: Success message confirming the notebook was updated.
     """
-    notebook_id = validate_required_param(notebook_id, "notebook_id")
-    title = validate_required_param(title, "title")
-    
     client = get_joplin_client()
     client.modify_notebook(notebook_id, title=title)
     return format_update_success(ItemType.notebook, notebook_id)
 
 @create_tool("delete_notebook", "Delete notebook")
 async def delete_notebook(
-    notebook_id: Annotated[str, Field(description="Notebook ID to delete")]
+    notebook_id: Annotated[JoplinIdType, Field(description="Notebook ID to delete")]
 ) -> str:
     """Delete a notebook from Joplin.
     
@@ -2184,7 +2099,6 @@ async def delete_notebook(
     
     Warning: This action is permanent and cannot be undone. All notes in the notebook will also be deleted.
     """
-    notebook_id = validate_required_param(notebook_id, "notebook_id")
     client = get_joplin_client()
     client.delete_notebook(notebook_id)
     return format_delete_success(ItemType.notebook, notebook_id)
@@ -2211,10 +2125,9 @@ async def list_tags() -> str:
     return format_tag_list_with_counts(tags, client)
 
 
-
 @create_tool("create_tag", "Create tag")
 async def create_tag(
-    title: Annotated[str, Field(description="Tag title")]
+    title: Annotated[RequiredStringType, Field(description="Tag title")]
 ) -> str:
     """Create a new tag.
     
@@ -2227,15 +2140,15 @@ async def create_tag(
         - create_tag("work") - Create a new tag named "work"
         - create_tag("important") - Create a new tag named "important"
     """
-    title = validate_required_param(title, "title")
     client = get_joplin_client()
     tag = client.add_tag(title=title)
     return format_creation_success(ItemType.tag, title, str(tag))
 
+
 @create_tool("update_tag", "Update tag")
 async def update_tag(
-    tag_id: Annotated[str, Field(description="Tag ID to update")],
-    title: Annotated[str, Field(description="New tag title")]
+    tag_id: Annotated[JoplinIdType, Field(description="Tag ID to update")],
+    title: Annotated[RequiredStringType, Field(description="New tag title")]
 ) -> str:
     """Update an existing tag.
     
@@ -2244,16 +2157,14 @@ async def update_tag(
     Returns:
         str: Success message confirming the tag was updated.
     """
-    tag_id = validate_required_param(tag_id, "tag_id")
-    title = validate_required_param(title, "title")
-    
     client = get_joplin_client()
     client.modify_tag(tag_id, title=title)
     return format_update_success(ItemType.tag, tag_id)
 
+
 @create_tool("delete_tag", "Delete tag")
 async def delete_tag(
-    tag_id: Annotated[str, Field(description="Tag ID to delete")]
+    tag_id: Annotated[JoplinIdType, Field(description="Tag ID to delete")]
 ) -> str:
     """Delete a tag from Joplin.
     
@@ -2265,16 +2176,14 @@ async def delete_tag(
     
     Warning: This action is permanent and cannot be undone. The tag will be removed from all notes.
     """
-    tag_id = validate_required_param(tag_id, "tag_id")
     client = get_joplin_client()
     client.delete_tag(tag_id)
     return format_delete_success(ItemType.tag, tag_id)
 
 
-
 @create_tool("get_tags_by_note", "Get tags by note")
 async def get_tags_by_note(
-    note_id: Annotated[str, Field(description="Note ID to get tags from")]
+    note_id: Annotated[JoplinIdType, Field(description="Note ID to get tags from")]
 ) -> str:
     """Get all tags for a specific note.
     
@@ -2283,7 +2192,6 @@ async def get_tags_by_note(
     Returns:
         str: Formatted list of tags applied to the note with title, ID, and creation date.
     """
-    note_id = validate_required_param(note_id, "note_id")
     
     client = get_joplin_client()
     fields_list = "id,title,created_time,updated_time"
@@ -2295,15 +2203,10 @@ async def get_tags_by_note(
     
     return format_item_list(tags, ItemType.tag)
 
-
-
 # === TAG-NOTE RELATIONSHIP OPERATIONS ===
 
 async def _tag_note_impl(note_id: str, tag_name: str) -> str:
     """Shared implementation for adding a tag to a note using note ID and tag name."""
-    note_id = validate_required_param(note_id, "note_id")
-    tag_name = validate_required_param(tag_name, "tag_name")
-    
     client = get_joplin_client()
     
     # Verify note exists by getting it
@@ -2319,10 +2222,9 @@ async def _tag_note_impl(note_id: str, tag_name: str) -> str:
     client.add_tag_to_note(tag_id, note_id)
     return format_relation_success("tagged note", ItemType.note, f"{note_title} (ID: {note_id})", ItemType.tag, tag_name)
 
+
 async def _untag_note_impl(note_id: str, tag_name: str) -> str:
     """Shared implementation for removing a tag from a note using note ID and tag name."""
-    note_id = validate_required_param(note_id, "note_id")
-    tag_name = validate_required_param(tag_name, "tag_name")
     
     client = get_joplin_client()
     
@@ -2339,11 +2241,12 @@ async def _untag_note_impl(note_id: str, tag_name: str) -> str:
     client.remove_tag_from_note(tag_id, note_id)
     return format_relation_success("removed tag from note", ItemType.note, f"{note_title} (ID: {note_id})", ItemType.tag, tag_name)
 
+
 # Primary tag operations
 @create_tool("tag_note", "Tag note")
 async def tag_note(
-    note_id: Annotated[str, Field(description="Note ID to add tag to")], 
-    tag_name: Annotated[str, Field(description="Tag name to add")]
+    note_id: Annotated[JoplinIdType, Field(description="Note ID to add tag to")], 
+    tag_name: Annotated[RequiredStringType, Field(description="Tag name to add")]
 ) -> str:
     """Add a tag to a note for categorization and organization.
     
@@ -2361,10 +2264,11 @@ async def tag_note(
     """
     return await _tag_note_impl(note_id, tag_name)
 
+
 @create_tool("untag_note", "Untag note")
 async def untag_note(
-    note_id: Annotated[str, Field(description="Note ID to remove tag from")], 
-    tag_name: Annotated[str, Field(description="Tag name to remove")]
+    note_id: Annotated[JoplinIdType, Field(description="Note ID to remove tag from")], 
+    tag_name: Annotated[RequiredStringType, Field(description="Tag name to remove")]
 ) -> str:
     """Remove a tag from a note.
     
