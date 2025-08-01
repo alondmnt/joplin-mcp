@@ -8,6 +8,7 @@ from .txt_importer import TxtImporter
 from .csv_importer import CSVImporter
 from .enex_importer import ENEXImporter
 from .raw_importer import RAWImporter
+from .zip_importer import ZIPImporter
 
 __all__ = [
     "BaseImporter",
@@ -18,4 +19,5 @@ __all__ = [
     "CSVImporter",
     "ENEXImporter",
     "RAWImporter",
+    "ZIPImporter",
 ]

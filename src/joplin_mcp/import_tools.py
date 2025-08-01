@@ -12,7 +12,7 @@ from pydantic import Field
 from .import_engine import JoplinImportEngine, get_joplin_client
 from .config import JoplinMCPConfig
 from .types.import_types import ImportOptions
-from .importers import MarkdownImporter, JEXImporter, HTMLImporter, TxtImporter, CSVImporter, ENEXImporter, RAWImporter
+from .importers import MarkdownImporter, JEXImporter, HTMLImporter, TxtImporter, CSVImporter, ENEXImporter, RAWImporter, ZIPImporter
 from .importers.base import ImportValidationError, ImportProcessingError
 
 logger = logging.getLogger(__name__)
@@ -74,6 +74,7 @@ def get_importer_for_format(file_format: str, options: ImportOptions):
         'csv': CSVImporter,
         'enex': ENEXImporter,
         'raw': RAWImporter,
+        'zip': ZIPImporter,
     }
     
     importer_class = format_map.get(file_format.lower())
@@ -112,6 +113,7 @@ def detect_file_format(file_path: str) -> str:
         'text': 'txt',
         'csv': 'csv',
         'enex': 'enex',
+        'zip': 'zip',
     }
     
     detected_format = extension_map.get(extension)
@@ -149,6 +151,7 @@ def detect_directory_format(directory_path: str) -> str:
         'txt': 'txt', 'text': 'txt',
         'csv': 'csv',
         'enex': 'enex',
+        'zip': 'zip',
     }
     
     # Get supported extensions ordered by count
