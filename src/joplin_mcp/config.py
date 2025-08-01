@@ -229,6 +229,12 @@ class JoplinMCPConfig:
         # Utility operations (1 tool)
         "ping_joplin": True,             # Test connection
         
+        # Import operations (4 tools - disabled by default for security)
+        "import_from_file": False,       # Import single file
+        "import_from_directory": False,  # Import directory structure
+        "import_csv_data": False,        # Import structured CSV data  
+        "import_archive": False,         # Import from archives (JEX, ZIP)
+        
         # get_notes_by_notebook, get_tag, search_tags, get_notes_by_tag)
         # get_all_notes, update_tag and update_notebook are disabled by default but available if needed
     }
@@ -240,6 +246,7 @@ class JoplinMCPConfig:
         "notebooks": ["list_notebooks", "create_notebook", "update_notebook", "delete_notebook"],
         "tags": ["list_tags", "create_tag", "update_tag", "delete_tag", "get_tags_by_note", "tag_note", "untag_note"],
         "utilities": ["ping_joplin"],
+        "import": ["import_from_file", "import_from_directory", "import_csv_data", "import_archive"],
     }
 
     # Content exposure levels for privacy control
@@ -267,6 +274,20 @@ class JoplinMCPConfig:
         "enable_smart_toc": True      # Enable smart TOC behavior in get_note
     }
 
+    # Default import settings
+    DEFAULT_IMPORT_SETTINGS = {
+        "max_file_size_mb": 100,              # Maximum file size in MB
+        "max_batch_size": 100,                # Maximum notes per batch
+        "allowed_formats": ["md", "html", "csv", "txt"],  # Allowed import formats
+        "create_missing_notebooks": True,     # Auto-create notebooks
+        "create_missing_tags": True,          # Auto-create tags
+        "preserve_timestamps": True,          # Preserve original timestamps
+        "handle_duplicates": "skip",          # How to handle duplicates: skip|overwrite|rename
+        "attachment_handling": "link",        # How to handle attachments: link|embed|skip
+        "preserve_structure": True,           # Preserve directory structure as notebooks
+        "default_encoding": "utf-8"          # Default file encoding
+    }
+
     def __init__(
         self,
         host: str = None,
@@ -276,6 +297,7 @@ class JoplinMCPConfig:
         verify_ssl: bool = None,
         tools: Optional[Dict[str, bool]] = None,
         content_exposure: Optional[Dict[str, Union[str, int]]] = None,
+        import_settings: Optional[Dict[str, Any]] = None,
     ):
         """Initialize configuration with default values."""
         # Use centralized defaults if not provided
@@ -294,6 +316,11 @@ class JoplinMCPConfig:
         self.content_exposure = self.DEFAULT_CONTENT_EXPOSURE.copy()
         if content_exposure:
             self.content_exposure.update(content_exposure)
+            
+        # Initialize import settings configuration
+        self.import_settings = self.DEFAULT_IMPORT_SETTINGS.copy()
+        if import_settings:
+            self.import_settings.update(import_settings)
 
     def is_tool_enabled(self, tool_name: str) -> bool:
         """Check if a specific tool is enabled."""
