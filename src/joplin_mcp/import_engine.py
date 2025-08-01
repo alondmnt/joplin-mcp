@@ -136,7 +136,7 @@ class JoplinImportEngine:
                         note.title = await self._generate_unique_title(note.title, notebook_id)
                         
             # Create the note
-            created_note = self.client.add_note(
+            note_id = self.client.add_note(
                 title=note.title,
                 body=note.body,
                 parent_id=notebook_id,
@@ -144,8 +144,8 @@ class JoplinImportEngine:
                 todo_completed=note.todo_completed
             )
             
-            note_id = created_note.get('id')
-            if not note_id:
+            # add_note returns the note ID directly as a string
+            if not note_id or not isinstance(note_id, str):
                 return False, "Failed to get note ID from creation response"
                 
             # Handle tags
@@ -194,15 +194,14 @@ class JoplinImportEngine:
             # Try to find existing notebook
             notebooks = self.client.get_all_notebooks()
             for notebook in notebooks:
-                if notebook.get('title') == notebook_name:
-                    notebook_id = notebook.get('id')
+                if notebook.title == notebook_name:
+                    notebook_id = notebook.id
                     self._notebook_cache[notebook_name] = notebook_id
                     return notebook_id
                     
             # Create new notebook if allowed
             if options.create_missing_notebooks:
-                created_notebook = self.client.add_notebook(title=notebook_name)
-                notebook_id = created_notebook.get('id')
+                notebook_id = self.client.add_notebook(title=notebook_name)
                 if notebook_id:
                     self._notebook_cache[notebook_name] = notebook_id
                     result.add_created_notebook(notebook_name)
@@ -246,8 +245,8 @@ class JoplinImportEngine:
                 tags = self.client.get_all_tags()
                 found = False
                 for tag in tags:
-                    if tag.get('title') == tag_name:
-                        tag_id = tag.get('id')
+                    if tag.title == tag_name:
+                        tag_id = tag.id
                         self._tag_cache[tag_name] = tag_id
                         tag_ids.append(tag_id)
                         found = True
@@ -255,8 +254,7 @@ class JoplinImportEngine:
                         
                 # Create new tag if allowed and not found
                 if not found and options.create_missing_tags:
-                    created_tag = self.client.add_tag(title=tag_name)
-                    tag_id = created_tag.get('id')
+                    tag_id = self.client.add_tag(title=tag_name)
                     if tag_id:
                         self._tag_cache[tag_name] = tag_id
                         tag_ids.append(tag_id)
@@ -302,16 +300,16 @@ class JoplinImportEngine:
             # Cache notebooks
             notebooks = self.client.get_all_notebooks()
             for notebook in notebooks:
-                name = notebook.get('title')
-                notebook_id = notebook.get('id')
+                name = notebook.title
+                notebook_id = notebook.id
                 if name and notebook_id:
                     self._notebook_cache[name] = notebook_id
                     
             # Cache tags
             tags = self.client.get_all_tags()
             for tag in tags:
-                name = tag.get('title')
-                tag_id = tag.get('id')
+                name = tag.title
+                tag_id = tag.id
                 if name and tag_id:
                     self._tag_cache[name] = tag_id
                     
@@ -334,10 +332,10 @@ class JoplinImportEngine:
             results = self.client.search_all(search_query)
             
             for note in results:
-                if note.get('title') == title:
+                if note.title == title:
                     # Check notebook match if specified
-                    if notebook_id is None or note.get('parent_id') == notebook_id:
-                        return note.get('id')
+                    if notebook_id is None or note.parent_id == notebook_id:
+                        return note.id
                         
         except Exception as e:
             logger.warning(f"Failed to search for existing note '{title}': {e}")

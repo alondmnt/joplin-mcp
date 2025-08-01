@@ -30,7 +30,7 @@ classifiers = [
     "Topic :: Text Processing",
     "Topic :: Office/Business",
 ]
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.0.0",
     "joppy>=1.0.0",
