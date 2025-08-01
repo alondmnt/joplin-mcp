@@ -24,7 +24,8 @@
     "update_tag": false,
     "delete_tag": false,
     "tag_note": false,
-    "untag_note": false
+    "untag_note": false,
+    "import_from_file": false
   },
   "content_exposure": {
     "search_results": "preview",
