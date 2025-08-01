@@ -19,11 +19,12 @@ class ZIPImporter(BaseImporter):
 
     def get_supported_extensions(self) -> List[str]:
         """Return list of supported file extensions."""
-        return [".zip"]
+        return ["zip"]
 
     def can_import(self, file_path: Path) -> bool:
         """Check if file can be imported as ZIP."""
-        return file_path.suffix.lower() in self.get_supported_extensions()
+        extension = file_path.suffix.lower().lstrip(".")
+        return extension in self.get_supported_extensions()
 
     def supports_directory(self) -> bool:
         """ZIP format only supports file imports."""

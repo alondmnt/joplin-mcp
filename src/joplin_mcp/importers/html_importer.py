@@ -34,7 +34,7 @@ class HTMLImporter(BaseImporter):
 
     def get_supported_extensions(self) -> List[str]:
         """Return list of supported file extensions."""
-        return [".html", ".htm"]
+        return ["html", "htm"]
 
     async def validate(self, file_path: str) -> None:
         """Validate HTML file can be processed."""

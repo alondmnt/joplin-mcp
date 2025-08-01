@@ -33,30 +33,61 @@ class ENEXImporter(BaseImporter):
 
     def get_supported_extensions(self) -> List[str]:
         """Return list of supported file extensions."""
-        return [".enex"]
+        return ["enex"]
 
     def can_import(self, file_path: Path) -> bool:
         """Check if file can be imported as ENEX."""
-        return file_path.suffix.lower() in self.get_supported_extensions()
+        extension = file_path.suffix.lower().lstrip(".")
+        return extension in self.get_supported_extensions()
 
-    async def validate(self, file_path: str) -> bool:
-        """Validate ENEX file can be processed."""
-        path = Path(file_path)
+    def supports_directory(self) -> bool:
+        """ENEX format supports both files and directories containing ENEX files."""
+        return True
 
-        # Check file exists and is readable
+    async def validate(self, source_path: str) -> bool:
+        """Validate ENEX file or directory can be processed."""
+        path = Path(source_path)
+
+        # Check source exists and is readable
         if not path.exists():
-            raise ImportValidationError(f"ENEX file not found: {file_path}")
+            raise ImportValidationError(f"ENEX source not found: {source_path}")
 
-        if not path.is_file():
-            raise ImportValidationError(f"Path is not a file: {file_path}")
+        if path.is_file():
+            # Validate single ENEX file
+            extension = path.suffix.lower().lstrip(".")
+            if extension not in self.get_supported_extensions():
+                raise ImportValidationError(
+                    f"Unsupported ENEX file extension: {path.suffix}"
+                )
+            # Validate it's a valid XML file
+            await self._validate_enex_file(path)
+            
+        elif path.is_dir():
+            # Validate directory contains ENEX files
+            enex_files = list(path.rglob("*.enex"))
+            if not enex_files:
+                raise ImportValidationError(
+                    f"No ENEX files found in directory: {source_path}"
+                )
+            # Validate at least one ENEX file is valid
+            for enex_file in enex_files[:3]:  # Check first 3 files for performance
+                try:
+                    await self._validate_enex_file(enex_file)
+                    break  # If one is valid, assume others are too
+                except ImportValidationError:
+                    continue
+            else:
+                raise ImportValidationError(
+                    f"No valid ENEX files found in directory: {source_path}"
+                )
+        else:
+            raise ImportValidationError(f"Path is neither file nor directory: {source_path}")
 
-        # Check file extension
-        if path.suffix.lower() not in self.get_supported_extensions():
-            raise ImportValidationError(
-                f"Unsupported ENEX file extension: {path.suffix}"
-            )
+        return True
 
-        if path.stat().st_size == 0:
+    async def _validate_enex_file(self, file_path: Path) -> None:
+        """Validate a single ENEX file's XML structure."""
+        if file_path.stat().st_size == 0:
             raise ImportValidationError(f"File is empty: {file_path}")
 
         # Try to parse as XML and validate ENEX structure
@@ -97,57 +128,76 @@ class ENEXImporter(BaseImporter):
         except Exception as e:
             raise ImportValidationError(f"Error reading ENEX file: {str(e)}") from e
 
-        return True
-
-    async def parse(self, file_path: str) -> List[ImportedNote]:
-        """Parse ENEX file and convert to ImportedNote objects."""
+    async def parse(self, source_path: str) -> List[ImportedNote]:
+        """Parse ENEX file or directory and convert to ImportedNote objects."""
         try:
-            path = Path(file_path)
-
-            # Read ENEX content with proper encoding
-            content = None
-            used_encoding = None
-            for encoding in ["utf-8", "latin-1", "cp1252", "iso-8859-1"]:
-                try:
-                    with open(file_path, encoding=encoding) as f:
-                        content = f.read()
-                    used_encoding = encoding
-                    break
-                except UnicodeDecodeError:
-                    continue
-
-            if content is None:
-                raise ImportProcessingError(
-                    f"Could not read ENEX file with any supported encoding: {file_path}"
-                )
-
-            # Parse XML
-            root = ET.fromstring(content)
-
-            # Extract notes
-            notes = []
-            note_elements = root.findall("note")
-
-            for i, note_elem in enumerate(note_elements):
-                try:
-                    imported_note = self._parse_note_element(
-                        note_elem, path, used_encoding or "utf-8", i + 1
-                    )
-                    if imported_note:
-                        notes.append(imported_note)
-                except Exception as e:
-                    # Log error but continue with other notes
-                    print(f"Warning: Failed to parse note {i + 1}: {str(e)}")
-                    continue
-
-            return notes
-
+            path = Path(source_path)
+            
+            if path.is_file():
+                # Parse single ENEX file
+                return await self._parse_enex_file(path)
+            elif path.is_dir():
+                # Parse all ENEX files in directory
+                all_notes = []
+                enex_files = list(path.rglob("*.enex"))
+                
+                for enex_file in enex_files:
+                    try:
+                        notes = await self._parse_enex_file(enex_file)
+                        all_notes.extend(notes)
+                    except Exception as e:
+                        # Log error but continue with other files
+                        print(f"Warning: Failed to parse {enex_file}: {str(e)}")
+                        continue
+                
+                return all_notes
+            else:
+                raise ImportProcessingError(f"Source is neither file nor directory: {source_path}")
+                
         except Exception as e:
             if isinstance(e, (ImportValidationError, ImportProcessingError)):
                 raise
+            raise ImportProcessingError(f"ENEX import failed: {str(e)}") from e
+
+    async def _parse_enex_file(self, file_path: Path) -> List[ImportedNote]:
+        """Parse a single ENEX file and convert to ImportedNote objects."""
+        # Read ENEX content with proper encoding
+        content = None
+        used_encoding = None
+        for encoding in ["utf-8", "latin-1", "cp1252", "iso-8859-1"]:
+            try:
+                with open(file_path, encoding=encoding) as f:
+                    content = f.read()
+                used_encoding = encoding
+                break
+            except UnicodeDecodeError:
+                continue
+
+        if content is None:
             raise ImportProcessingError(
-                f"Error parsing ENEX file {file_path}: {str(e)}"
-            ) from e
+                f"Could not read ENEX file with any supported encoding: {file_path}"
+            )
+
+        # Parse XML
+        root = ET.fromstring(content)
+
+        # Extract notes
+        notes = []
+        note_elements = root.findall("note")
+
+        for i, note_elem in enumerate(note_elements):
+            try:
+                imported_note = self._parse_note_element(
+                    note_elem, file_path, used_encoding or "utf-8", i + 1
+                )
+                if imported_note:
+                    notes.append(imported_note)
+            except Exception as e:
+                # Log error but continue with other notes
+                print(f"Warning: Failed to parse note {i + 1} from {file_path}: {str(e)}")
+                continue
+
+        return notes
 
     def _parse_note_element(
         self, note_elem: ET.Element, source_path: Path, encoding: str, note_number: int

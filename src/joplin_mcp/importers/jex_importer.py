@@ -27,6 +27,10 @@ class JEXImporter(BaseImporter):
         """Get supported file extensions."""
         return ["jex"]
 
+    def supports_directory(self) -> bool:
+        """JEX format only supports individual files (TAR archives)."""
+        return False
+
     async def validate(self, source: str) -> bool:
         """Validate that the source is a valid JEX file."""
         self.validate_source_exists(source)
@@ -35,7 +39,8 @@ class JEXImporter(BaseImporter):
         path = Path(source)
         if not path.is_file():
             raise ImportValidationError(
-                "JEX importer only supports files, not directories"
+                f"JEX format requires a single TAR archive file, not a directory. "
+                f"Path '{source}' is not a file. Use RAWImporter for directory exports."
             )
 
         if not self.supports_file(source):
