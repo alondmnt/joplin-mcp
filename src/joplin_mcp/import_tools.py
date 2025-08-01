@@ -12,7 +12,7 @@ from pydantic import Field
 from .import_engine import JoplinImportEngine, get_joplin_client
 from .config import JoplinMCPConfig
 from .types.import_types import ImportOptions
-from .importers import MarkdownImporter, JEXImporter, HTMLImporter
+from .importers import MarkdownImporter, JEXImporter, HTMLImporter, TxtImporter
 from .importers.base import ImportValidationError, ImportProcessingError
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,8 @@ def get_importer_for_format(file_format: str, options: ImportOptions):
         'jex': JEXImporter,
         'html': HTMLImporter,
         'htm': HTMLImporter,
+        'txt': TxtImporter,
+        'text': TxtImporter,
     }
     
     importer_class = format_map.get(file_format.lower())
@@ -92,6 +94,8 @@ def detect_file_format(file_path: str) -> str:
         'jex': 'jex',
         'html': 'html',
         'htm': 'html',
+        'txt': 'txt',
+        'text': 'txt',
     }
     
     detected_format = extension_map.get(extension)
