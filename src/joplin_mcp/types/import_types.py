@@ -6,6 +6,16 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 
+class ImportValidationError(Exception):
+    """Raised when import validation fails."""
+    pass
+
+
+class ImportProcessingError(Exception):
+    """Raised when import processing fails."""
+    pass
+
+
 @dataclass
 class ImportedNote:
     """Represents a note to be imported into Joplin.
@@ -123,6 +133,7 @@ class ImportOptions:
     encoding: str = "utf-8"
     file_pattern: Optional[str] = None
     preserve_structure: bool = True
+    preserve_directory_structure: bool = True
     import_options: Dict[str, Any] = field(default_factory=dict)
     
     def __post_init__(self):

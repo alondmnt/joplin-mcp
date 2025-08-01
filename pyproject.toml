@@ -39,6 +39,8 @@ dependencies = [
     "httpx>=0.24.0",
     "typing-extensions>=4.0.0",
     "PyYAML>=6.0.0",
+    "beautifulsoup4>=4.9.0",
+    "markdownify>=0.11.0",
 ]
 
 [project.optional-dependencies]

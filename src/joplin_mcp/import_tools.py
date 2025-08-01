@@ -12,7 +12,7 @@ from pydantic import Field
 from .import_engine import JoplinImportEngine, get_joplin_client
 from .config import JoplinMCPConfig
 from .types.import_types import ImportOptions
-from .importers import MarkdownImporter, JEXImporter
+from .importers import MarkdownImporter, JEXImporter, HTMLImporter
 from .importers.base import ImportValidationError, ImportProcessingError
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,8 @@ def get_importer_for_format(file_format: str, options: ImportOptions):
         'md': MarkdownImporter,
         'markdown': MarkdownImporter,
         'jex': JEXImporter,
+        'html': HTMLImporter,
+        'htm': HTMLImporter,
     }
     
     importer_class = format_map.get(file_format.lower())
@@ -88,6 +90,8 @@ def detect_file_format(file_path: str) -> str:
         'mdown': 'md',
         'mkd': 'md',
         'jex': 'jex',
+        'html': 'html',
+        'htm': 'html',
     }
     
     detected_format = extension_map.get(extension)
@@ -104,7 +108,7 @@ def register_import_tools(mcp: FastMCP):
     @mcp.tool()
     async def import_from_file(
         file_path: Annotated[str, Field(description="Path to the file to import")],
-        format: Annotated[Optional[str], Field(description="File format (md, jex) - auto-detected if not specified")] = None,
+        format: Annotated[Optional[str], Field(description="File format (md, jex, html) - auto-detected if not specified")] = None,
         target_notebook: Annotated[Optional[str], Field(description="Target notebook name (optional)")] = None,
         import_options: Annotated[Optional[Dict[str, Any]], Field(description="Additional import options")] = None
     ) -> str:
@@ -113,6 +117,7 @@ def register_import_tools(mcp: FastMCP):
         Supports importing from various file formats including:
         - Markdown files (.md, .markdown) with optional frontmatter
         - JEX files (Joplin's native export format)
+        - HTML files (.html, .htm) with conversion to Markdown
         
         The importer will preserve metadata, tags, and notebook structure where possible.
         
