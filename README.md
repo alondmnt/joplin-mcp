@@ -43,13 +43,14 @@ This MCP server provides **21 optimized tools** for comprehensive Joplin integra
 
 ### 2. Choose Your AI Client
 
-#### Option A: Claude Desktop (Automated Setup)
+#### Option A: Claude Desktop (Online, Commercial, Automated Setup)
 
 Run the automated installer:
 
 ```bash
 # Install and configure everything automatically
-uvx joplin-mcp-install
+pip install joplin-mcp
+joplin-mcp-install
 ```
 
 This script will:
@@ -64,9 +65,7 @@ After setup, restart Claude Desktop and you're ready to go!
 "List my notebooks" or "Create a note about today's meeting"
 ```
 
-#### Option B: Jan AI
-
-**B1: Manual Setup (Recommended - Simplest)**
+#### Option B: Jan AI (Local AI models)
 
 1. **Install Jan AI** from [https://jan.ai](https://jan.ai)
 
@@ -76,7 +75,7 @@ After setup, restart Claude Desktop and you're ready to go!
    - Click **Add MCP Server**
    - Configure:
      - **Name**: `joplin`
-     - **Command**: `uvx joplin-mcp`
+     - **Command**: `uvx joplin-mcp` *(requires `uv` installed)*
      - **Environment Variables**:
        - `JOPLIN_TOKEN`: `your_joplin_api_token_here`
    - Enable the server
@@ -87,7 +86,8 @@ After setup, restart Claude Desktop and you're ready to go!
 
 ```bash
 # Install and configure Jan AI automatically (if Jan is already installed)
-uvx joplin-mcp-install
+pip install joplin-mcp
+joplin-mcp-install
 ```
 
 This will detect and configure Jan AI automatically, just like Claude Desktop.
@@ -117,7 +117,7 @@ pip install ollmcp
 # Set environment variable
 export JOPLIN_TOKEN="your_joplin_api_token_here"
 
-# Run with manual server configuration
+# Run with manual server configuration (requires uv installed)
 ollmcp --server "joplin:uvx joplin-mcp" --model qwen3:4b
 ```
 
@@ -184,7 +184,7 @@ install.bat
 
 If you prefer manual setup or the script doesn't work:
 
-> **Note**: `uvx` is a tool for running Python applications in isolated environments without permanent installation. If you don't have it, install with `pip install uv` or use the "installed package" options below.
+> **Note**: `uvx` runs Python applications without permanent installation (requires `uv`: `pip install uv`). For setup/configuration, use traditional pip install as uvx's isolation prevents modifying AI client configs.
 
 #### 1. Create Configuration File
 
@@ -204,7 +204,7 @@ Create `joplin-mcp.json` in your project directory:
 
 Add to your `claude_desktop_config.json`:
 
-**Option A: Using uvx (Recommended)**
+**Option A: Using uvx (Zero-install)**
 ```json
 {
   "mcpServers": {
@@ -218,6 +218,7 @@ Add to your `claude_desktop_config.json`:
   }
 }
 ```
+*Requires `uv` installed: `pip install uv`*
 
 **Option B: Using installed package**
 ```json
@@ -235,7 +236,7 @@ Add to your `claude_desktop_config.json`:
 
 #### 3. OllMCP Manual Configuration
 
-**Option A: Using uvx (Recommended)**
+**Option A: Using uvx (Zero-install)**
 ```bash
 # Set environment variable
 export JOPLIN_TOKEN="your_token_here"
@@ -243,6 +244,7 @@ export JOPLIN_TOKEN="your_token_here"
 # Run with manual server configuration
 ollmcp --server "joplin:uvx joplin-mcp" --model qwen3:4b
 ```
+*Requires `uv` installed: `pip install uv`*
 
 **Option B: Using installed package**
 ```bash
