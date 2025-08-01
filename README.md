@@ -16,7 +16,7 @@ A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://jop
 
 ## What You Can Do
 
-This MCP server provides **21 optimized tools** for comprehensive Joplin integration:
+This MCP server provides **22 optimized tools** for comprehensive Joplin integration:
 
 ### **Note Management**
 - **Find & Search**: `find_notes`, `find_notes_with_tag`, `find_notes_in_notebook`, `get_all_notes`
@@ -28,6 +28,9 @@ This MCP server provides **21 optimized tools** for comprehensive Joplin integra
 ### **Tag Management**
 - **Categorize**: `list_tags`, `create_tag`, `update_tag`, `delete_tag`, `get_tags_by_note`
 - **Link**: `tag_note`, `untag_note`
+
+### **Import**
+- **File Import**: `import_from_file` - Import Markdown, HTML, CSV, TXT, ENEX, ZIP, JEX files and directories
 
 ### **System**
 - **Health**: `ping_joplin`
@@ -423,5 +426,7 @@ Available tools: 21 tools ready
 | **Tag-Note Relationships** | | |
 | `tag_note` | Update | Add tags to notes |
 | `untag_note` | Update | Remove tags from notes |
+| **Import Tools** | | |
+| `import_from_file` | Write | Import files/directories (MD, HTML, CSV, TXT, ENEX, ZIP, JEX) |
 | **System Tools** | | |
 | `ping_joplin` | Read | Test connectivity |
