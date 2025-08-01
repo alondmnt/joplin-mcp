@@ -7,6 +7,7 @@ from .html_importer import HTMLImporter
 from .txt_importer import TxtImporter
 from .csv_importer import CSVImporter
 from .enex_importer import ENEXImporter
+from .raw_importer import RAWImporter
 
 __all__ = [
     "BaseImporter",
@@ -16,4 +17,5 @@ __all__ = [
     "TxtImporter",
     "CSVImporter",
     "ENEXImporter",
+    "RAWImporter",
 ]

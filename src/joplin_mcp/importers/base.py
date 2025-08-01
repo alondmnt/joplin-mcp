@@ -100,7 +100,78 @@ class BaseImporter(ABC):
             return False
             
         extension = path.suffix.lstrip('.').lower()
-        return extension in self.get_supported_extensions()
+        return extension in [ext.lstrip('.') for ext in self.get_supported_extensions()]
+    
+    async def parse_directory(self, directory_path: str) -> List[ImportedNote]:
+        """Parse all supported files in a directory.
+        
+        Args:
+            directory_path: Path to directory to import
+            
+        Returns:
+            List of ImportedNote objects from all files in directory
+        """
+        path = Path(directory_path)
+        if not path.exists() or not path.is_dir():
+            raise ImportValidationError(f"Directory not found: {directory_path}")
+        
+        if not self.supports_directory():
+            raise ImportValidationError(f"Directory import not supported by {self.__class__.__name__}")
+        
+        # Find all supported files
+        supported_files = await self.scan_directory(directory_path)
+        
+        if not supported_files:
+            raise ImportValidationError(f"No supported files found in directory: {directory_path}")
+        
+        # Parse all files
+        all_notes = []
+        for file_path in supported_files:
+            try:
+                # Validate and parse each file
+                await self.validate(file_path)
+                notes = await self.parse(file_path)
+                all_notes.extend(notes)
+            except Exception as e:
+                # Log error but continue with other files
+                print(f"Warning: Failed to import {file_path}: {str(e)}")
+                continue
+        
+        return all_notes
+    
+    def supports_directory(self) -> bool:
+        """Check if this importer supports directory imports.
+        
+        Returns:
+            True if directory imports are supported
+        """
+        # Default: most importers support directory scanning
+        return True
+    
+    async def scan_directory(self, directory_path: str) -> List[str]:
+        """Scan directory for supported files.
+        
+        Args:
+            directory_path: Path to directory to scan
+            
+        Returns:
+            List of file paths that this importer can handle
+        """
+        path = Path(directory_path)
+        if not path.exists() or not path.is_dir():
+            return []
+        
+        supported_files = []
+        extensions = [ext.lstrip('.').lower() for ext in self.get_supported_extensions()]
+        
+        # Recursively scan directory
+        for file_path in path.rglob('*'):
+            if file_path.is_file():
+                extension = file_path.suffix.lstrip('.').lower()
+                if extension in extensions:
+                    supported_files.append(str(file_path))
+        
+        return sorted(supported_files)
         
     def validate_source_exists(self, source: str) -> None:
         """Validate that the source path exists.

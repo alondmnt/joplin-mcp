@@ -12,7 +12,7 @@ from pydantic import Field
 from .import_engine import JoplinImportEngine, get_joplin_client
 from .config import JoplinMCPConfig
 from .types.import_types import ImportOptions
-from .importers import MarkdownImporter, JEXImporter, HTMLImporter, TxtImporter, CSVImporter, ENEXImporter
+from .importers import MarkdownImporter, JEXImporter, HTMLImporter, TxtImporter, CSVImporter, ENEXImporter, RAWImporter
 from .importers.base import ImportValidationError, ImportProcessingError
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,7 @@ def get_importer_for_format(file_format: str, options: ImportOptions):
         'text': TxtImporter,
         'csv': CSVImporter,
         'enex': ENEXImporter,
+        'raw': RAWImporter,
     }
     
     importer_class = format_map.get(file_format.lower())
@@ -81,6 +82,17 @@ def get_importer_for_format(file_format: str, options: ImportOptions):
         
     return importer_class(options)
 
+
+def detect_source_format(source_path: str) -> str:
+    """Detect format from file or directory path."""
+    path = Path(source_path)
+    
+    if path.is_file():
+        return detect_file_format(source_path)
+    elif path.is_dir():
+        return detect_directory_format(source_path)
+    else:
+        raise ValueError(f"Source path does not exist: {source_path}")
 
 def detect_file_format(file_path: str) -> str:
     """Detect file format from file extension."""
@@ -107,6 +119,111 @@ def detect_file_format(file_path: str) -> str:
         raise ValueError(f"Cannot detect format for file: {file_path}. Unsupported extension: {extension}")
         
     return detected_format
+
+def detect_directory_format(directory_path: str) -> str:
+    """Detect format from directory contents."""
+    path = Path(directory_path)
+    
+    if not path.exists() or not path.is_dir():
+        raise ValueError(f"Directory not found: {directory_path}")
+    
+    # Check for specific directory patterns
+    # RAW format: Joplin Export Directory
+    if (path / "resources").exists() and any(path.glob("*.md")):
+        return "raw"
+    
+    # Count file types to determine predominant format
+    extension_counts = {}
+    for file_path in path.rglob('*'):
+        if file_path.is_file():
+            extension = file_path.suffix.lstrip('.').lower()
+            extension_counts[extension] = extension_counts.get(extension, 0) + 1
+    
+    if not extension_counts:
+        raise ValueError(f"No files found in directory: {directory_path}")
+    
+    # Find most common supported extension
+    extension_map = {
+        'md': 'md', 'markdown': 'md', 'mdown': 'md', 'mkd': 'md',
+        'html': 'html', 'htm': 'html',
+        'txt': 'txt', 'text': 'txt',
+        'csv': 'csv',
+        'enex': 'enex',
+    }
+    
+    # Get supported extensions ordered by count
+    supported_extensions = []
+    for ext, count in sorted(extension_counts.items(), key=lambda x: x[1], reverse=True):
+        if ext in extension_map:
+            supported_extensions.append((ext, count))
+    
+    if not supported_extensions:
+        raise ValueError(f"No supported file formats found in directory: {directory_path}")
+    
+    # Return format of most common supported extension
+    most_common_ext = supported_extensions[0][0]
+    return extension_map[most_common_ext]
+
+
+async def import_source(source_path: str, target_notebook: Optional[str] = None, import_options: Optional[Dict[str, Any]] = None) -> str:
+    """Import from file or directory source.
+    
+    Args:
+        source_path: Path to file or directory to import
+        target_notebook: Target notebook name
+        import_options: Import configuration options
+        
+    Returns:
+        Formatted import result
+    """
+    from pathlib import Path
+    
+    # Create import options
+    options = ImportOptions(
+        handle_duplicates=import_options.get('handle_duplicates', 'rename') if import_options else 'rename',
+        create_missing_notebooks=import_options.get('create_missing_notebooks', True) if import_options else True,
+        create_missing_tags=import_options.get('create_missing_tags', True) if import_options else True
+    )
+    
+    # Detect format
+    detected_format = detect_source_format(source_path)
+    
+    # Get appropriate importer
+    importer = get_importer_for_format(detected_format, options)
+    
+    # Validate source
+    await importer.validate(source_path)
+    
+    # Parse based on source type
+    path = Path(source_path)
+    if path.is_file():
+        notes = await importer.parse(source_path)
+    elif path.is_dir():
+        if hasattr(importer, 'parse_directory'):
+            notes = await importer.parse_directory(source_path)
+        else:
+            # Fallback: use base class directory parsing
+            notes = await importer.parse_directory(source_path)
+    else:
+        raise ValueError(f"Invalid source path: {source_path}")
+    
+    if not notes:
+        return f"No notes imported from {source_path}"
+    
+    # Set target notebook if specified
+    if target_notebook:
+        for note in notes:
+            if not note.notebook:  # Don't override existing notebook assignments
+                note.notebook = target_notebook
+    
+    # Get Joplin client and import
+    config = JoplinMCPConfig()
+    client = get_joplin_client(config)
+    engine = JoplinImportEngine(client, config)
+    
+    result = await engine.import_batch(notes, options)
+    
+    return format_import_result(result)
 
 
 # Register the import tools with FastMCP
