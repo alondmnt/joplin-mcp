@@ -117,7 +117,9 @@ class HTMLImporter(BaseImporter):
                     # Convert HTML to Markdown
                     markdown_content = await self._convert_to_markdown(soup, note_data)
                 except Exception as e:
-                    raise ImportProcessingError(f"Failed to parse HTML: {str(e)}") from e
+                    raise ImportProcessingError(
+                        f"Failed to parse HTML: {str(e)}"
+                    ) from e
             else:
                 # Fallback when BeautifulSoup is not available
                 logger.warning(
@@ -313,7 +315,9 @@ class HTMLImporter(BaseImporter):
             return markdown_content.strip()
 
         except Exception as e:
-            raise ImportProcessingError(f"HTML to Markdown conversion failed: {str(e)}") from e
+            raise ImportProcessingError(
+                f"HTML to Markdown conversion failed: {str(e)}"
+            ) from e
 
     def _fallback_html_to_text(self, html_content: str) -> str:
         """Fallback method when BeautifulSoup/markdownify are not available."""

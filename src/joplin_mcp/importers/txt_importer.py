@@ -45,24 +45,24 @@ class TxtImporter(BaseImporter):
                 raise ImportValidationError(
                     f"Unsupported text file extension: {path.suffix}"
                 )
-            
+
             if path.stat().st_size == 0:
                 raise ImportValidationError(f"File is empty: {source_path}")
-                
+
             # Try to read the file to check if it's readable text
             await self._validate_text_file(path)
-            
+
         elif path.is_dir():
             # Validate directory contains text files
             txt_files = []
             for ext in self.get_supported_extensions():
                 txt_files.extend(path.rglob(f"*.{ext}"))
-            
+
             if not txt_files:
                 raise ImportValidationError(
                     f"No text files (.txt, .text) found in directory: {source_path}"
                 )
-            
+
             # Validate at least one text file is readable
             for txt_file in txt_files[:3]:  # Check first 3 files for performance
                 try:
@@ -75,7 +75,9 @@ class TxtImporter(BaseImporter):
                     f"No readable text files found in directory: {source_path}"
                 )
         else:
-            raise ImportValidationError(f"Path is neither file nor directory: {source_path}")
+            raise ImportValidationError(
+                f"Path is neither file nor directory: {source_path}"
+            )
 
         return True
 
@@ -103,7 +105,7 @@ class TxtImporter(BaseImporter):
         """Parse text file or directory and convert to ImportedNote objects."""
         try:
             path = Path(source_path)
-            
+
             if path.is_file():
                 # Parse single text file
                 note = await self._parse_text_file(path)
@@ -114,7 +116,7 @@ class TxtImporter(BaseImporter):
                 txt_files = []
                 for ext in self.get_supported_extensions():
                     txt_files.extend(path.rglob(f"*.{ext}"))
-                
+
                 for txt_file in txt_files:
                     try:
                         note = await self._parse_text_file(txt_file)
@@ -124,11 +126,13 @@ class TxtImporter(BaseImporter):
                         # Log error but continue with other files
                         print(f"Warning: Failed to parse {txt_file}: {str(e)}")
                         continue
-                
+
                 return all_notes
             else:
-                raise ImportProcessingError(f"Source is neither file nor directory: {source_path}")
-                
+                raise ImportProcessingError(
+                    f"Source is neither file nor directory: {source_path}"
+                )
+
         except Exception as e:
             if isinstance(e, (ImportValidationError, ImportProcessingError)):
                 raise

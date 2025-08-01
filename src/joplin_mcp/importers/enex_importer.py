@@ -61,7 +61,7 @@ class ENEXImporter(BaseImporter):
                 )
             # Validate it's a valid XML file
             await self._validate_enex_file(path)
-            
+
         elif path.is_dir():
             # Validate directory contains ENEX files
             enex_files = list(path.rglob("*.enex"))
@@ -81,7 +81,9 @@ class ENEXImporter(BaseImporter):
                     f"No valid ENEX files found in directory: {source_path}"
                 )
         else:
-            raise ImportValidationError(f"Path is neither file nor directory: {source_path}")
+            raise ImportValidationError(
+                f"Path is neither file nor directory: {source_path}"
+            )
 
         return True
 
@@ -132,7 +134,7 @@ class ENEXImporter(BaseImporter):
         """Parse ENEX file or directory and convert to ImportedNote objects."""
         try:
             path = Path(source_path)
-            
+
             if path.is_file():
                 # Parse single ENEX file
                 return await self._parse_enex_file(path)
@@ -140,7 +142,7 @@ class ENEXImporter(BaseImporter):
                 # Parse all ENEX files in directory
                 all_notes = []
                 enex_files = list(path.rglob("*.enex"))
-                
+
                 for enex_file in enex_files:
                     try:
                         notes = await self._parse_enex_file(enex_file)
@@ -149,11 +151,13 @@ class ENEXImporter(BaseImporter):
                         # Log error but continue with other files
                         print(f"Warning: Failed to parse {enex_file}: {str(e)}")
                         continue
-                
+
                 return all_notes
             else:
-                raise ImportProcessingError(f"Source is neither file nor directory: {source_path}")
-                
+                raise ImportProcessingError(
+                    f"Source is neither file nor directory: {source_path}"
+                )
+
         except Exception as e:
             if isinstance(e, (ImportValidationError, ImportProcessingError)):
                 raise
@@ -194,7 +198,9 @@ class ENEXImporter(BaseImporter):
                     notes.append(imported_note)
             except Exception as e:
                 # Log error but continue with other notes
-                print(f"Warning: Failed to parse note {i + 1} from {file_path}: {str(e)}")
+                print(
+                    f"Warning: Failed to parse note {i + 1} from {file_path}: {str(e)}"
+                )
                 continue
 
         return notes

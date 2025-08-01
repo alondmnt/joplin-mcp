@@ -46,22 +46,22 @@ class CSVImporter(BaseImporter):
                 raise ImportValidationError(
                     f"Unsupported CSV file extension: {path.suffix}"
                 )
-            
+
             if path.stat().st_size == 0:
                 raise ImportValidationError(f"File is empty: {source_path}")
-                
+
             # Validate CSV file structure
             await self._validate_csv_file(path)
-            
+
         elif path.is_dir():
             # Validate directory contains CSV files
             csv_files = list(path.rglob("*.csv"))
-            
+
             if not csv_files:
                 raise ImportValidationError(
                     f"No CSV files found in directory: {source_path}"
                 )
-            
+
             # Validate at least one CSV file is readable
             for csv_file in csv_files[:3]:  # Check first 3 files for performance
                 try:
@@ -74,7 +74,9 @@ class CSVImporter(BaseImporter):
                     f"No valid CSV files found in directory: {source_path}"
                 )
         else:
-            raise ImportValidationError(f"Path is neither file nor directory: {source_path}")
+            raise ImportValidationError(
+                f"Path is neither file nor directory: {source_path}"
+            )
 
         return True
 
@@ -146,7 +148,7 @@ class CSVImporter(BaseImporter):
         """Parse CSV file or directory and convert to ImportedNote objects."""
         try:
             path = Path(source_path)
-            
+
             if path.is_file():
                 # Parse single CSV file
                 notes = await self._parse_csv_file(path)
@@ -155,7 +157,7 @@ class CSVImporter(BaseImporter):
                 # Parse all CSV files in directory
                 all_notes = []
                 csv_files = list(path.rglob("*.csv"))
-                
+
                 for csv_file in csv_files:
                     try:
                         notes = await self._parse_csv_file(csv_file)
@@ -164,11 +166,13 @@ class CSVImporter(BaseImporter):
                         # Log error but continue with other files
                         print(f"Warning: Failed to parse {csv_file}: {str(e)}")
                         continue
-                
+
                 return all_notes
             else:
-                raise ImportProcessingError(f"Source is neither file nor directory: {source_path}")
-                
+                raise ImportProcessingError(
+                    f"Source is neither file nor directory: {source_path}"
+                )
+
         except Exception as e:
             if isinstance(e, (ImportValidationError, ImportProcessingError)):
                 raise

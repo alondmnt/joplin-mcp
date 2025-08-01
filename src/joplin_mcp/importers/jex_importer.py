@@ -71,7 +71,7 @@ class JEXImporter(BaseImporter):
         except tarfile.TarError as e:
             raise ImportValidationError(
                 f"Invalid JEX file (not a valid TAR archive): {str(e)}"
-            )
+            ) from e
 
         return True
 
@@ -91,7 +91,7 @@ class JEXImporter(BaseImporter):
                 notes = await self._parse_extracted_jex(temp_path)
 
         except Exception as e:
-            raise ImportProcessingError(f"Failed to parse JEX file {source}: {str(e)}")
+            raise ImportProcessingError(f"Failed to parse JEX file {source}: {str(e)}") from e
 
         return notes
 
