@@ -34,49 +34,91 @@ This MCP server provides **21 optimized tools** for comprehensive Joplin integra
 
 ## Quick Start
 
-### 1. Install the Package
 
-```bash
-pip install joplin-mcp
-```
-
-### 2. Configure Joplin
+### 1. Configure Joplin
 
 1. Open **Joplin Desktop** → **Tools** → **Options** → **Web Clipper**
 2. **Enable** the Web Clipper service
 3. **Copy** the Authorization token
 
-### 3. Run Setup Script
+### 2. Choose Your AI Client
+
+#### Option A: Claude Desktop (Automated Setup)
+
+Run the automated installer:
 
 ```bash
-joplin-mcp-install
+# Install and configure everything automatically
+uvx joplin-mcp-install
 ```
 
-This interactive script will:
-- Configure your Joplin API token
+This script will:
+- Configure your Joplin API token  
 - Set tool permissions (Create/Update/Delete)
 - Set up Claude Desktop automatically
 - Test the connection
 
-### 4. Choose Your AI Client
-
-#### Option A: Claude Desktop
-After running the setup script, restart Claude Desktop and you're ready to go!
+After setup, restart Claude Desktop and you're ready to go!
 
 ```
 "List my notebooks" or "Create a note about today's meeting"
 ```
 
-#### Option B: OllMCP (Local AI Models)
+#### Option B: Jan AI
 
-If Claude Desktop was configured above, you can run the following to detect joplin-mcp automatically by OllMCP (Ollama served agents).
+**B1: Manual Setup (Recommended - Simplest)**
 
+1. **Install Jan AI** from [https://jan.ai](https://jan.ai)
+
+2. **Add MCP Server** in Jan's interface:
+   - Open Jan AI
+   - Go to **Settings** → **Extensions** → **Model Context Protocol**
+   - Click **Add MCP Server**
+   - Configure:
+     - **Name**: `joplin`
+     - **Command**: `uvx joplin-mcp`
+     - **Environment Variables**:
+       - `JOPLIN_TOKEN`: `your_joplin_api_token_here`
+   - Enable the server
+
+3. **Start chatting** with access to your Joplin notes!
+
+**B2: Automated Setup (Alternative)**
+
+```bash
+# Install and configure Jan AI automatically (if Jan is already installed)
+uvx joplin-mcp-install
+```
+
+This will detect and configure Jan AI automatically, just like Claude Desktop.
+
+```
+"Show me my recent notes" or "Create a project planning note"
+```
+
+#### Option C: OllMCP (Local AI Models)
+
+For local Ollama models:
+
+**Option C1: Auto-discovery (if you set up Claude Desktop first)**
 ```bash
 # Install ollmcp
 pip install ollmcp
 
-# Run with auto-discovery and your preferred Ollama model, such as:
+# Run with auto-discovery (requires existing Claude Desktop config)
 ollmcp --auto-discovery --model qwen3:4b
+```
+
+**Option C2: Manual setup (works independently)**
+```bash
+# Install ollmcp
+pip install ollmcp
+
+# Set environment variable
+export JOPLIN_TOKEN="your_joplin_api_token_here"
+
+# Run with manual server configuration
+ollmcp --server "joplin:uvx joplin-mcp" --model qwen3:4b
 ```
 
 ## Example Usage
@@ -104,18 +146,34 @@ Choose the level that matches your comfort and use case.
 
 ## Advanced Configuration
 
-### Alternative Installation (Development)
+### Alternative Installation Methods
+
+#### Method 1: Traditional pip install
+
+If you don't have `uvx` or prefer to customize MCP settings:
+
+```bash
+# Install the package
+pip install joplin-mcp
+
+# Run the setup script
+joplin-mcp-install
+```
+
+This method provides the same functionality as `uvx joplin-mcp-install` but requires a local Python environment.
+
+#### Method 2: Development Installation
 
 For developers or users who want the latest features:
 
-#### macOS/Linux:
+**macOS/Linux:**
 ```bash
 git clone https://github.com/alondmnt/joplin-mcp.git
 cd joplin-mcp
 ./install.sh
 ```
 
-#### Windows:
+**Windows:**
 ```batch
 git clone https://github.com/alondmnt/joplin-mcp.git
 cd joplin-mcp
@@ -125,6 +183,8 @@ install.bat
 ### Manual Configuration
 
 If you prefer manual setup or the script doesn't work:
+
+> **Note**: `uvx` is a tool for running Python applications in isolated environments without permanent installation. If you don't have it, install with `pip install uv` or use the "installed package" options below.
 
 #### 1. Create Configuration File
 
@@ -144,6 +204,22 @@ Create `joplin-mcp.json` in your project directory:
 
 Add to your `claude_desktop_config.json`:
 
+**Option A: Using uvx (Recommended)**
+```json
+{
+  "mcpServers": {
+    "joplin": {
+      "command": "uvx",
+      "args": ["joplin-mcp"],
+      "env": {
+        "JOPLIN_TOKEN": "your_token_here"
+      }
+    }
+  }
+}
+```
+
+**Option B: Using installed package**
 ```json
 {
   "mcpServers": {
@@ -159,6 +235,16 @@ Add to your `claude_desktop_config.json`:
 
 #### 3. OllMCP Manual Configuration
 
+**Option A: Using uvx (Recommended)**
+```bash
+# Set environment variable
+export JOPLIN_TOKEN="your_token_here"
+
+# Run with manual server configuration
+ollmcp --server "joplin:uvx joplin-mcp" --model qwen3:4b
+```
+
+**Option B: Using installed package**
 ```bash
 # Set environment variable
 export JOPLIN_TOKEN="your_token_here"
