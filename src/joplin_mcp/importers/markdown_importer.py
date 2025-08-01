@@ -5,7 +5,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import yaml
+# Optional dependency for YAML frontmatter parsing
+try:
+    import yaml
+
+    YAML_AVAILABLE = True
+except ImportError:
+    YAML_AVAILABLE = False
 
 from ..types.import_types import ImportedNote
 from .base import BaseImporter, ImportProcessingError, ImportValidationError
@@ -158,23 +164,28 @@ class MarkdownImporter(BaseImporter):
         except Exception as e:
             raise ImportProcessingError(
                 f"Failed to parse markdown file {file_path}: {str(e)}"
-            )
+            ) from e
 
     def _extract_frontmatter(self, content: str) -> tuple[Dict[str, Any], str]:
         """Extract YAML frontmatter from markdown content."""
-        frontmatter = {}
+        frontmatter: Dict[str, Any] = {}
         body = content
 
         # Check for YAML frontmatter (--- at start)
         if content.startswith("---"):
             parts = content.split("---", 2)
             if len(parts) >= 3:
-                try:
-                    frontmatter = yaml.safe_load(parts[1]) or {}
+                if YAML_AVAILABLE:
+                    try:
+                        frontmatter = yaml.safe_load(parts[1]) or {}
+                        body = parts[2].strip()
+                    except yaml.YAMLError:
+                        # If YAML parsing fails, treat as regular content
+                        pass
+                else:
+                    # Fallback when YAML is not available - basic key:value parsing
+                    frontmatter = self._fallback_yaml_parse(parts[1])
                     body = parts[2].strip()
-                except yaml.YAMLError:
-                    # If YAML parsing fails, treat as regular content
-                    pass
 
         return frontmatter, body
 
@@ -226,7 +237,7 @@ class MarkdownImporter(BaseImporter):
             tags.extend(hashtags)
 
         # Remove duplicates and empty tags
-        return list(set(tag for tag in tags if tag))
+        return list({tag for tag in tags if tag})
 
     def _parse_timestamp(self, timestamp_str: Optional[str]) -> Optional[datetime]:
         """Parse timestamp string to datetime object."""
@@ -259,3 +270,52 @@ class MarkdownImporter(BaseImporter):
 
         # If all formats fail, return None
         return None
+
+    def _fallback_yaml_parse(self, yaml_content: str) -> Dict[str, Any]:
+        """Fallback YAML parser when PyYAML is not available."""
+        frontmatter: Dict[str, Any] = {}
+
+        # Basic key: value parsing for common frontmatter fields
+        lines = yaml_content.strip().split("\n")
+
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            # Handle simple key: value pairs
+            if ":" in line:
+                key, value_str = line.split(":", 1)
+                key = key.strip()
+                value_str = value_str.strip()
+                value: Any = value_str
+
+                # Remove quotes if present
+                if value_str.startswith('"') and value_str.endswith('"'):
+                    value = value_str[1:-1]
+                elif value_str.startswith("'") and value_str.endswith("'"):
+                    value = value_str[1:-1]
+                # Handle common YAML values
+                elif value_str.lower() in ["true", "yes"]:
+                    value = True
+                elif value_str.lower() in ["false", "no"]:
+                    value = False
+                elif value_str.isdigit():
+                    value = int(value_str)
+                elif value_str.replace(".", "", 1).isdigit():
+                    value = float(value_str)
+                elif value_str.startswith("[") and value_str.endswith("]"):
+                    # Basic list parsing - comma separated values
+                    list_content = value_str[1:-1].strip()
+                    if list_content:
+                        items = [
+                            item.strip().strip("\"'")
+                            for item in list_content.split(",")
+                        ]
+                        value = items
+                    else:
+                        value = []
+
+                frontmatter[key] = value
+
+        return frontmatter

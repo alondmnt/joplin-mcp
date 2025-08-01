@@ -8,16 +8,22 @@ import logging
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
+# Optional dependencies for HTML processing
 try:
     import markdownify
-    from bs4 import BeautifulSoup, NavigableString, Tag
+
+    MARKDOWNIFY_AVAILABLE = True
 except ImportError:
-    raise ImportError(
-        "HTML import requires additional dependencies. Install with: "
-        "pip install beautifulsoup4 markdownify"
-    )
+    MARKDOWNIFY_AVAILABLE = False
+
+try:
+    from bs4 import BeautifulSoup
+
+    BEAUTIFULSOUP_AVAILABLE = True
+except ImportError:
+    BEAUTIFULSOUP_AVAILABLE = False
 
 from ..types.import_types import (
     ImportedNote,
@@ -36,7 +42,7 @@ class HTMLImporter(BaseImporter):
         """Return list of supported file extensions."""
         return ["html", "htm"]
 
-    async def validate(self, file_path: str) -> None:
+    async def validate(self, file_path: str) -> bool:
         """Validate HTML file can be processed."""
         path = Path(file_path)
 
@@ -47,8 +53,9 @@ class HTMLImporter(BaseImporter):
         if not path.is_file():
             raise ImportValidationError(f"Path is not a file: {file_path}")
 
-        # Check file extension
-        if path.suffix.lower() not in self.get_supported_extensions():
+        # Check file extension (remove dot from suffix for comparison)
+        extension = path.suffix.lower().lstrip(".")
+        if extension not in self.get_supported_extensions():
             raise ImportValidationError(
                 f"Unsupported HTML file extension: {path.suffix}"
             )
@@ -77,6 +84,8 @@ class HTMLImporter(BaseImporter):
                 f"File may not be valid HTML (no common HTML tags found): {file_path}"
             )
 
+        return True
+
     async def parse(self, file_path: str) -> List[ImportedNote]:
         """Parse HTML file and convert to ImportedNote objects."""
         try:
@@ -99,17 +108,23 @@ class HTMLImporter(BaseImporter):
 
             logger.info(f"Read HTML file with {used_encoding} encoding: {file_path}")
 
-            # Parse HTML with BeautifulSoup
-            try:
-                soup = BeautifulSoup(content, "html.parser")
-            except Exception as e:
-                raise ImportProcessingError(f"Failed to parse HTML: {str(e)}")
-
-            # Extract metadata and content
-            note_data = await self._extract_note_data(soup, path)
-
-            # Convert HTML to Markdown
-            markdown_content = await self._convert_to_markdown(soup, note_data)
+            # Parse HTML with BeautifulSoup or fallback
+            if BEAUTIFULSOUP_AVAILABLE:
+                try:
+                    soup = BeautifulSoup(content, "html.parser")
+                    # Extract metadata and content
+                    note_data = await self._extract_note_data(soup, path)
+                    # Convert HTML to Markdown
+                    markdown_content = await self._convert_to_markdown(soup, note_data)
+                except Exception as e:
+                    raise ImportProcessingError(f"Failed to parse HTML: {str(e)}") from e
+            else:
+                # Fallback when BeautifulSoup is not available
+                logger.warning(
+                    "BeautifulSoup not available, using fallback HTML processing"
+                )
+                note_data = self._extract_note_data_fallback(content, path)
+                markdown_content = self._fallback_html_to_text(content)
 
             # Create ImportedNote
             note = ImportedNote(
@@ -135,7 +150,7 @@ class HTMLImporter(BaseImporter):
         except Exception as e:
             if isinstance(e, (ImportValidationError, ImportProcessingError)):
                 raise
-            raise ImportProcessingError(f"HTML import failed: {str(e)}")
+            raise ImportProcessingError(f"HTML import failed: {str(e)}") from e
 
     async def _extract_note_data(self, soup: BeautifulSoup, path: Path) -> dict:
         """Extract metadata and title from HTML document."""
@@ -185,13 +200,13 @@ class HTMLImporter(BaseImporter):
                 # Try to parse creation date
                 try:
                     note_data["created_time"] = self._parse_date(content)
-                except:
+                except Exception:
                     pass
             elif name == "modified":
                 # Try to parse modified date
                 try:
                     note_data["updated_time"] = self._parse_date(content)
-                except:
+                except Exception:
                     pass
 
         # Extract notebook from directory structure if not specified
@@ -204,20 +219,24 @@ class HTMLImporter(BaseImporter):
         if not note_data.get("created_time"):
             try:
                 note_data["created_time"] = datetime.fromtimestamp(path.stat().st_ctime)
-            except:
+            except Exception:
                 pass
 
         if not note_data.get("updated_time"):
             try:
                 note_data["updated_time"] = datetime.fromtimestamp(path.stat().st_mtime)
-            except:
+            except Exception:
                 pass
 
         return note_data
 
-    async def _convert_to_markdown(self, soup: BeautifulSoup, note_data: dict) -> str:
+    async def _convert_to_markdown(self, soup, note_data: dict) -> str:
         """Convert HTML content to Markdown."""
         try:
+            # Check if we have the required dependencies
+            if not BEAUTIFULSOUP_AVAILABLE or not MARKDOWNIFY_AVAILABLE:
+                return self._fallback_html_to_text(str(soup))
+
             # Remove script and style elements
             for script in soup(["script", "style"]):
                 script.decompose()
@@ -294,7 +313,137 @@ class HTMLImporter(BaseImporter):
             return markdown_content.strip()
 
         except Exception as e:
-            raise ImportProcessingError(f"HTML to Markdown conversion failed: {str(e)}")
+            raise ImportProcessingError(f"HTML to Markdown conversion failed: {str(e)}") from e
+
+    def _fallback_html_to_text(self, html_content: str) -> str:
+        """Fallback method when BeautifulSoup/markdownify are not available."""
+        import re
+
+        # Add warning comment
+        content = "<!-- Note: HTML import using fallback method. Install beautifulsoup4 and markdownify for better conversion -->\n\n"
+
+        # Basic HTML tag removal and text extraction
+        # Remove script and style content
+        content += re.sub(
+            r"<script[^>]*>.*?</script>",
+            "",
+            html_content,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        content += re.sub(
+            r"<style[^>]*>.*?</style>",
+            "",
+            html_content,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+
+        # Convert headers to markdown
+        content = re.sub(r"<h1[^>]*>(.*?)</h1>", r"# \1", content, flags=re.IGNORECASE)
+        content = re.sub(r"<h2[^>]*>(.*?)</h2>", r"## \1", content, flags=re.IGNORECASE)
+        content = re.sub(
+            r"<h3[^>]*>(.*?)</h3>", r"### \1", content, flags=re.IGNORECASE
+        )
+        content = re.sub(
+            r"<h4[^>]*>(.*?)</h4>", r"#### \1", content, flags=re.IGNORECASE
+        )
+        content = re.sub(
+            r"<h5[^>]*>(.*?)</h5>", r"##### \1", content, flags=re.IGNORECASE
+        )
+        content = re.sub(
+            r"<h6[^>]*>(.*?)</h6>", r"###### \1", content, flags=re.IGNORECASE
+        )
+
+        # Convert paragraphs
+        content = re.sub(
+            r"<p[^>]*>(.*?)</p>", r"\1\n\n", content, flags=re.DOTALL | re.IGNORECASE
+        )
+
+        # Convert line breaks
+        content = re.sub(r"<br[^>]*>", "\n", content, flags=re.IGNORECASE)
+
+        # Convert bold and italic
+        content = re.sub(
+            r"<(strong|b)[^>]*>(.*?)</\1>", r"**\2**", content, flags=re.IGNORECASE
+        )
+        content = re.sub(
+            r"<(em|i)[^>]*>(.*?)</\1>", r"*\2*", content, flags=re.IGNORECASE
+        )
+
+        # Convert links
+        content = re.sub(
+            r'<a[^>]*href=["\']([^"\']*)["\'][^>]*>(.*?)</a>',
+            r"[\2](\1)",
+            content,
+            flags=re.IGNORECASE,
+        )
+
+        # Convert lists (basic)
+        content = re.sub(
+            r"<li[^>]*>(.*?)</li>", r"- \1", content, flags=re.DOTALL | re.IGNORECASE
+        )
+        content = re.sub(r"<[uo]l[^>]*>", "", content, flags=re.IGNORECASE)
+        content = re.sub(r"</[uo]l>", "", content, flags=re.IGNORECASE)
+
+        # Remove remaining HTML tags
+        content = re.sub(r"<[^>]+>", "", content)
+
+        # Clean up excessive whitespace
+        content = re.sub(r"\n\s*\n\s*\n", "\n\n", content)
+        content = re.sub(r"[ \t]+", " ", content)
+
+        return content.strip()
+
+    def _extract_note_data_fallback(self, content: str, path: Path) -> dict:
+        """Fallback method to extract basic note data when BeautifulSoup is not available."""
+        import re
+
+        note_data: Dict[str, Any] = {
+            "title": path.stem.replace("_", " ").replace("-", " ").title(),
+            "tags": [],
+            "notebook": None,
+            "created_time": datetime.fromtimestamp(path.stat().st_ctime),
+            "updated_time": datetime.fromtimestamp(path.stat().st_mtime),
+        }
+
+        # Try to extract title from HTML title tag
+        title_match = re.search(r"<title[^>]*>([^<]+)</title>", content, re.IGNORECASE)
+        if title_match:
+            note_data["title"] = title_match.group(1).strip()
+
+        # Try to extract first h1 as title if no title tag
+        elif not title_match:
+            h1_match = re.search(r"<h1[^>]*>([^<]+)</h1>", content, re.IGNORECASE)
+            if h1_match:
+                note_data["title"] = h1_match.group(1).strip()
+
+        # Extract basic meta tags
+        description_match = re.search(
+            r'<meta[^>]*name=["\']description["\'][^>]*content=["\']([^"\']+)["\']',
+            content,
+            re.IGNORECASE,
+        )
+        if description_match:
+            note_data["description"] = description_match.group(1)
+
+        author_match = re.search(
+            r'<meta[^>]*name=["\']author["\'][^>]*content=["\']([^"\']+)["\']',
+            content,
+            re.IGNORECASE,
+        )
+        if author_match:
+            note_data["author"] = author_match.group(1)
+
+        keywords_match = re.search(
+            r'<meta[^>]*name=["\']keywords["\'][^>]*content=["\']([^"\']+)["\']',
+            content,
+            re.IGNORECASE,
+        )
+        if keywords_match:
+            keywords = [k.strip() for k in keywords_match.group(1).split(",")]
+            if isinstance(note_data["tags"], list):
+                note_data["tags"].extend(keywords)
+
+        return note_data
 
     def _clean_markdown(self, markdown: str) -> str:
         """Clean up converted markdown content."""

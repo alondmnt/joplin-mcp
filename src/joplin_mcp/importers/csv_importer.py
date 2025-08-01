@@ -27,24 +27,60 @@ class CSVImporter(BaseImporter):
         extension = file_path.suffix.lower().lstrip(".")
         return extension in self.get_supported_extensions()
 
-    async def validate(self, file_path: str) -> bool:
-        """Validate CSV file can be processed."""
-        path = Path(file_path)
+    def supports_directory(self) -> bool:
+        """CSV format supports both files and directories containing CSV files."""
+        return True
 
-        # Check file exists and is readable
+    async def validate(self, source_path: str) -> bool:
+        """Validate CSV file or directory can be processed."""
+        path = Path(source_path)
+
+        # Check source exists and is readable
         if not path.exists():
-            raise ImportValidationError(f"CSV file not found: {file_path}")
+            raise ImportValidationError(f"CSV source not found: {source_path}")
 
-        if not path.is_file():
-            raise ImportValidationError(f"Path is not a file: {file_path}")
+        if path.is_file():
+            # Validate single CSV file
+            extension = path.suffix.lower().lstrip(".")
+            if extension not in self.get_supported_extensions():
+                raise ImportValidationError(
+                    f"Unsupported CSV file extension: {path.suffix}"
+                )
+            
+            if path.stat().st_size == 0:
+                raise ImportValidationError(f"File is empty: {source_path}")
+                
+            # Validate CSV file structure
+            await self._validate_csv_file(path)
+            
+        elif path.is_dir():
+            # Validate directory contains CSV files
+            csv_files = list(path.rglob("*.csv"))
+            
+            if not csv_files:
+                raise ImportValidationError(
+                    f"No CSV files found in directory: {source_path}"
+                )
+            
+            # Validate at least one CSV file is readable
+            for csv_file in csv_files[:3]:  # Check first 3 files for performance
+                try:
+                    await self._validate_csv_file(csv_file)
+                    break  # If one is valid, assume others are too
+                except ImportValidationError:
+                    continue
+            else:
+                raise ImportValidationError(
+                    f"No valid CSV files found in directory: {source_path}"
+                )
+        else:
+            raise ImportValidationError(f"Path is neither file nor directory: {source_path}")
 
-        # Check file extension
-        if path.suffix.lower() not in self.get_supported_extensions():
-            raise ImportValidationError(
-                f"Unsupported CSV file extension: {path.suffix}"
-            )
+        return True
 
-        if path.stat().st_size == 0:
+    async def _validate_csv_file(self, file_path: Path) -> None:
+        """Validate a single CSV file structure."""
+        if file_path.stat().st_size == 0:
             raise ImportValidationError(f"File is empty: {file_path}")
 
         # Try to read and parse as CSV
@@ -106,66 +142,86 @@ class CSVImporter(BaseImporter):
         except Exception as e:
             raise ImportValidationError(f"Error reading CSV file: {str(e)}") from e
 
-        return True
-
-    async def parse(self, file_path: str) -> List[ImportedNote]:
-        """Parse CSV file and convert to ImportedNote objects."""
+    async def parse(self, source_path: str) -> List[ImportedNote]:
+        """Parse CSV file or directory and convert to ImportedNote objects."""
         try:
-            path = Path(file_path)
-
-            # Read CSV content with proper encoding
-            content = None
-            used_encoding = None
-            for encoding in ["utf-8", "latin-1", "cp1252", "iso-8859-1"]:
-                try:
-                    with open(file_path, encoding=encoding) as f:
-                        content = f.read()
-                    used_encoding = encoding
-                    break
-                except UnicodeDecodeError:
-                    continue
-
-            if content is None:
-                raise ImportProcessingError(
-                    f"Could not read CSV file with any supported encoding: {file_path}"
-                )
-
-            # Parse CSV data
-            rows = []
-            with open(file_path, encoding=used_encoding) as f:
-                # Detect CSV dialect
-                sample = f.read(1024)
-                f.seek(0)
-
-                sniffer = csv.Sniffer()
-                try:
-                    dialect = sniffer.sniff(sample)
-                except csv.Error:
-                    dialect = csv.excel
-
-                reader = csv.reader(f, dialect=dialect)
-                for row in reader:
-                    rows.append(row)
-
-            if not rows:
-                raise ImportProcessingError(f"CSV file contains no data: {file_path}")
-
-            # Get import mode from options - default to 'table'
-            import_mode = getattr(self.options, "csv_import_mode", "table")
-
-            if import_mode == "rows":
-                return self._create_notes_from_rows(
-                    path, rows, used_encoding or "utf-8"
-                )
+            path = Path(source_path)
+            
+            if path.is_file():
+                # Parse single CSV file
+                notes = await self._parse_csv_file(path)
+                return notes
+            elif path.is_dir():
+                # Parse all CSV files in directory
+                all_notes = []
+                csv_files = list(path.rglob("*.csv"))
+                
+                for csv_file in csv_files:
+                    try:
+                        notes = await self._parse_csv_file(csv_file)
+                        all_notes.extend(notes)
+                    except Exception as e:
+                        # Log error but continue with other files
+                        print(f"Warning: Failed to parse {csv_file}: {str(e)}")
+                        continue
+                
+                return all_notes
             else:
-                return self._create_table_note(path, rows, used_encoding or "utf-8")
-
+                raise ImportProcessingError(f"Source is neither file nor directory: {source_path}")
+                
         except Exception as e:
             if isinstance(e, (ImportValidationError, ImportProcessingError)):
                 raise
+            raise ImportProcessingError(f"CSV import failed: {str(e)}") from e
+
+    async def _parse_csv_file(self, file_path: Path) -> List[ImportedNote]:
+        """Parse a single CSV file and convert to ImportedNote objects."""
+        # Read CSV content with proper encoding
+        content = None
+        used_encoding = None
+        for encoding in ["utf-8", "latin-1", "cp1252", "iso-8859-1"]:
+            try:
+                with open(file_path, encoding=encoding) as f:
+                    content = f.read()
+                used_encoding = encoding
+                break
+            except UnicodeDecodeError:
+                continue
+
+        if content is None:
             raise ImportProcessingError(
-                f"Error parsing CSV file {file_path}: {str(e)}"
-            ) from e
+                f"Could not read CSV file with any supported encoding: {file_path}"
+            )
+
+        # Parse CSV data
+        rows = []
+        with open(file_path, encoding=used_encoding) as f:
+            # Detect CSV dialect
+            sample = f.read(1024)
+            f.seek(0)
+
+            sniffer = csv.Sniffer()
+            try:
+                dialect = sniffer.sniff(sample)
+            except csv.Error:
+                dialect = csv.excel
+
+            reader = csv.reader(f, dialect=dialect)
+            for row in reader:
+                rows.append(row)
+
+        if not rows:
+            raise ImportProcessingError(f"CSV file contains no data: {file_path}")
+
+        # Get import mode from options - default to 'table'
+        import_mode = getattr(self.options, "csv_import_mode", "table")
+
+        if import_mode == "rows":
+            return self._create_notes_from_rows(
+                file_path, rows, used_encoding or "utf-8"
+            )
+        else:
+            return self._create_table_note(file_path, rows, used_encoding or "utf-8")
 
     def _create_table_note(
         self, path: Path, rows: List[List[str]], encoding: str
