@@ -68,35 +68,42 @@ _config: Optional[JoplinMCPConfig] = None
 # Load configuration at module level for tool filtering
 def _load_module_config() -> JoplinMCPConfig:
     """Load configuration at module level for tool registration filtering."""
-    import os
     from pathlib import Path
     
-    # Get the current working directory and script directory
-    cwd = Path.cwd()
-    script_dir = Path(__file__).parent.parent.parent  # Go up to project root
+    # Use the built-in auto-discovery that checks standard global config locations
+    # This includes: ~/.joplin-mcp.json, ~/.config/joplin-mcp/config.json, etc.
+    logger.info("Auto-discovering Joplin MCP configuration...")
     
-    # List of paths to try for configuration file
-    config_paths = [
-        cwd / "joplin-mcp.json",
-        script_dir / "joplin-mcp.json",
-        Path("/Users/alondmnt/projects/joplin/mcp/joplin-mcp.json"),  # Absolute path as fallback
-    ]
-    
-    # Try each path
-    for config_path in config_paths:
-        if config_path.exists():
-            try:
-                logger.info(f"Loading configuration from: {config_path}")
-                config = JoplinMCPConfig.from_file(config_path)
-                logger.info(f"Successfully loaded config from {config_path}")
-                return config
-            except Exception as e:
-                logger.warning(f"Failed to load config from {config_path}: {e}")
-                continue
-    
-    # If no config file found, use defaults from config module
-    logger.warning("No configuration file found. Using safe default configuration.")
-    return JoplinMCPConfig()
+    try:
+        config = JoplinMCPConfig.auto_discover()
+        
+        # Check if a config file was actually found vs. using defaults
+        for path in JoplinMCPConfig.get_default_config_paths():
+            if path.exists():
+                logger.info(f"Successfully loaded configuration from: {path}")
+                break
+        else:
+            # Also check current directory (for development)
+            cwd = Path.cwd()
+            local_paths = [
+                cwd / "joplin-mcp.json",
+                cwd / "joplin-mcp.yaml",
+                cwd / "joplin-mcp.yml"
+            ]
+            
+            for path in local_paths:
+                if path.exists():
+                    logger.info(f"Successfully loaded configuration from: {path}")
+                    break
+            else:
+                logger.warning("No configuration file found. Using environment variables and defaults.")
+        
+        return config
+        
+    except Exception as e:
+        logger.error(f"Failed to load configuration: {e}")
+        logger.warning("Falling back to default configuration.")
+        return JoplinMCPConfig()
 
 # Load config for tool registration filtering
 _module_config = _load_module_config()

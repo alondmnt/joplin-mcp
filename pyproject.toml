@@ -7,12 +7,12 @@ name = "joplin-mcp"
 version = "0.3.0"
 description = "Model Context Protocol (MCP) server for Joplin note-taking application"
 readme = "README.md"
-license = {text = "MIT"}
+license = {file = "LICENSE"}
 authors = [
-    {name = "Joplin MCP Contributors"}
+    {name = "Alon Diament"}
 ]
 maintainers = [
-    {name = "Joplin MCP Contributors"}
+    {name = "Alon Diament"}
 ]
 keywords = ["joplin", "mcp", "model-context-protocol", "notes", "ai", "assistant"]
 classifiers = [
@@ -38,6 +38,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "httpx>=0.24.0",
     "typing-extensions>=4.0.0",
+    "PyYAML>=6.0.0",
 ]
 
 [project.optional-dependencies]
@@ -137,14 +138,6 @@ warn_unused_ignores = false
 # Per-module configuration
 [[tool.mypy.overrides]]
 module = "tests.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "joplin_mcp.client"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "joplin_mcp.models"
 ignore_errors = true
 
 [[tool.mypy.overrides]]

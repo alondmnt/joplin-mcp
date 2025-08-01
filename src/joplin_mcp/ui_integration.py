@@ -324,14 +324,90 @@ class ChatInterface(ABC):
         """Find the configuration file for this chat interface."""
         pass
     
-    @abstractmethod
+    def create_base_mcp_config(
+        self, 
+        config_path: Path, 
+        is_development: bool = False
+    ) -> Dict[str, Any]:
+        """Create base MCP server configuration that works for most interfaces."""
+        python_path = shutil.which("python") or shutil.which("python3") or sys.executable
+        
+        if is_development:
+            # Development install - use run_fastmcp_server.py
+            project_root = config_path.parent
+            server_script = project_root / "run_fastmcp_server.py"
+            
+            mcp_config = {
+                "command": python_path,
+                "args": [str(server_script)],
+                "cwd": str(project_root),
+                "env": {
+                    "PYTHONPATH": str(project_root)
+                }
+            }
+        else:
+            # Pip install - use module command
+            mcp_config = {
+                "command": "joplin-mcp-server",
+                "env": {}
+            }
+        
+        # Add Joplin-specific environment variables
+        env_vars = self.get_joplin_environment_variables(config_path)
+        mcp_config["env"].update(env_vars)
+        
+        return mcp_config
+    
+    def get_joplin_environment_variables(self, config_path: Path) -> Dict[str, str]:
+        """Extract Joplin environment variables from config file.
+        
+        Subclasses can override this to use different config reading methods.
+        """
+        env_vars = {}
+        
+        if not config_path.exists():
+            return env_vars
+            
+        try:
+            # Default implementation using JoplinMCPConfig
+            from .config import JoplinMCPConfig
+            joplin_config = JoplinMCPConfig.from_file(config_path)
+            
+            if joplin_config.token:
+                env_vars["JOPLIN_API_TOKEN"] = joplin_config.token
+            if joplin_config.base_url:
+                env_vars["JOPLIN_API_BASE_URL"] = joplin_config.base_url
+            if not joplin_config.verify_ssl:
+                env_vars["JOPLIN_VERIFY_SSL"] = "false"
+                
+        except Exception:
+            # Fallback to raw JSON reading for backward compatibility
+            try:
+                with open(config_path, 'r') as f:
+                    raw_config = json.load(f)
+                
+                # Legacy field names for backward compatibility
+                if raw_config.get("token"):
+                    env_vars["JOPLIN_TOKEN"] = raw_config["token"]
+                if not raw_config.get("verify_ssl", True):
+                    env_vars["JOPLIN_VERIFY_SSL"] = "false"
+                    
+            except (json.JSONDecodeError, FileNotFoundError):
+                pass
+        
+        return env_vars
+    
     def create_mcp_config(
         self, 
         config_path: Path, 
         is_development: bool = False
     ) -> Dict[str, Any]:
-        """Create MCP server configuration for this interface."""
-        pass
+        """Create MCP server configuration for this interface.
+        
+        Default implementation works for most interfaces.
+        Override if you need custom configuration structure.
+        """
+        return self.create_base_mcp_config(config_path, is_development)
     
     @abstractmethod
     def get_manual_config_instructions(
@@ -363,49 +439,7 @@ class ClaudeDesktopInterface(ChatInterface):
         
         return None
     
-    def create_mcp_config(
-        self, 
-        config_path: Path, 
-        is_development: bool = False
-    ) -> Dict[str, Any]:
-        """Create MCP server configuration for Claude Desktop."""
-        python_path = shutil.which("python") or shutil.which("python3") or sys.executable
-        
-        if is_development:
-            # Development install - use run_fastmcp_server.py
-            project_root = config_path.parent
-            server_script = project_root / "run_fastmcp_server.py"
-            
-            mcp_config = {
-                "command": python_path,
-                "args": [str(server_script)],
-                "cwd": str(project_root),
-                "env": {
-                    "PYTHONPATH": str(project_root)
-                }
-            }
-        else:
-            # Pip install - use module command
-            mcp_config = {
-                "command": "joplin-mcp-server",
-                "env": {}
-            }
-        
-        # Add Joplin config from file
-        if config_path.exists():
-            try:
-                with open(config_path, 'r') as f:
-                    joplin_config = json.load(f)
-                
-                if joplin_config.get("token"):
-                    mcp_config["env"]["JOPLIN_TOKEN"] = joplin_config["token"]
-                
-                if not joplin_config.get("verify_ssl", True):
-                    mcp_config["env"]["JOPLIN_VERIFY_SSL"] = "false"
-            except (json.JSONDecodeError, FileNotFoundError):
-                pass
-        
-        return mcp_config
+    # Claude Desktop uses the default base implementation
     
     def get_manual_config_instructions(
         self, 
@@ -447,14 +481,8 @@ class OllamaInterface(ChatInterface):
         # TODO: Implement when Ollama MCP support is added
         return None
     
-    def create_mcp_config(
-        self, 
-        config_path: Path, 
-        is_development: bool = False
-    ) -> Dict[str, Any]:
-        """Create MCP server configuration for Ollama."""
-        # TODO: Implement based on Ollama's MCP configuration format
-        return {}
+    # Ollama uses the default base implementation
+    # Override get_joplin_environment_variables() if Ollama needs different env vars
     
     def get_manual_config_instructions(
         self, 
@@ -464,11 +492,80 @@ class OllamaInterface(ChatInterface):
         """Get manual configuration instructions for Ollama."""
         return "Ollama MCP integration coming soon!"
 
+class JanInterface(ChatInterface):
+    """Jan AI integration."""
+    
+    @property
+    def name(self) -> str:
+        return "Jan AI"
+    
+    def find_config_file(self) -> Optional[Path]:
+        """Find Jan AI configuration file."""
+        possible_paths = [
+            Path.home() / "Library" / "Application Support" / "Jan" / "data" / "mcp_config.json",  # macOS (confirmed)
+            Path.home() / "AppData" / "Roaming" / "Jan" / "data" / "mcp_config.json",  # Windows (likely)
+            Path.home() / "AppData" / "Local" / "Jan" / "data" / "mcp_config.json",  # Windows Alternative
+            Path.home() / ".config" / "jan" / "data" / "mcp_config.json",  # Linux XDG
+            Path.home() / ".jan" / "data" / "mcp_config.json",  # Linux Alternative
+        ]
+        
+        for path in possible_paths:
+            if path.exists():
+                return path
+        
+        return None
+    
+    # Jan AI uses the default base implementation
+    
+    def get_manual_config_instructions(
+        self, 
+        config_path: Path, 
+        is_development: bool = False
+    ) -> str:
+        """Get manual configuration instructions for Jan AI."""
+        mcp_config = self.create_mcp_config(config_path, is_development)
+        
+        # Jan AI uses the same format as Claude Desktop, with an optional "active" field
+        full_config = {
+            "mcpServers": {
+                "joplin": {
+                    **mcp_config,
+                    "active": True  # Enable the MCP server by default
+                }
+            }
+        }
+        
+        config_locations = [
+            "**macOS:** `~/Library/Application Support/Jan/data/mcp_config.json`",
+            "**Windows:** `%APPDATA%\\Jan\\data\\mcp_config.json` (likely)",
+            "**Linux:** `~/.config/jan/data/mcp_config.json` (likely)"
+        ]
+        
+        return f"""Add this to your Jan AI MCP configuration file:
+
+{chr(10).join(config_locations)}
+
+```json
+{json.dumps(full_config, indent=2)}
+```
+
+**Important Notes:**
+1. The `"active": true` field enables the MCP server in Jan AI
+2. Create the `mcp_config.json` file if it doesn't exist
+3. Restart Jan AI after making configuration changes
+4. Make sure Joplin is running and Web Clipper is enabled
+
+If you have trouble:
+- Check Jan AI's GitHub repository: https://github.com/janhq/jan
+- Verify the file path exists (create directories if needed)
+- Check Jan AI's logs for MCP connection errors"""
+
 # === CHAT INTERFACE REGISTRY ===
 
 _INTERFACES: Dict[str, Type[ChatInterface]] = {
     "claude": ClaudeDesktopInterface,
     "ollama": OllamaInterface,
+    "jan": JanInterface,
 }
 
 def get_available_interfaces() -> List[str]:
@@ -532,14 +629,24 @@ def update_chat_interface_config(
         except json.JSONDecodeError:
             print_warning(f"{interface.name} config is invalid. Creating new one.")
     
-    # Ensure mcpServers section exists (Claude Desktop specific for now)
-    if interface_name == "claude":
+    # Ensure mcpServers section exists for interfaces that use this format
+    if interface_name in ["claude", "jan"]:
         if "mcpServers" not in interface_config:
             interface_config["mcpServers"] = {}
         
         # Add Joplin MCP server config
         mcp_config = interface.create_mcp_config(config_path, is_development)
+        
+        # Jan AI requires an "active" field to enable the MCP server
+        if interface_name == "jan":
+            mcp_config["active"] = True
+            
         interface_config["mcpServers"]["joplin"] = mcp_config
+    else:
+        # For other interfaces, we might need different configuration formats
+        print_warning(f"Auto-configuration for {interface.name} is not yet implemented.")
+        print_info("Falling back to manual configuration instructions.")
+        return False
     
     # Backup existing config
     backup_path = interface_config_path.with_suffix('.json.backup')
@@ -583,7 +690,7 @@ def print_header(title: str) -> None:
     print_colored(f"  {title}", Colors.CYAN + Colors.BOLD)
     print_colored("="*60, Colors.CYAN)
 
-def print_final_instructions(config_path: Path, claude_updated: bool, is_development: bool = False):
+def print_final_instructions(config_path: Path, interface_results: Dict[str, bool], is_development: bool = False):
     """Print final setup instructions with install-specific details."""
     print_header("Installation Complete!")
     
@@ -592,58 +699,28 @@ def print_final_instructions(config_path: Path, claude_updated: bool, is_develop
     
     print_colored("📋 What was configured:", Colors.BOLD)
     print_info(f"• Joplin configuration: {config_path}")
-    if claude_updated:
-        print_info("• Claude Desktop configuration updated")
-    else:
-        print_warning("• Claude Desktop configuration needs manual setup")
+    
+    # Show results for each interface that was attempted
+    for interface_name, success in interface_results.items():
+        interface = get_interface(interface_name)
+        if success:
+            print_info(f"• {interface.name} configuration updated")
+        else:
+            print_warning(f"• {interface.name} configuration needs manual setup")
     
     print()
     print_colored("🚀 Next steps:", Colors.BOLD)
     
-    if not claude_updated:
-        print_info("1. Manually add the MCP server to your Claude Desktop config:")
-        print_colored('   Add this to your Claude Desktop config file:', Colors.CYAN)
-        
-        if is_development:
-            # Development install - show full command with paths
-            import shutil
-            import sys
-            from pathlib import Path
-            
-            python_path = shutil.which("python") or shutil.which("python3") or sys.executable
-            project_root = config_path.parent
-            server_script = project_root / "run_fastmcp_server.py"
-            
-            sample_config = {
-                "mcpServers": {
-                    "joplin": {
-                        "command": python_path,
-                        "args": [str(server_script)],
-                        "cwd": str(project_root),
-                        "env": {
-                            "PYTHONPATH": str(project_root)
-                        }
-                    }
-                }
-            }
-        else:
-            # Pip install - show simple command
-            sample_config = {
-                "mcpServers": {
-                    "joplin": {
-                        "command": "joplin-mcp-server",
-                        "env": {}
-                    }
-                }
-            }
-        
-        import json
-        print_colored(json.dumps(sample_config, indent=2), Colors.CYAN)
-        print()
-    
-    print_info("2. Restart Claude Desktop to load the new configuration")
-    print_info("3. In Claude Desktop, start a new conversation")
-    print_info("4. The Joplin MCP tools should now be available!")
+    # Show manual instructions for any failed configurations
+    any_failed = any(not success for success in interface_results.values())
+    if any_failed:
+        for interface_name, success in interface_results.items():
+            if not success:
+                interface = get_interface(interface_name)
+                print_info(f"Manually add the MCP server to your {interface.name} config:")
+                print_colored(interface.get_manual_config_instructions(config_path, is_development), Colors.CYAN)
+                print()
+
     
     # Show install-specific information
     if not is_development:
@@ -698,7 +775,8 @@ def print_final_instructions(config_path: Path, claude_updated: bool, is_develop
 def run_installation_process(
     config_path_resolver,
     is_development: bool = False,
-    welcome_message: str = "Welcome! This will configure the Joplin MCP server."
+    welcome_message: str = "Welcome! This will configure the Joplin MCP server.",
+    interfaces: List[str] = None
 ) -> int:
     """Unified installation process for both development and pip installs.
     
@@ -706,13 +784,17 @@ def run_installation_process(
         config_path_resolver: Function that takes a token and returns a config path
         is_development: Whether this is a development install
         welcome_message: Custom welcome message
+        interfaces: List of interface names to configure (default: ["claude", "jan"])
     
     Returns:
         Exit code (0 for success, 1 for failure)
     """
+    if interfaces is None:
+        interfaces = ["claude", "jan"]  # Support Claude Desktop and Jan AI by default
+    
     print_header("Joplin MCP Server Installation")
     print_colored(welcome_message, Colors.WHITE)
-    print_colored("This will configure access to your Joplin notes from Claude Desktop.", Colors.WHITE)
+    print_colored("This will configure access to your Joplin notes from supported AI assistants.", Colors.WHITE)
     
     try:
         # Step 1: Get Joplin API token
@@ -721,18 +803,25 @@ def run_installation_process(
         # Step 2: Create/update Joplin configuration
         config_path = config_path_resolver(token)
         
-        # Step 3: Update Claude Desktop configuration
-        claude_updated = update_chat_interface_config(
-            interface_name="claude",
-            config_path=config_path,
-            is_development=is_development
-        )
+        # Step 3: Update AI interface configurations
+        interface_results = {}
+        for interface_name in interfaces:
+            try:
+                success = update_chat_interface_config(
+                    interface_name=interface_name,
+                    config_path=config_path,
+                    is_development=is_development
+                )
+                interface_results[interface_name] = success
+            except Exception as e:
+                print_warning(f"Failed to configure {interface_name}: {e}")
+                interface_results[interface_name] = False
         
         # Step 4: Test connection
         connection_ok = test_joplin_connection(config_path)
         
         # Step 5: Print final instructions
-        print_final_instructions(config_path, claude_updated, is_development)
+        print_final_instructions(config_path, interface_results, is_development)
         
         if not connection_ok:
             print_warning("Connection test failed, but installation completed.")

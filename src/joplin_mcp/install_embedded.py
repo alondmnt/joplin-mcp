@@ -14,8 +14,8 @@ def create_joplin_config(token: str) -> Path:
     """Create or update the joplin-mcp.json configuration file."""
     print_step("Creating Joplin MCP Configuration")
     
-    # For pip-installed packages, create config in current directory
-    config_path = Path.cwd() / "joplin-mcp.json"
+    # Create config in user's home directory for global access
+    config_path = Path.home() / ".joplin-mcp.json"
     
     # Use centralized interactive config creation
     from .config import JoplinMCPConfig
