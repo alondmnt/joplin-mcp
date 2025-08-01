@@ -6,6 +6,7 @@ from .jex_importer import JEXImporter
 from .html_importer import HTMLImporter
 from .txt_importer import TxtImporter
 from .csv_importer import CSVImporter
+from .enex_importer import ENEXImporter
 
 __all__ = [
     "BaseImporter",
@@ -14,4 +15,5 @@ __all__ = [
     "HTMLImporter",
     "TxtImporter",
     "CSVImporter",
+    "ENEXImporter",
 ]
