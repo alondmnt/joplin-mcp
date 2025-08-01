@@ -180,6 +180,7 @@ class RAWImporter(BaseImporter):
                     frontmatter = content[4:end_marker]
                     try:
                         import yaml  # type: ignore
+
                         metadata = yaml.safe_load(frontmatter) or {}
                         content = content[end_marker + 5 :]  # Remove frontmatter
                     except ImportError:

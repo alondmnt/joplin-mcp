@@ -153,7 +153,9 @@ class CSVImporter(BaseImporter):
             import_mode = getattr(self.options, "csv_import_mode", "table")
 
             if import_mode == "rows":
-                return self._create_notes_from_rows(path, rows, used_encoding or "utf-8")
+                return self._create_notes_from_rows(
+                    path, rows, used_encoding or "utf-8"
+                )
             else:
                 return self._create_table_note(path, rows, used_encoding or "utf-8")
 

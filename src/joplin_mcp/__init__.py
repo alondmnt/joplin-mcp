@@ -38,6 +38,7 @@ __all__ = [
     "__description__",
 ]
 
+
 def get_version() -> str:
     """Get the current version of joplin-mcp."""
     return __version__

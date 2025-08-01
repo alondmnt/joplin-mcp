@@ -1,9 +1,9 @@
 """Type definitions for Joplin MCP server."""
 
-from .import_types import ImportedNote, ImportResult, ImportOptions
+from .import_types import ImportedNote, ImportOptions, ImportResult
 
 __all__ = [
     "ImportedNote",
-    "ImportResult", 
+    "ImportResult",
     "ImportOptions",
 ]

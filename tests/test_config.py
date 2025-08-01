@@ -650,7 +650,7 @@ class TestConfigValidationAndEdgeCases:
         config_data1 = {"host": "json-host", "token": "json-token"}
         config_data2 = {"host": "yaml-host", "token": "yaml-token"}
 
-        # Create unique temporary file names in current directory 
+        # Create unique temporary file names in current directory
         unique_id = str(uuid.uuid4())[:8]
         json_file = f"test-joplin-mcp-{unique_id}.json"
         yaml_file = f"test-joplin-mcp-{unique_id}.yaml"
@@ -659,12 +659,14 @@ class TestConfigValidationAndEdgeCases:
             # Write config data to temp files in current directory
             with open(json_file, "w") as f:
                 json.dump(config_data1, f)
-            
+
             with open(yaml_file, "w") as f:
                 yaml.dump(config_data2, f)
 
             # Test auto discovery with specific filenames
-            config = JoplinMCPConfig.auto_discover(search_filenames=[json_file, yaml_file])
+            config = JoplinMCPConfig.auto_discover(
+                search_filenames=[json_file, yaml_file]
+            )
 
             # Should find the first file in the search order (JSON comes first)
             assert config.host == "json-host"
@@ -696,7 +698,17 @@ class TestConfigValidationAndEdgeCases:
 
         config_dict = config.to_dict()
 
-        expected_keys = {"host", "port", "token", "timeout", "verify_ssl", "base_url", "tools", "enabled_tools_count", "disabled_tools_count"}
+        expected_keys = {
+            "host",
+            "port",
+            "token",
+            "timeout",
+            "verify_ssl",
+            "base_url",
+            "tools",
+            "enabled_tools_count",
+            "disabled_tools_count",
+        }
         assert set(config_dict.keys()) == expected_keys
 
         assert config_dict["host"] == "test-host"
@@ -940,9 +952,7 @@ class TestConfigErrorHandlingAndMessages:
             },
         ):
             warnings = []
-            JoplinMCPConfig.from_environment_with_warnings(
-                warning_collector=warnings
-            )
+            JoplinMCPConfig.from_environment_with_warnings(warning_collector=warnings)
 
             # Should detect deprecated option and suggest new one
             assert len(warnings) > 0
@@ -957,11 +967,11 @@ class TestConfigToolConfiguration:
     def test_config_default_tools_all_enabled(self):
         """Test that all tools are enabled by default."""
         config = JoplinMCPConfig(token="test-token")
-        
+
         # All tools should be enabled by default
         assert len(config.get_enabled_tools()) == len(config.DEFAULT_TOOLS)
         assert len(config.get_disabled_tools()) == 0
-        
+
         # Check specific tools
         assert config.is_tool_enabled("find_notes")
         assert config.is_tool_enabled("create_note")
@@ -976,9 +986,9 @@ class TestConfigToolConfiguration:
             "delete_note": False,
             "ping_joplin": True,
         }
-        
+
         config = JoplinMCPConfig(token="test-token", tools=tools_config)
-        
+
         assert config.is_tool_enabled("find_notes")
         assert config.is_tool_enabled("create_note")
         assert not config.is_tool_enabled("delete_note")
@@ -986,58 +996,64 @@ class TestConfigToolConfiguration:
 
     def test_config_tools_from_file_json(self):
         """Test tool configuration loading from JSON file."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump({
-                "host": "localhost",
-                "port": 41184,
-                "token": "test-token",
-                "tools": {
-                    "find_notes": True,
-                    "create_note": False,
-                    "delete_note": False,
-                    "ping_joplin": True,
-                }
-            }, f)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(
+                {
+                    "host": "localhost",
+                    "port": 41184,
+                    "token": "test-token",
+                    "tools": {
+                        "find_notes": True,
+                        "create_note": False,
+                        "delete_note": False,
+                        "ping_joplin": True,
+                    },
+                },
+                f,
+            )
             temp_path = f.name
 
         try:
             config = JoplinMCPConfig.from_file(temp_path)
-            
+
             assert config.is_tool_enabled("find_notes")
             assert not config.is_tool_enabled("create_note")
             assert not config.is_tool_enabled("delete_note")
             assert config.is_tool_enabled("ping_joplin")
-            
+
             # Check that unspecified tools use defaults
             assert config.is_tool_enabled("get_note")  # Should be default True
-            
+
         finally:
             os.unlink(temp_path)
 
     def test_config_tools_from_file_yaml(self):
         """Test tool configuration loading from YAML file."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            yaml.dump({
-                "host": "localhost",
-                "port": 41184,
-                "token": "test-token",
-                "tools": {
-                    "find_notes": True,
-                    "create_note": False,
-                    "delete_note": False,
-                    "ping_joplin": True,
-                }
-            }, f)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            yaml.dump(
+                {
+                    "host": "localhost",
+                    "port": 41184,
+                    "token": "test-token",
+                    "tools": {
+                        "find_notes": True,
+                        "create_note": False,
+                        "delete_note": False,
+                        "ping_joplin": True,
+                    },
+                },
+                f,
+            )
             temp_path = f.name
 
         try:
             config = JoplinMCPConfig.from_file(temp_path)
-            
+
             assert config.is_tool_enabled("find_notes")
             assert not config.is_tool_enabled("create_note")
             assert not config.is_tool_enabled("delete_note")
             assert config.is_tool_enabled("ping_joplin")
-            
+
         finally:
             os.unlink(temp_path)
 
@@ -1054,7 +1070,7 @@ class TestConfigToolConfiguration:
             },
         ):
             config = JoplinMCPConfig.from_environment()
-            
+
             assert config.is_tool_enabled("find_notes")
             assert not config.is_tool_enabled("create_note")
             assert not config.is_tool_enabled("delete_note")
@@ -1063,12 +1079,12 @@ class TestConfigToolConfiguration:
     def test_config_tools_enable_disable_methods(self):
         """Test individual tool enable/disable methods."""
         config = JoplinMCPConfig(token="test-token")
-        
+
         # Test disable
         assert config.is_tool_enabled("create_note")
         config.disable_tool("create_note")
         assert not config.is_tool_enabled("create_note")
-        
+
         # Test enable
         config.enable_tool("create_note")
         assert config.is_tool_enabled("create_note")
@@ -1076,32 +1092,32 @@ class TestConfigToolConfiguration:
     def test_config_tools_enable_disable_invalid_tool(self):
         """Test that enabling/disabling invalid tools raises errors."""
         config = JoplinMCPConfig(token="test-token")
-        
+
         with pytest.raises(ConfigError, match="Unknown tool"):
             config.enable_tool("invalid_tool")
-            
+
         with pytest.raises(ConfigError, match="Unknown tool"):
             config.disable_tool("invalid_tool")
 
     def test_config_tools_category_management(self):
         """Test tool category enable/disable functionality."""
         config = JoplinMCPConfig(token="test-token")
-        
+
         # Test disable category
         config.disable_tool_category("tags")
-        
+
         # All tag tools should be disabled
         tag_tools = config.get_tool_categories()["tags"]
         for tool in tag_tools:
             assert not config.is_tool_enabled(tool)
-        
+
         # Non-tag tools should still be enabled
         assert config.is_tool_enabled("find_notes")
         assert config.is_tool_enabled("create_note")
-        
+
         # Test enable category
         config.enable_tool_category("tags")
-        
+
         # All tag tools should be enabled again
         for tool in tag_tools:
             assert config.is_tool_enabled(tool)
@@ -1109,31 +1125,31 @@ class TestConfigToolConfiguration:
     def test_config_tools_category_invalid_category(self):
         """Test that invalid categories raise errors."""
         config = JoplinMCPConfig(token="test-token")
-        
+
         with pytest.raises(ConfigError, match="Unknown tool category"):
             config.enable_tool_category("invalid_category")
-            
+
         with pytest.raises(ConfigError, match="Unknown tool category"):
             config.disable_tool_category("invalid_category")
 
     def test_config_tools_get_enabled_disabled_lists(self):
         """Test getting lists of enabled/disabled tools."""
         config = JoplinMCPConfig(token="test-token")
-        
+
         # Initially all tools should be enabled
         enabled = config.get_enabled_tools()
         disabled = config.get_disabled_tools()
-        
+
         assert len(enabled) == len(config.DEFAULT_TOOLS)
         assert len(disabled) == 0
-        
+
         # Disable some tools
         config.disable_tool("delete_note")
         config.disable_tool("delete_notebook")
-        
+
         enabled = config.get_enabled_tools()
         disabled = config.get_disabled_tools()
-        
+
         assert len(enabled) == len(config.DEFAULT_TOOLS) - 2
         assert len(disabled) == 2
         assert "delete_note" in disabled
@@ -1143,7 +1159,7 @@ class TestConfigToolConfiguration:
         """Test validation of invalid tool names in configuration."""
         config = JoplinMCPConfig(token="test-token")
         config.tools["invalid_tool"] = True
-        
+
         with pytest.raises(ConfigError, match="Unknown tool in configuration"):
             config.validate()
 
@@ -1151,7 +1167,7 @@ class TestConfigToolConfiguration:
         """Test validation of invalid tool values in configuration."""
         config = JoplinMCPConfig(token="test-token")
         config.tools["find_notes"] = "invalid"
-        
+
         with pytest.raises(ConfigError, match="Tool configuration.*must be boolean"):
             config.validate()
 
@@ -1159,52 +1175,67 @@ class TestConfigToolConfiguration:
         """Test validation of invalid tools structure."""
         config = JoplinMCPConfig(token="test-token")
         config.tools = "invalid"
-        
-        with pytest.raises(ConfigError, match="Tools configuration must be a dictionary"):
+
+        with pytest.raises(
+            ConfigError, match="Tools configuration must be a dictionary"
+        ):
             config.validate()
 
     def test_config_tools_file_validation_invalid_tool_name(self):
         """Test file validation with invalid tool names."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump({
-                "token": "test-token",
-                "tools": {
-                    "invalid_tool": True,
-                    "find_notes": True,
-                }
-            }, f)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(
+                {
+                    "token": "test-token",
+                    "tools": {
+                        "invalid_tool": True,
+                        "find_notes": True,
+                    },
+                },
+                f,
+            )
             temp_path = f.name
 
         try:
-            with pytest.raises(ConfigError, match="Unknown tool in 'tools' configuration"):
+            with pytest.raises(
+                ConfigError, match="Unknown tool in 'tools' configuration"
+            ):
                 JoplinMCPConfig.from_file(temp_path)
         finally:
             os.unlink(temp_path)
 
     def test_config_tools_file_validation_invalid_tool_value_type(self):
         """Test file validation with invalid tool value types."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump({
-                "token": "test-token",
-                "tools": {
-                    "find_notes": "invalid",
-                }
-            }, f)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(
+                {
+                    "token": "test-token",
+                    "tools": {
+                        "find_notes": "invalid",
+                    },
+                },
+                f,
+            )
             temp_path = f.name
 
         try:
-            with pytest.raises(ConfigError, match="Invalid data type for tool 'find_notes'"):
+            with pytest.raises(
+                ConfigError, match="Invalid data type for tool 'find_notes'"
+            ):
                 JoplinMCPConfig.from_file(temp_path)
         finally:
             os.unlink(temp_path)
 
     def test_config_tools_file_validation_invalid_tools_structure(self):
         """Test file validation with invalid tools structure."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump({
-                "token": "test-token",
-                "tools": "invalid",
-            }, f)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(
+                {
+                    "token": "test-token",
+                    "tools": "invalid",
+                },
+                f,
+            )
             temp_path = f.name
 
         try:
@@ -1215,14 +1246,17 @@ class TestConfigToolConfiguration:
 
     def test_config_tools_priority_env_over_file(self):
         """Test that environment variables override file configuration for tools."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-            json.dump({
-                "token": "test-token",
-                "tools": {
-                    "find_notes": False,
-                    "create_note": True,
-                }
-            }, f)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(
+                {
+                    "token": "test-token",
+                    "tools": {
+                        "find_notes": False,
+                        "create_note": True,
+                    },
+                },
+                f,
+            )
             temp_path = f.name
 
         try:
@@ -1234,12 +1268,14 @@ class TestConfigToolConfiguration:
                 },
             ):
                 config = JoplinMCPConfig.from_file_and_environment(temp_path)
-                
+
                 # Environment should override file
                 assert config.is_tool_enabled("find_notes")  # env: true, file: false
-                assert config.is_tool_enabled("create_note")   # file: true, no env
-                assert not config.is_tool_enabled("delete_note")  # env: false, file: default true
-                
+                assert config.is_tool_enabled("create_note")  # file: true, no env
+                assert not config.is_tool_enabled(
+                    "delete_note"
+                )  # env: false, file: default true
+
         finally:
             os.unlink(temp_path)
 
@@ -1247,18 +1283,18 @@ class TestConfigToolConfiguration:
         """Test that configuration copy includes tools configuration."""
         config = JoplinMCPConfig(token="test-token")
         config.disable_tool("delete_note")
-        
+
         copied_config = config.copy()
-        
+
         assert not copied_config.is_tool_enabled("delete_note")
         assert copied_config.is_tool_enabled("find_notes")
 
     def test_config_tools_copy_with_tools_override(self):
         """Test configuration copy with tools override."""
         config = JoplinMCPConfig(token="test-token")
-        
+
         copied_config = config.copy(tools={"find_notes": False, "create_note": True})
-        
+
         assert not copied_config.is_tool_enabled("find_notes")
         assert copied_config.is_tool_enabled("create_note")
 
@@ -1266,9 +1302,9 @@ class TestConfigToolConfiguration:
         """Test that to_dict includes tools configuration."""
         config = JoplinMCPConfig(token="test-token")
         config.disable_tool("delete_note")
-        
+
         config_dict = config.to_dict()
-        
+
         assert "tools" in config_dict
         assert "enabled_tools_count" in config_dict
         assert "disabled_tools_count" in config_dict
@@ -1280,9 +1316,9 @@ class TestConfigToolConfiguration:
         config = JoplinMCPConfig(token="test-token")
         config.disable_tool("delete_note")
         config.disable_tool("delete_notebook")
-        
+
         repr_str = repr(config)
-        
+
         assert "tools=" in repr_str
         assert "/25 enabled" in repr_str or "enabled)" in repr_str
 
@@ -1290,20 +1326,20 @@ class TestConfigToolConfiguration:
         """Test that save_to_file includes tools configuration."""
         config = JoplinMCPConfig(token="test-token")
         config.disable_tool("delete_note")
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             temp_path = f.name
-        
+
         try:
             config.save_to_file(temp_path)
-            
-            with open(temp_path, 'r') as f:
+
+            with open(temp_path) as f:
                 saved_data = json.load(f)
-            
+
             assert "tools" in saved_data
             assert not saved_data["tools"]["delete_note"]
             assert saved_data["tools"]["find_notes"]
-            
+
         finally:
             os.unlink(temp_path)
 
@@ -1311,9 +1347,9 @@ class TestConfigToolConfiguration:
         """Test that connection_info includes tools summary."""
         config = JoplinMCPConfig(token="test-token")
         config.disable_tool("delete_note")
-        
+
         conn_info = config.connection_info
-        
+
         assert "tools_summary" in conn_info
         assert "enabled" in conn_info["tools_summary"]
         assert "disabled" in conn_info["tools_summary"]
@@ -1325,9 +1361,9 @@ class TestConfigToolConfiguration:
         config = JoplinMCPConfig(token="test-token")
         config.tools["invalid_tool"] = True
         config.tools["find_notes"] = "invalid"
-        
+
         errors = config.get_validation_errors()
-        
+
         # Should have errors for invalid tool and invalid tool value
         tool_errors = [e for e in errors if "tool" in str(e).lower()]
         assert len(tool_errors) >= 2

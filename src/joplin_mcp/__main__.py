@@ -10,4 +10,5 @@ import sys
 if __name__ == "__main__":
     # Default to running the server
     from .server import main
-    sys.exit(main()) 
+
+    sys.exit(main())

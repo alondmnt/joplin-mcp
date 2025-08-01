@@ -59,7 +59,7 @@ class TxtImporter(BaseImporter):
             raise ImportValidationError(
                 f"Unable to decode text file with common encodings: {file_path}"
             )
-        
+
         return True
 
     async def parse(self, file_path: str) -> List[ImportedNote]:
