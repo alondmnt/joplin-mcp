@@ -5,6 +5,7 @@ from .markdown_importer import MarkdownImporter
 from .jex_importer import JEXImporter
 from .html_importer import HTMLImporter
 from .txt_importer import TxtImporter
+from .csv_importer import CSVImporter
 
 __all__ = [
     "BaseImporter",
@@ -12,4 +13,5 @@ __all__ = [
     "JEXImporter",
     "HTMLImporter",
     "TxtImporter",
+    "CSVImporter",
 ]
