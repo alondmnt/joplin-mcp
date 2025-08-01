@@ -31,6 +31,7 @@ This MCP server provides **22 optimized tools** for comprehensive Joplin integra
 
 ### **Import**
 - **File Import**: `import_from_file` - Import Markdown, HTML, CSV, TXT, ENEX, ZIP, JEX files and directories
+  > **Note**: Import tools are disabled by default for security. Enable with `"import_from_file": true` in your config.
 
 ### **System**
 - **Health**: `ping_joplin`
@@ -282,7 +283,11 @@ Fine-tune which operations the AI can perform by editing your config:
     "delete_notebook": false,
     "create_tag": true,
     "update_tag": false,
-    "delete_tag": false
+    "delete_tag": false,
+    "import_from_file": true,
+    "get_all_notes": false,
+    "update_notebook": false,
+    "update_tag": false
   }
 }
 ```
