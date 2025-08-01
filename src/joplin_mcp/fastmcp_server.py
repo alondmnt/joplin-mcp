@@ -2690,7 +2690,7 @@ async def import_from_file(
     file_path: Annotated[str, Field(description="Path to the file to import")],
     format: Annotated[
         Optional[str],
-        Field(description="File format (md, jex) - auto-detected if not specified"),
+        Field(description="File format (md, html, txt, csv, enex, zip, jex) - auto-detected if not specified"),
     ] = None,
     target_notebook: Annotated[
         Optional[str], Field(description="Target notebook name (optional)")
@@ -2699,13 +2699,20 @@ async def import_from_file(
         Optional[Dict[str, Any]], Field(description="Additional import options")
     ] = None,
 ) -> str:
-    """Import notes from a single file.
+    """Import notes from a single file or directory.
 
     Supports importing from various file formats including:
-    - Markdown files (.md, .markdown) with optional frontmatter
-    - JEX files (Joplin's native export format)
+    - Markdown files (.md, .markdown, .mdown, .mkd) with optional frontmatter and YAML fallback
+    - HTML files (.html, .htm) with BeautifulSoup/markdownify fallback
+    - Text files (.txt, .text) with tag extraction
+    - CSV files (.csv) with table conversion
+    - ENEX files (.enex) - Evernote export format
+    - ZIP files (.zip) - Archive extraction and processing  
+    - JEX files (.jex) - Joplin's native export format
+    - Generic files - Fallback processing for unknown formats
 
     The importer will preserve metadata, tags, and notebook structure where possible.
+    Directory imports are supported for most formats with recursive file processing.
 
     Returns:
         str: Detailed import result with statistics and any errors/warnings
@@ -2714,8 +2721,14 @@ async def import_from_file(
         Import a markdown file:
         import_from_file("/path/to/notes.md")
 
-        Import to specific notebook:
-        import_from_file("/path/to/notes.md", target_notebook="My Notebook")
+        Import HTML content:
+        import_from_file("/path/to/webpage.html", target_notebook="Web Clips")
+
+        Import directory of files:
+        import_from_file("/path/to/notes-folder/", target_notebook="Imported Notes")
+
+        Import CSV data:
+        import_from_file("/path/to/data.csv", target_notebook="Data Tables")
 
         Import JEX backup:
         import_from_file("/path/to/backup.jex")
@@ -2724,7 +2737,16 @@ async def import_from_file(
     from pathlib import Path
 
     from .import_engine import JoplinImportEngine
-    from .importers import JEXImporter, MarkdownImporter
+    from .importers import (
+        JEXImporter, 
+        MarkdownImporter,
+        HTMLImporter,
+        TxtImporter,
+        CSVImporter,
+        ENEXImporter,
+        ZIPImporter,
+        GenericImporter
+    )
     from .importers.base import ImportProcessingError, ImportValidationError
     from .types.import_types import ImportOptions
 
@@ -2782,6 +2804,14 @@ PROCESSING_TIME: {result.processing_time:.2f}s"""
             "md": MarkdownImporter,
             "markdown": MarkdownImporter,
             "jex": JEXImporter,
+            "html": HTMLImporter,
+            "htm": HTMLImporter,
+            "txt": TxtImporter,
+            "text": TxtImporter,
+            "csv": CSVImporter,
+            "enex": ENEXImporter,
+            "zip": ZIPImporter,
+            "generic": GenericImporter,
         }
 
         importer_class = format_map.get(file_format.lower())
@@ -2800,17 +2830,23 @@ PROCESSING_TIME: {result.processing_time:.2f}s"""
         # Map extensions to formats
         extension_map = {
             "md": "md",
-            "markdown": "markdown",
+            "markdown": "markdown", 
             "mdown": "md",
             "mkd": "md",
             "jex": "jex",
+            "html": "html",
+            "htm": "html",
+            "txt": "txt",
+            "text": "txt",
+            "csv": "csv",
+            "enex": "enex",
+            "zip": "zip",
         }
 
         detected_format = extension_map.get(extension)
         if not detected_format:
-            raise ValueError(
-                f"Cannot detect format for file: {file_path}. Unsupported extension: {extension}"
-            )
+            # Fall back to generic importer for unknown extensions
+            return "generic"
 
         return detected_format
 
@@ -2818,19 +2854,53 @@ PROCESSING_TIME: {result.processing_time:.2f}s"""
         # Load configuration
         config = JoplinMCPConfig.load()
 
-        # Validate file path
+        # Validate file path (support both files and directories)
         path = Path(file_path)
         if not path.exists():
-            return f"ERROR: File does not exist: {file_path}"
-        if not path.is_file():
-            return f"ERROR: Path is not a file: {file_path}"
+            return format_import_result(type('Result', (), {
+                'is_complete_success': False,
+                'is_partial_success': False,
+                'total_processed': 0,
+                'successful_imports': 0,
+                'failed_imports': 0,
+                'skipped_items': 0,
+                'processing_time': 0.0,
+                'created_notebooks': [],
+                'created_tags': [],
+                'errors': [f"Path does not exist: {file_path}"],
+                'warnings': []
+            })())
+        if not (path.is_file() or path.is_dir()):
+            return format_import_result(type('Result', (), {
+                'is_complete_success': False,
+                'is_partial_success': False,
+                'total_processed': 0,
+                'successful_imports': 0,
+                'failed_imports': 0,
+                'skipped_items': 0,
+                'processing_time': 0.0,
+                'created_notebooks': [],
+                'created_tags': [],
+                'errors': [f"Path is neither a file nor directory: {file_path}"],
+                'warnings': []
+            })())
 
         # Detect format if not specified
         if not format:
             try:
-                format = detect_file_format(file_path)
-            except ValueError as e:
-                return f"ERROR: {str(e)}"
+                from .import_system import UnifiedImportSystem
+                unified_system = UnifiedImportSystem()
+                format = unified_system.detect_source_format(file_path)
+            except Exception as e:
+                # Fallback to local detection for files
+                if path.is_file():
+                    try:
+                        format = detect_file_format(file_path)
+                    except ValueError:
+                        format = "generic"
+                else:
+                    # For directories, default to generic
+                    format = "generic"
 
         # Create import options
         base_options = ImportOptions(
