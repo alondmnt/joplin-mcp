@@ -40,7 +40,7 @@ from functools import wraps
 from fastmcp import FastMCP, Context
 
 # Pydantic imports for proper Field annotations
-from pydantic import Field, field_validator, BeforeValidator
+from pydantic import Field
 from typing_extensions import Annotated
 
 # Direct joppy import
@@ -119,14 +119,14 @@ class ItemType(str, Enum):
 
 # === PYDANTIC VALIDATION TYPES ===
 
-def flexible_bool_validator(v):
+def flexible_bool_converter(value: Union[bool, str, None]) -> Optional[bool]:
     """Convert various string representations to boolean for API compatibility."""
-    if v is None:
+    if value is None:
         return None
-    if isinstance(v, bool):
-        return v
-    if isinstance(v, str):
-        value_lower = v.lower().strip()
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        value_lower = value.lower().strip()
         if value_lower in ('true', '1', 'yes', 'on'):
             return True
         elif value_lower in ('false', '0', 'no', 'off'):
@@ -134,14 +134,23 @@ def flexible_bool_validator(v):
         else:
             raise ValueError("Must be a boolean value or string representation (true/false, 1/0, yes/no, on/off)")
     # Handle other truthy/falsy values
-    return bool(v)
+    return bool(value)
 
-# Validation types - mix of Field constraints and custom validators as needed
+def validate_joplin_id(note_id: str) -> str:
+    """Validate that a string is a proper Joplin note ID (32 hex characters)."""
+    import re
+    if not isinstance(note_id, str):
+        raise ValueError("Note ID must be a string")
+    if not re.match(r"^[a-f0-9]{32}$", note_id):
+        raise ValueError("Note ID must be exactly 32 hexadecimal characters (Joplin UUID format)")
+    return note_id
+
+# Validation types - simplified for MCP client compatibility but with runtime validation
 LimitType = Annotated[int, Field(ge=1, le=100)]         # Range validation + automatic string-to-int conversion
 OffsetType = Annotated[int, Field(ge=0)]                # Minimum validation + automatic string-to-int conversion
-RequiredStringType = Annotated[str, Field(min_length=1, pattern=r"^.*\S.*$")]  # Rejects empty/whitespace-only strings
-JoplinIdType = Annotated[str, Field(pattern=r"^[a-f0-9]{32}$")]  # Joplin ID: 32 hex characters (UUID without hyphens)
-OptionalBoolType = Annotated[Optional[Union[bool, str]], BeforeValidator(flexible_bool_validator)]  # Robust string-to-bool conversion
+RequiredStringType = Annotated[str, Field(min_length=1)]  # Simplified: just min length, runtime validation for complex patterns
+JoplinIdType = Annotated[str, Field(min_length=32, max_length=32)]  # Length constraints, runtime regex validation
+OptionalBoolType = Optional[Union[bool, str]]  # Accepts both bool and string, runtime conversion handles strings
 
 # === UTILITY FUNCTIONS ===
 
@@ -1506,6 +1515,12 @@ async def get_note(
         get_note("id", force_full=True) - Force full content
     """
     
+    # Runtime validation for Jan AI compatibility while preserving functionality
+    note_id = validate_joplin_id(note_id)
+    toc_only = flexible_bool_converter(toc_only)
+    force_full = flexible_bool_converter(force_full)
+    metadata_only = flexible_bool_converter(metadata_only)
+    
     include_body = not metadata_only
     
     # Validate line extraction parameters
@@ -1567,6 +1582,9 @@ async def get_links(
     - [link text](:/targetNoteId) - Link to note
     - [link text](:/targetNoteId#section-slug) - Link to specific section in note
     """
+    # Runtime validation for Jan AI compatibility while preserving functionality
+    note_id = validate_joplin_id(note_id)
+    
     client = get_joplin_client()
     
     # Get the note
@@ -1759,6 +1777,10 @@ async def create_note(
         - create_note("Meeting Notes", "Work Projects", "# Meeting with Client") - Create regular note
     """
     
+    # Runtime validation for Jan AI compatibility while preserving functionality
+    is_todo = flexible_bool_converter(is_todo)
+    todo_completed = flexible_bool_converter(todo_completed)
+    
     # Use helper function to get notebook ID
     parent_id = get_notebook_id_by_name(notebook_name)
     
@@ -1789,6 +1811,11 @@ async def update_note(
         - update_note("note123", body="New content", is_todo=True) - Update content and convert to todo
     """
     
+    # Runtime validation for Jan AI compatibility while preserving functionality
+    note_id = validate_joplin_id(note_id)
+    is_todo = flexible_bool_converter(is_todo)
+    todo_completed = flexible_bool_converter(todo_completed)
+    
     update_data = {}
     if title is not None: update_data["title"] = title
     if body is not None: update_data["body"] = body
@@ -1815,6 +1842,9 @@ async def delete_note(
     
     Warning: This action is permanent and cannot be undone.
     """
+    # Runtime validation for Jan AI compatibility while preserving functionality
+    note_id = validate_joplin_id(note_id)
+    
     client = get_joplin_client()
     client.delete_note(note_id)
     return format_delete_success(ItemType.note, note_id)
@@ -1847,6 +1877,10 @@ async def find_notes(
         💡 TIP: For tag-specific searches, use find_notes_with_tag("tag_name") instead.
         💡 TIP: For notebook-specific searches, use find_notes_in_notebook("notebook_name") instead.
     """
+    
+    # Runtime validation for Jan AI compatibility while preserving functionality
+    task = flexible_bool_converter(task)
+    completed = flexible_bool_converter(completed)
     
     client = get_joplin_client()
     
