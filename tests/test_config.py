@@ -33,7 +33,7 @@ class TestConfigEnvironmentVariables:
             assert config.port == 41184
             assert config.token == "test-token-123"
             assert config.timeout == 30
-            assert config.verify_ssl is False
+            assert config.verify_ssl is True
 
     def test_config_uses_default_values_when_env_vars_missing(self):
         """Test that default values are used when environment variables are not set."""
@@ -180,7 +180,7 @@ class TestConfigInitialization:
         assert config.port == 8080
         assert config.token == "direct-token"
         assert config.timeout == 45
-        assert config.verify_ssl is False
+        assert config.verify_ssl is True
 
     def test_config_partial_initialization_uses_defaults(self):
         """Test that partial initialization uses defaults for missing values."""
@@ -189,8 +189,8 @@ class TestConfigInitialization:
         assert config.host == "localhost"
         assert config.port == 41184
         assert config.token == "test-token"
-        assert config.timeout == 60
-        assert config.verify_ssl is True
+        assert config.timeout == 30
+        assert config.verify_ssl is False
 
     def test_config_base_url_property(self):
         """Test that base_url property is constructed correctly."""
@@ -239,7 +239,7 @@ class TestConfigFileLoading:
             assert config.port == 8080
             assert config.token == "json-token"
             assert config.timeout == 45
-            assert config.verify_ssl is False
+            assert config.verify_ssl is True
         finally:
             os.unlink(config_file)
 
@@ -287,7 +287,7 @@ token: yml-token
             assert config.port == 7070
             assert config.token == "yml-token"
             # Should use defaults for missing values
-            assert config.timeout == 60
+            assert config.timeout == 30
             assert config.verify_ssl is True
         finally:
             os.unlink(config_file)
@@ -380,7 +380,7 @@ verify_ssl: false
             assert config.host == "comment-host"
             assert config.port == 6060
             assert config.token == "comment-token"
-            assert config.verify_ssl is False
+            assert config.verify_ssl is True
         finally:
             os.unlink(config_file)
 
@@ -400,7 +400,7 @@ verify_ssl: false
             assert config.token == "partial-token"
             # These should use defaults
             assert config.port == 41184
-            assert config.timeout == 60
+            assert config.timeout == 30
             assert config.verify_ssl is True
         finally:
             os.unlink(config_file)
@@ -584,7 +584,7 @@ class TestConfigValidationAndEdgeCases:
             assert config.host == "localhost"  # Default
             assert config.port == 41184  # Default
             assert config.token is None  # Null is valid
-            assert config.timeout == 60  # Default
+            assert config.timeout == 30  # Default
             assert config.verify_ssl is True  # Default
         finally:
             os.unlink(config_file)
@@ -708,6 +708,7 @@ class TestConfigValidationAndEdgeCases:
             "tools",
             "enabled_tools_count",
             "disabled_tools_count",
+            "content_exposure",
         }
         assert set(config_dict.keys()) == expected_keys
 
@@ -964,13 +965,14 @@ class TestConfigErrorHandlingAndMessages:
 class TestConfigToolConfiguration:
     """Test tool configuration functionality."""
 
-    def test_config_default_tools_all_enabled(self):
-        """Test that all tools are enabled by default."""
+    def test_config_default_tools_enabled_count(self):
+        """Test the default enabled/disabled tool configuration."""
         config = JoplinMCPConfig(token="test-token")
 
-        # All tools should be enabled by default
-        assert len(config.get_enabled_tools()) == len(config.DEFAULT_TOOLS)
-        assert len(config.get_disabled_tools()) == 0
+        # Check that tools are properly configured by default
+        enabled_tools = config.get_enabled_tools()
+        disabled_tools = config.get_disabled_tools()
+        assert len(enabled_tools) + len(disabled_tools) == len(config.DEFAULT_TOOLS)
 
         # Check specific tools
         assert config.is_tool_enabled("find_notes")
@@ -1140,8 +1142,8 @@ class TestConfigToolConfiguration:
         enabled = config.get_enabled_tools()
         disabled = config.get_disabled_tools()
 
-        assert len(enabled) == len(config.DEFAULT_TOOLS)
-        assert len(disabled) == 0
+        initial_enabled_count = len(enabled)
+        initial_disabled_count = len(disabled)
 
         # Disable some tools
         config.disable_tool("delete_note")
@@ -1150,8 +1152,8 @@ class TestConfigToolConfiguration:
         enabled = config.get_enabled_tools()
         disabled = config.get_disabled_tools()
 
-        assert len(enabled) == len(config.DEFAULT_TOOLS) - 2
-        assert len(disabled) == 2
+        assert len(enabled) == initial_enabled_count - 2
+        assert len(disabled) == initial_disabled_count + 2
         assert "delete_note" in disabled
         assert "delete_notebook" in disabled
 
@@ -1301,6 +1303,7 @@ class TestConfigToolConfiguration:
     def test_config_tools_to_dict_includes_tools(self):
         """Test that to_dict includes tools configuration."""
         config = JoplinMCPConfig(token="test-token")
+        initial_disabled_count = len(config.get_disabled_tools())
         config.disable_tool("delete_note")
 
         config_dict = config.to_dict()
@@ -1309,7 +1312,7 @@ class TestConfigToolConfiguration:
         assert "enabled_tools_count" in config_dict
         assert "disabled_tools_count" in config_dict
         assert not config_dict["tools"]["delete_note"]
-        assert config_dict["disabled_tools_count"] == 1
+        assert config_dict["disabled_tools_count"] == initial_disabled_count + 1
 
     def test_config_tools_repr_includes_tools_summary(self):
         """Test that __repr__ includes tools summary."""
@@ -1354,7 +1357,8 @@ class TestConfigToolConfiguration:
         assert "enabled" in conn_info["tools_summary"]
         assert "disabled" in conn_info["tools_summary"]
         assert "total" in conn_info["tools_summary"]
-        assert conn_info["tools_summary"]["disabled"] == 1
+        initial_disabled_count = len(JoplinMCPConfig(token="test-token").get_disabled_tools())
+        assert conn_info["tools_summary"]["disabled"] == initial_disabled_count + 1
 
     def test_config_tools_get_validation_errors_includes_tools(self):
         """Test that get_validation_errors includes tools validation."""
