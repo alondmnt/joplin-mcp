@@ -24,6 +24,8 @@
     "delete_notebook": true,
     "delete_tag": true,
     "update_notebook": true,
+    "update_tag": true,
+    "import_from_file": true,
     "ping_joplin": true
   },
   "content_exposure": {

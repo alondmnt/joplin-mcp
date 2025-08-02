@@ -29,7 +29,10 @@
     "delete_note": false,
     "delete_notebook": false,
     "delete_tag": false,
-    "ping_joplin": false
+    "ping_joplin": false,
+    "import_from_file": false,
+    "get_tags_by_note": false,
+    "update_tag": false
   },
   "content_exposure": {
     "search_results": "preview",
