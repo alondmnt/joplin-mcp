@@ -2749,106 +2749,7 @@ async def import_from_file(
     )
     from .importers.base import ImportProcessingError, ImportValidationError
     from .types.import_types import ImportOptions
-
-    def format_import_result(result) -> str:
-        """Format import result for MCP response."""
-        status = (
-            "SUCCESS"
-            if result.is_complete_success
-            else "PARTIAL_SUCCESS" if result.is_partial_success else "FAILED"
-        )
-
-        response = f"""OPERATION: IMPORT_FROM_FILE
-STATUS: {status}
-TOTAL_PROCESSED: {result.total_processed}
-SUCCESSFUL_IMPORTS: {result.successful_imports}
-FAILED_IMPORTS: {result.failed_imports}
-SKIPPED_ITEMS: {result.skipped_items}
-PROCESSING_TIME: {result.processing_time:.2f}s"""
-
-        if result.created_notebooks:
-            response += f"\nCREATED_NOTEBOOKS: {', '.join(result.created_notebooks)}"
-
-        if result.created_tags:
-            response += f"\nCREATED_TAGS: {', '.join(result.created_tags)}"
-
-        if result.errors:
-            response += f"\nERRORS: {len(result.errors)} error(s)"
-            for error in result.errors[:5]:  # Show first 5 errors
-                response += f"\n  - {error}"
-            if len(result.errors) > 5:
-                response += f"\n  ... and {len(result.errors) - 5} more errors"
-
-        if result.warnings:
-            response += f"\nWARNINGS: {len(result.warnings)} warning(s)"
-            for warning in result.warnings[:3]:  # Show first 3 warnings
-                response += f"\n  - {warning}"
-            if len(result.warnings) > 3:
-                response += f"\n  ... and {len(result.warnings) - 3} more warnings"
-
-        # Add success message
-        if result.is_complete_success:
-            response += f"\nMESSAGE: Import completed successfully - all {result.successful_imports} items imported"
-        elif result.is_partial_success:
-            response += f"\nMESSAGE: Import partially successful - {result.successful_imports}/{result.total_processed} items imported"
-        else:
-            response += (
-                "\nMESSAGE: Import failed - no items were successfully imported"
-            )
-
-        return response
-
-    def get_importer_for_format(file_format: str, options: ImportOptions):
-        """Get the appropriate importer for the specified format."""
-        format_map = {
-            "md": MarkdownImporter,
-            "markdown": MarkdownImporter,
-            "jex": JEXImporter,
-            "html": HTMLImporter,
-            "htm": HTMLImporter,
-            "txt": TxtImporter,
-            "text": TxtImporter,
-            "csv": CSVImporter,
-            "enex": ENEXImporter,
-            "zip": ZIPImporter,
-            "generic": GenericImporter,
-        }
-
-        importer_class = format_map.get(file_format.lower())
-        if not importer_class:
-            raise ValueError(
-                f"Unsupported format: {file_format}. Supported formats: {list(format_map.keys())}"
-            )
-
-        return importer_class(options)
-
-    def detect_file_format(file_path: str) -> str:
-        """Detect file format from file extension."""
-        path = Path(file_path)
-        extension = path.suffix.lstrip(".").lower()
-
-        # Map extensions to formats
-        extension_map = {
-            "md": "md",
-            "markdown": "markdown", 
-            "mdown": "md",
-            "mkd": "md",
-            "jex": "jex",
-            "html": "html",
-            "htm": "html",
-            "txt": "txt",
-            "text": "txt",
-            "csv": "csv",
-            "enex": "enex",
-            "zip": "zip",
-        }
-
-        detected_format = extension_map.get(extension)
-        if not detected_format:
-            # Fall back to generic importer for unknown extensions
-            return "generic"
-
-        return detected_format
+    from .import_tools import format_import_result, get_importer_for_format, detect_file_format
 
     try:
         # Load configuration
@@ -2869,7 +2770,7 @@ PROCESSING_TIME: {result.processing_time:.2f}s"""
                 'created_tags': [],
                 'errors': [f"Path does not exist: {file_path}"],
                 'warnings': []
-            })())
+            })(), "IMPORT_FROM_FILE")
         if not (path.is_file() or path.is_dir()):
             return format_import_result(type('Result', (), {
                 'is_complete_success': False,
@@ -2883,7 +2784,7 @@ PROCESSING_TIME: {result.processing_time:.2f}s"""
                 'created_tags': [],
                 'errors': [f"Path is neither a file nor directory: {file_path}"],
                 'warnings': []
-            })())
+            })(), "IMPORT_FROM_FILE")
 
         # Detect format if not specified
         if not format:
@@ -2927,10 +2828,7 @@ PROCESSING_TIME: {result.processing_time:.2f}s"""
                     base_options.import_options[key] = value
 
         # Get appropriate importer
-        try:
-            importer = get_importer_for_format(format, base_options)
-        except ValueError as e:
-            return f"ERROR: {str(e)}"
+        importer = get_importer_for_format(format, base_options)
 
         # Validate and parse file
         try:
@@ -2955,7 +2853,7 @@ PROCESSING_TIME: {result.processing_time:.2f}s"""
             return f"ERROR: Import engine failed: {str(e)}"
 
         # Format and return result
-        return format_import_result(result)
+        return format_import_result(result, "IMPORT_FROM_FILE")
 
     except Exception as e:
         logger.error(f"import_from_file failed: {e}")

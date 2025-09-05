@@ -2,11 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Annotated, Any, Dict, Optional
-
-# FastMCP imports
-from fastmcp import FastMCP
-from pydantic import Field
+from typing import Any, Dict, Optional
 
 from .config import JoplinMCPConfig
 
@@ -23,13 +19,12 @@ from .importers import (
     TxtImporter,
     ZIPImporter,
 )
-from .importers.base import ImportProcessingError, ImportValidationError
 from .types.import_types import ImportOptions
 
 logger = logging.getLogger(__name__)
 
 
-def format_import_result(result) -> str:
+def format_import_result(result, operation_name: str = "IMPORT_BATCH") -> str:
     """Format import result for MCP response."""
     status = (
         "SUCCESS"
@@ -37,7 +32,7 @@ def format_import_result(result) -> str:
         else "PARTIAL_SUCCESS" if result.is_partial_success else "FAILED"
     )
 
-    response = f"""OPERATION: IMPORT_BATCH
+    response = f"""OPERATION: {operation_name}
 STATUS: {status}
 TOTAL_PROCESSED: {result.total_processed}
 SUCCESSFUL_IMPORTS: {result.successful_imports}
@@ -271,121 +266,3 @@ async def import_source(
     return format_import_result(result)
 
 
-# Register the import tools with FastMCP
-def register_import_tools(mcp: FastMCP):
-    """Register import tools with the FastMCP server."""
-
-    @mcp.tool()
-    async def import_from_file(
-        file_path: Annotated[str, Field(description="Path to the file to import")],
-        format: Annotated[
-            Optional[str],
-            Field(
-                description="File format (md, jex, html) - auto-detected if not specified"
-            ),
-        ] = None,
-        target_notebook: Annotated[
-            Optional[str], Field(description="Target notebook name (optional)")
-        ] = None,
-        import_options: Annotated[
-            Optional[Dict[str, Any]], Field(description="Additional import options")
-        ] = None,
-    ) -> str:
-        """Import notes from a single file.
-
-        Supports importing from various file formats including:
-        - Markdown files (.md, .markdown) with optional frontmatter
-        - JEX files (Joplin's native export format)
-        - HTML files (.html, .htm) with conversion to Markdown
-
-        The importer will preserve metadata, tags, and notebook structure where possible.
-
-        Returns:
-            str: Detailed import result with statistics and any errors/warnings
-        """
-        try:
-            # Load configuration
-            config = JoplinMCPConfig.load()
-
-            # Check if import tools are enabled
-            if not config.is_tool_enabled("import_from_file"):
-                return "ERROR: import_from_file tool is disabled in configuration"
-
-            # Validate file path
-            path = Path(file_path)
-            if not path.exists():
-                return f"ERROR: File does not exist: {file_path}"
-            if not path.is_file():
-                return f"ERROR: Path is not a file: {file_path}"
-
-            # Detect format if not specified
-            if not format:
-                try:
-                    format = detect_file_format(file_path)
-                except ValueError as e:
-                    return f"ERROR: {str(e)}"
-
-            # Create import options
-            base_options = ImportOptions(
-                target_notebook=target_notebook,
-                create_missing_notebooks=config.import_settings.get(
-                    "create_missing_notebooks", True
-                ),
-                create_missing_tags=config.import_settings.get(
-                    "create_missing_tags", True
-                ),
-                preserve_timestamps=config.import_settings.get(
-                    "preserve_timestamps", True
-                ),
-                handle_duplicates=config.import_settings.get(
-                    "handle_duplicates", "skip"
-                ),
-                max_batch_size=config.import_settings.get("max_batch_size", 100),
-                attachment_handling=config.import_settings.get(
-                    "attachment_handling", "link"
-                ),
-                encoding=config.import_settings.get("default_encoding", "utf-8"),
-            )
-
-            # Apply additional options
-            if import_options:
-                for key, value in import_options.items():
-                    if hasattr(base_options, key):
-                        setattr(base_options, key, value)
-                    else:
-                        base_options.import_options[key] = value
-
-            # Get appropriate importer
-            try:
-                importer = get_importer_for_format(format, base_options)
-            except ValueError as e:
-                return f"ERROR: {str(e)}"
-
-            # Validate and parse file
-            try:
-                await importer.validate(file_path)
-                notes = await importer.parse(file_path)
-            except ImportValidationError as e:
-                return f"VALIDATION_ERROR: {str(e)}"
-            except ImportProcessingError as e:
-                return f"PROCESSING_ERROR: {str(e)}"
-            except Exception as e:
-                return f"ERROR: Unexpected error during parsing: {str(e)}"
-
-            if not notes:
-                return "WARNING: No notes were extracted from the file"
-
-            # Import notes using the import engine
-            try:
-                client = get_joplin_client()
-                engine = JoplinImportEngine(client, config)
-                result = await engine.import_batch(notes, base_options)
-            except Exception as e:
-                return f"ERROR: Import engine failed: {str(e)}"
-
-            # Format and return result
-            return format_import_result(result)
-
-        except Exception as e:
-            logger.error(f"import_from_file failed: {e}")
-            return f"ERROR: Tool execution failed: {str(e)}"
