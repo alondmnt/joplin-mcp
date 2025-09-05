@@ -2693,8 +2693,8 @@ async def import_from_file(
         Field(description="File format (md, html, txt, csv, enex, zip, jex) - auto-detected if not specified"),
     ] = None,
     target_notebook: Annotated[
-        Optional[str], Field(description="Target notebook name (optional)")
-    ] = None,
+        Optional[str], Field(description="Target notebook name (optional, defaults to 'Imported')")
+    ] = 'Imported',
     import_options: Annotated[
         Optional[Dict[str, Any]], Field(description="Additional import options")
     ] = None,
