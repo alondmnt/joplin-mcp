@@ -280,7 +280,7 @@ class JoplinImportEngine:
 
             for tag_id in tag_ids:
                 try:
-                    self.client.create_note_tag(note_id=note_id, tag_id=tag_id)
+                    self.client.add_tag_to_note(tag_id=tag_id, note_id=note_id)
                 except Exception as e:
                     # Non-fatal error, just log it
                     logger.warning(
