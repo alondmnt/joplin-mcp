@@ -2690,7 +2690,7 @@ async def import_from_file(
     file_path: Annotated[str, Field(description="Path to the file to import")],
     format: Annotated[
         Optional[str],
-        Field(description="File format (md, html, txt, csv, enex, zip, jex) - auto-detected if not specified"),
+        Field(description="File format (md, html, csv, enex, zip, jex, generic) - auto-detected if not specified"),
     ] = None,
     target_notebook: Annotated[
         Optional[str], Field(description="Target notebook name (optional, defaults to 'Imported')")
@@ -2704,12 +2704,11 @@ async def import_from_file(
     Supports importing from various file formats including:
     - Markdown files (.md, .markdown, .mdown, .mkd) with optional frontmatter and YAML fallback
     - HTML files (.html, .htm) with BeautifulSoup/markdownify fallback
-    - Text files (.txt, .text) with tag extraction
     - CSV files (.csv) with table conversion
     - ENEX files (.enex) - Evernote export format
     - ZIP files (.zip) - Archive extraction and processing  
     - JEX files (.jex) - Joplin's native export format
-    - Generic files - Fallback processing for unknown formats
+    - Generic files - Fallback processing for unknown formats (including text files, code files, logs, etc.)
 
     The importer will preserve metadata, tags, and notebook structure where possible.
     Directory imports are supported for most formats with recursive file processing.

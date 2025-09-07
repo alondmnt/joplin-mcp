@@ -79,8 +79,6 @@ class GenericImporter(BaseImporter):
                 # Handle TSV files (Tab-separated values) - similar to CSV but different delimiter
                 return await self._handle_tsv_format(file_path)
             
-            elif extension in ["txt", "text"]:
-                return await self._delegate_to_importer("txt_importer", "TxtImporter", file_path)
             
             elif extension in ["enex"]:
                 return await self._delegate_to_importer("enex_importer", "ENEXImporter", file_path)
