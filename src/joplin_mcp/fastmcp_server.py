@@ -2737,16 +2737,6 @@ async def import_from_file(
     from pathlib import Path
 
     from .import_engine import JoplinImportEngine
-    from .importers import (
-        JEXImporter, 
-        MarkdownImporter,
-        HTMLImporter,
-        TxtImporter,
-        CSVImporter,
-        ENEXImporter,
-        ZIPImporter,
-        GenericImporter
-    )
     from .importers.base import ImportProcessingError, ImportValidationError
     from .types.import_types import ImportOptions
     from .import_tools import format_import_result, get_importer_for_format, detect_file_format
