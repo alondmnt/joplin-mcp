@@ -2,28 +2,29 @@
 Generic importer for Joplin MCP.
 
 Handles unknown file formats and "Other applications..." imports.
-Acts as a fallback importer for unsupported formats with intelligent content detection.
+Acts as a fallback importer for unsupported formats with intelligent delegation to specialized importers.
 """
 
 import mimetypes
-from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
 from ..types.import_types import ImportedNote
 from .base import BaseImporter, ImportProcessingError, ImportValidationError
+from .utils import csv_to_markdown_table
 
 
 class GenericImporter(BaseImporter):
-    """Generic importer for unknown file formats and custom applications."""
+    """Generic importer that delegates to specialized importers or handles unknown formats."""
 
     def get_supported_extensions(self) -> List[str]:
-        """Return list of supported file extensions (generic handles any)."""
-        return [".*"]  # Wildcard for any extension
+        """Return list of supported file extensions (generic handles any file)."""
+        # GenericImporter handles all files regardless of extension
+        # Return empty list to trigger scan_directory_safe's "all files" mode
+        return []
 
     def can_import(self, file_path: Path) -> bool:
-        """Check if file can be imported (generic can handle any text file)."""
-        # Generic importer can handle any file
+        """Check if file can be imported (generic can handle any file)."""
         return True
 
     def supports_directory(self) -> bool:
@@ -34,105 +35,144 @@ class GenericImporter(BaseImporter):
         """Validate source can be processed by generic importer."""
         path = Path(source_path)
 
-        # Check source exists
-        if not path.exists():
-            raise ImportValidationError(f"Source not found: {source_path}")
-
-        # Handle directory
-        if path.is_dir():
-            # Check if directory contains any files
-            files = list(path.rglob("*"))
-            actual_files = [f for f in files if f.is_file()]
-            if not actual_files:
-                raise ImportValidationError(
-                    f"Directory contains no files: {source_path}"
-                )
-            return True
-
-        # Handle single file
-        if not path.is_file():
+        if path.is_file():
+            # Use enhanced base class validation for files
+            self.validate_file_comprehensive(path, allow_empty=True)
+        elif path.is_dir():
+            # Use enhanced base class validation for directories
+            self.validate_directory_comprehensive(path)
+        else:
             raise ImportValidationError(
                 f"Path is not a file or directory: {source_path}"
             )
-
-        if path.stat().st_size == 0:
-            # Empty files are still valid - we'll create a minimal note
-            pass
-
-        # Try to detect if it's a binary file that we can't process
-        if self._is_binary_file(path):
-            # For binary files, we'll create a metadata note instead
-            pass
 
         return True
 
     async def parse(self, source_path: str) -> List[ImportedNote]:
         """Parse source and convert to ImportedNote objects."""
-        try:
-            path = Path(source_path)
-            notes = []
+        path = Path(source_path)
 
-            if path.is_dir():
-                # Process directory recursively
-                notes = await self._parse_directory(path)
-            else:
-                # Process single file
-                note = await self._parse_file(path)
-                if note:
-                    notes.append(note)
-
-            return notes
-
-        except Exception as e:
-            if isinstance(e, (ImportValidationError, ImportProcessingError)):
-                raise
-            raise ImportProcessingError(
-                f"Error parsing generic source {source_path}: {str(e)}"
-            ) from e
-
-    async def _parse_directory(self, directory_path: Path) -> List[ImportedNote]:
-        """Parse all files in a directory."""
-        notes = []
-
-        # Get all files recursively
-        for file_path in directory_path.rglob("*"):
-            if file_path.is_file():
-                try:
-                    note = await self._parse_file(file_path)
-                    if note:
-                        notes.append(note)
-                except Exception as e:
-                    # Log error but continue with other files
-                    print(f"Warning: Failed to process {file_path}: {str(e)}")
-                    continue
-
-        return notes
+        if path.is_dir():
+            # Use standard directory processing from BaseImporter
+            return await super().parse_directory(source_path)
+        else:
+            # Process single file
+            note = await self._parse_file(path)
+            return [note] if note else []
 
     async def _parse_file(self, file_path: Path) -> Optional[ImportedNote]:
-        """Parse a single file into an ImportedNote."""
+        """Parse a single file by delegating to specialized importers or handling unknown formats."""
         try:
-            # Detect file characteristics
-            is_binary = self._is_binary_file(file_path)
-            mime_type = self._detect_mime_type(file_path)
-            file_size = file_path.stat().st_size
-
-            # Extract title from filename
-            title = self._extract_title_from_path(file_path)
-
-            # Process content based on file type
-            if is_binary:
-                body = self._create_binary_file_note(file_path, mime_type, file_size)
-                tags = ["binary", "attachment"]
+            extension = file_path.suffix.lower().lstrip(".")
+            
+            # Delegate to specialized importers for known formats
+            if extension in ["md", "markdown"]:
+                return await self._delegate_to_importer("markdown_importer", "MarkdownImporter", file_path)
+            
+            elif extension in ["html", "htm"]:
+                return await self._delegate_to_importer("html_importer", "HTMLImporter", file_path)
+            
+            elif extension in ["csv"]:
+                return await self._delegate_to_importer("csv_importer", "CSVImporter", file_path)
+            
+            elif extension in ["tsv"]:
+                # Handle TSV files (Tab-separated values) - similar to CSV but different delimiter
+                return await self._handle_tsv_format(file_path)
+            
+            elif extension in ["txt", "text"]:
+                return await self._delegate_to_importer("txt_importer", "TxtImporter", file_path)
+            
+            elif extension in ["enex"]:
+                return await self._delegate_to_importer("enex_importer", "ENEXImporter", file_path)
+            
+            elif extension in ["jex"]:
+                return await self._delegate_to_importer("jex_importer", "JEXImporter", file_path)
+            
+            elif extension in ["zip"]:
+                return await self._delegate_to_importer("zip_importer", "ZIPImporter", file_path)
+            
+            # Handle special formats that need custom processing
+            elif extension in ["json"]:
+                return await self._handle_json_format(file_path)
+            
+            elif extension in ["xml"]:
+                return await self._handle_xml_format(file_path)
+            
+            elif extension in ["py", "js", "java", "cpp", "c", "h", "css", "sql"]:
+                return await self._handle_code_format(file_path)
+            
+            elif extension in ["log"]:
+                return await self._handle_log_format(file_path)
+            
+            # Handle truly unknown formats
             else:
-                # Try to read as text
-                content = self._read_text_file(file_path)
+                return await self._handle_unknown_format(file_path)
+
+        except Exception as e:
+            raise ImportProcessingError(
+                f"Error processing file {file_path}: {str(e)}"
+            ) from e
+
+    async def _delegate_to_importer(self, module_name: str, class_name: str, file_path: Path) -> Optional[ImportedNote]:
+        """Delegate file processing to a specialized importer."""
+        try:
+            # Dynamic import to avoid circular dependencies
+            module = __import__(f"joplin_mcp.importers.{module_name}", fromlist=[class_name])
+            importer_class = getattr(module, class_name)
+            
+            # Create importer instance with same options
+            importer = importer_class(self.options)
+            
+            # Parse the file
+            notes = await importer.parse(str(file_path))
+            
+            # Return first note (specialized importers typically return one note per file)
+            if notes:
+                note = notes[0]
+                # Add generic-import tag to indicate it came through GenericImporter
+                if note.tags is None:
+                    note.tags = []
+                if "generic-import" not in note.tags:
+                    note.tags.append("generic-import")
+                return note
+            
+            return None
+            
+        except Exception as e:
+            # If delegation fails, fall back to unknown format handling
+            print(f"Warning: Delegation to {class_name} failed for {file_path}: {str(e)}")
+            return await self._handle_unknown_format(file_path)
+
+    async def _handle_unknown_format(self, file_path: Path) -> Optional[ImportedNote]:
+        """Handle files with truly unknown or unsupported formats."""
+        # Detect file characteristics
+        is_binary = self._is_binary_file(file_path)
+        mime_type = self._detect_mime_type(file_path)
+        file_metadata = self.get_file_metadata_safe(file_path)
+
+        # Extract title from filename
+        title = self._extract_title_from_path(file_path)
+
+        if is_binary:
+            # Create metadata note for binary files
+            body = self._create_binary_file_note(file_path, mime_type, file_metadata.get("size", 0))
+            tags = ["binary", "attachment", "generic-import"]
+        else:
+            # Try to read as text
+            try:
+                content, used_encoding = self.read_file_safe(file_path)
                 if not content.strip():
                     # Handle empty files
                     body = f"# {title}\n\n*This file was empty when imported.*"
                     tags = ["empty-file", "generic-import"]
                 else:
-                    body = self._process_text_content(content, file_path, mime_type)
-                    tags = self._extract_tags_from_content(content) + ["generic-import"]
+                    # Format as code block with basic processing
+                    body = self._format_unknown_text_content(content, file_path, mime_type)
+                    tags = self.extract_hashtags_safe(content) + ["generic-import"]
+            except Exception:
+                # If reading fails, treat as binary
+                body = self._create_binary_file_note(file_path, mime_type, file_metadata.get("size", 0))
+                tags = ["binary", "read-error", "generic-import"]
 
             # Add file type tags
             extension = file_path.suffix.lower()
@@ -143,36 +183,49 @@ class GenericImporter(BaseImporter):
                 main_type = mime_type.split("/")[0]
                 tags.append(f"type-{main_type}")
 
-            # Get file metadata
-            stat = file_path.stat()
-            created_time = datetime.fromtimestamp(stat.st_ctime)
-            updated_time = datetime.fromtimestamp(stat.st_mtime)
+        # Create note using enhanced base class utilities
+        return self.create_imported_note_safe(
+            title=title,
+            body=body,
+            file_path=file_path,
+            tags=list(set(tags)),  # Remove duplicates
+            additional_metadata={
+                "original_format": "generic",
+                "file_extension": extension,
+                "mime_type": mime_type,
+                "is_binary": is_binary,
+            },
+        )
 
-            # Create imported note
-            note = ImportedNote(
-                title=title,
-                body=body,
-                created_time=created_time,
-                updated_time=updated_time,
-                tags=list(set(tags)),  # Remove duplicates
-                notebook=None,
-                metadata={
-                    "original_format": "generic",
-                    "source_file": str(file_path),
-                    "file_extension": extension,
-                    "mime_type": mime_type,
-                    "file_size": file_size,
-                    "is_binary": is_binary,
-                    "import_method": "generic_importer",
-                },
-            )
-
-            return note
-
-        except Exception as e:
-            raise ImportProcessingError(
-                f"Error processing file {file_path}: {str(e)}"
-            ) from e
+    def _format_unknown_text_content(self, content: str, file_path: Path, mime_type: Optional[str]) -> str:
+        """Format unknown text content with basic processing."""
+        extension = file_path.suffix.lower()
+        
+        # For code-like files, use syntax highlighting
+        if extension in {".py", ".js", ".java", ".cpp", ".c", ".h", ".css", ".sql", ".json", ".xml"}:
+            language = extension.lstrip(".")
+            if language == "py":
+                language = "python"
+            elif language == "js":
+                language = "javascript"
+            
+            return f"# {self._extract_title_from_path(file_path)}\n\n```{language}\n{content}\n```"
+        
+        # For log files, preserve formatting
+        elif extension in {".log"}:
+            return f"# {self._extract_title_from_path(file_path)}\n\n```\n{content}\n```"
+        
+        # For other text files, add basic formatting
+        else:
+            lines = content.split('\n')
+            if len(lines) > 1 and len(lines[0]) < 100:
+                # First line might be a title
+                title = lines[0].strip()
+                body = '\n'.join(lines[1:]).strip()
+                if title and body:
+                    return f"# {title}\n\n{body}"
+            
+            return f"# {self._extract_title_from_path(file_path)}\n\n{content}"
 
     def _is_binary_file(self, file_path: Path) -> bool:
         """Check if file is binary."""
@@ -180,21 +233,19 @@ class GenericImporter(BaseImporter):
             # Read first 8192 bytes to check for binary content
             with open(file_path, "rb") as f:
                 chunk = f.read(8192)
+                if not chunk:
+                    return False
 
             # Check for null bytes (common in binary files)
-            if b"\x00" in chunk:
+            if b'\x00' in chunk:
                 return True
 
-            # Try to decode as text
-            try:
-                chunk.decode("utf-8")
-                return False
-            except UnicodeDecodeError:
-                return True
+            # Check for high percentage of non-text characters
+            text_chars = sum(1 for byte in chunk if 32 <= byte <= 126 or byte in (9, 10, 13))
+            return (text_chars / len(chunk)) < 0.75
 
         except Exception:
-            # If we can't read the file, assume it's binary
-            return True
+            return False
 
     def _detect_mime_type(self, file_path: Path) -> Optional[str]:
         """Detect MIME type of file."""
@@ -203,61 +254,21 @@ class GenericImporter(BaseImporter):
 
     def _extract_title_from_path(self, file_path: Path) -> str:
         """Extract title from file path."""
-        # Use filename without extension as title
+        # Use filename without extension as base title
         title = file_path.stem
 
-        # Clean up the title
-        title = title.replace("_", " ").replace("-", " ")
+        # Replace common separators with spaces
+        title = title.replace("_", " ").replace("-", " ").replace(".", " ")
+        
+        # Remove extra whitespace
+        title = " ".join(title.split())
 
         # Capitalize first letter of each word
         title = " ".join(word.capitalize() for word in title.split())
 
         return title or "Untitled"
 
-    def _read_text_file(self, file_path: Path) -> str:
-        """Read text file with encoding detection."""
-        encodings = ["utf-8", "utf-16", "latin-1", "cp1252", "iso-8859-1"]
-
-        for encoding in encodings:
-            try:
-                with open(file_path, encoding=encoding) as f:
-                    return f.read()
-            except (UnicodeDecodeError, UnicodeError):
-                continue
-
-        # If all encodings fail, read as binary and decode with errors='replace'
-        with open(file_path, "rb") as f:
-            content = f.read()
-        return content.decode("utf-8", errors="replace")
-
-    def _process_text_content(
-        self, content: str, file_path: Path, mime_type: Optional[str]
-    ) -> str:
-        """Process text content based on file type."""
-        extension = file_path.suffix.lower()
-
-        # Handle specific text formats
-        if extension in {".md", ".markdown"}:
-            return content  # Already Markdown
-        elif extension in {".html", ".htm"}:
-            return self._convert_html_to_markdown(content)
-        elif extension in {".csv", ".tsv"}:
-            return self._convert_tabular_to_markdown(content, extension)
-        elif extension in {".json"}:
-            return self._format_json_content(content)
-        elif extension in {".xml"}:
-            return self._format_xml_content(content)
-        elif extension in {".py", ".js", ".java", ".cpp", ".c", ".h", ".css", ".sql"}:
-            return self._format_code_content(content, extension)
-        elif extension in {".log"}:
-            return self._format_log_content(content)
-        else:
-            # Default: plain text with some formatting
-            return self._format_plain_text(content, file_path.name)
-
-    def _create_binary_file_note(
-        self, file_path: Path, mime_type: Optional[str], file_size: int
-    ) -> str:
+    def _create_binary_file_note(self, file_path: Path, mime_type: Optional[str], file_size: int) -> str:
         """Create note content for binary files."""
         size_mb = file_size / (1024 * 1024)
 
@@ -269,129 +280,61 @@ class GenericImporter(BaseImporter):
         content += f"- **Extension**: {file_path.suffix}\n"
         content += f"- **Location**: `{file_path.parent}`\n\n"
         content += "This is a binary file that cannot be displayed as text. "
-        content += (
-            "The original file should be accessed directly from its location.\n\n"
-        )
+        content += "The original file should be accessed directly from its location.\n\n"
         content += f"**Original Path**: `{file_path}`\n"
 
         return content
 
-    def _convert_html_to_markdown(self, content: str) -> str:
-        """Convert HTML to Markdown."""
-        try:
-            import markdownify
-            from bs4 import BeautifulSoup
 
-            # Parse and convert HTML to Markdown
-            soup = BeautifulSoup(content, "html.parser")
-
-            # Remove script and style tags for security
-            for tag in soup.find_all(["script", "style"]):
-                tag.decompose()
-
-            # Convert to Markdown
-            markdown = markdownify.markdownify(
-                str(soup), heading_style="ATX", bullets="-", strip=["script", "style"]
-            )
-
-            return markdown.strip()
-
-        except ImportError:
-            # If BeautifulSoup/markdownify not available, return as code block
-            return f"```html\n{content}\n```"
-
-    def _convert_tabular_to_markdown(self, content: str, extension: str) -> str:
-        """Convert CSV/TSV to Markdown table."""
-        import csv
-        from io import StringIO
-
-        try:
-            # Determine delimiter
-            delimiter = "\t" if extension == ".tsv" else ","
-
-            # Parse tabular data
-            reader = csv.reader(StringIO(content), delimiter=delimiter)
-            rows = list(reader)
-
-            if not rows:
-                return "Empty tabular file."
-
-            # Create Markdown table
-            markdown_lines = []
-
-            # Add headers
-            if rows:
-                headers = rows[0]
-                markdown_lines.append("| " + " | ".join(headers) + " |")
-                markdown_lines.append("| " + " | ".join(["---"] * len(headers)) + " |")
-
-                # Add data rows
-                for row in rows[1:]:
-                    # Pad row to match header count
-                    padded_row = row + [""] * (len(headers) - len(row))
-                    clean_row = [
-                        cell.replace("|", "\\|") for cell in padded_row[: len(headers)]
-                    ]
-                    markdown_lines.append("| " + " | ".join(clean_row) + " |")
-
-            return "\n".join(markdown_lines)
-
-        except Exception:
-            # Fallback: return as code block
-            return f"```{extension[1:]}\n{content}\n```"
-
-    def _format_json_content(self, content: str) -> str:
+    def _format_json_content(self, content: str, title: str) -> str:
         """Format JSON content."""
         try:
             import json
 
-            # Try to parse and prettify JSON
-            data = json.loads(content)
-            formatted = json.dumps(data, indent=2, ensure_ascii=False)
-            return f"```json\n{formatted}\n```"
-        except Exception:
-            # If parsing fails, return as-is in code block
-            return f"```json\n{content}\n```"
+            # Try to parse and pretty-print JSON
+            parsed = json.loads(content)
+            formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+            return f"# {title}\n\n```json\n{formatted}\n```"
+            
+        except json.JSONDecodeError:
+            # If not valid JSON, return as-is in code block
+            return f"# {title}\n\n```json\n{content}\n```"
 
-    def _format_xml_content(self, content: str) -> str:
+    def _format_xml_content(self, content: str, title: str) -> str:
         """Format XML content."""
         try:
-            import xml.etree.ElementTree as ET
-            from xml.dom import minidom
-
-            # Try to parse and prettify XML
-            root = ET.fromstring(content)
-            rough_string = ET.tostring(root, encoding="unicode")
-            reparsed = minidom.parseString(rough_string)
-            formatted = reparsed.toprettyxml(indent="  ")
-
+            import xml.dom.minidom
+            
+            # Try to pretty-print XML
+            dom = xml.dom.minidom.parseString(content)
+            formatted = dom.toprettyxml(indent="  ")
             # Remove empty lines
-            lines = [line for line in formatted.split("\n") if line.strip()]
-            formatted = "\n".join(lines)
+            lines = [line for line in formatted.split('\n') if line.strip()]
+            formatted = '\n'.join(lines)
+            return f"# {title}\n\n```xml\n{formatted}\n```"
 
-            return f"```xml\n{formatted}\n```"
         except Exception:
             # If parsing fails, return as-is in code block
-            return f"```xml\n{content}\n```"
+            return f"# {title}\n\n```xml\n{content}\n```"
 
-    def _format_code_content(self, content: str, extension: str) -> str:
+    def _format_code_content(self, content: str, extension: str, title: str) -> str:
         """Format code content with syntax highlighting."""
-        # Map extensions to language identifiers
-        lang_map = {
-            ".py": "python",
-            ".js": "javascript",
-            ".java": "java",
-            ".cpp": "cpp",
-            ".c": "c",
-            ".h": "c",
-            ".css": "css",
-            ".sql": "sql",
+        # Map extensions to language names for syntax highlighting
+        language_map = {
+            "py": "python",
+            "js": "javascript",
+            "java": "java",
+            "cpp": "cpp",
+            "c": "c",
+            "h": "c",
+            "css": "css",
+            "sql": "sql"
         }
+        
+        language = language_map.get(extension, extension)
+        return f"# {title}\n\n```{language}\n{content}\n```"
 
-        language = lang_map.get(extension, extension[1:])
-        return f"```{language}\n{content}\n```"
-
-    def _format_log_content(self, content: str) -> str:
+    def _format_log_content(self, content: str, title: str) -> str:
         """Format log file content."""
         # Split into lines and add some basic formatting
         lines = content.strip().split("\n")
@@ -399,49 +342,129 @@ class GenericImporter(BaseImporter):
         # Limit to last 1000 lines for very large logs
         if len(lines) > 1000:
             content = "\n".join(lines[-1000:])
-            header = f"**Log File** (showing last 1000 of {len(lines)} lines)\n\n"
+            header = f"# {title}\n\n**Log File** (showing last 1000 of {len(lines)} lines)\n\n"
         else:
-            header = "**Log File Content**\n\n"
+            header = f"# {title}\n\n**Log File Content**\n\n"
 
         return header + f"```log\n{content}\n```"
 
-    def _format_plain_text(self, content: str, filename: str) -> str:
-        """Format plain text content."""
-        # Add filename as title
-        title = self._extract_title_from_path(Path(filename))
+    async def _handle_tsv_format(self, file_path: Path) -> Optional[ImportedNote]:
+        """Handle TSV (Tab-separated values) files."""
+        try:
+            content, used_encoding = self.read_file_safe(file_path)
+            title = self._extract_title_from_path(file_path)
+            
+            # Convert TSV to Markdown table using shared utility
+            body = csv_to_markdown_table(content, title, delimiter="\t")
+            tags = self.extract_hashtags_safe(content) + ["tsv", "tabular", "generic-import"]
+            
+            return self.create_imported_note_safe(
+                title=title,
+                body=body,
+                file_path=file_path,
+                tags=tags,
+                additional_metadata={
+                    "original_format": "tsv",
+                    "encoding": used_encoding,
+                },
+            )
+        except Exception as e:
+            print(f"Warning: TSV processing failed for {file_path}: {str(e)}")
+            return await self._handle_unknown_format(file_path)
 
-        # Check if content already has markdown-style headers
-        if content.strip().startswith("#"):
-            return content
+    async def _handle_json_format(self, file_path: Path) -> Optional[ImportedNote]:
+        """Handle JSON files."""
+        try:
+            content, used_encoding = self.read_file_safe(file_path)
+            title = self._extract_title_from_path(file_path)
+            
+            # Format JSON content
+            body = self._format_json_content(content, title)
+            tags = self.extract_hashtags_safe(content) + ["json", "data", "generic-import"]
+            
+            return self.create_imported_note_safe(
+                title=title,
+                body=body,
+                file_path=file_path,
+                tags=tags,
+                additional_metadata={
+                    "original_format": "json",
+                    "encoding": used_encoding,
+                },
+            )
+        except Exception as e:
+            print(f"Warning: JSON processing failed for {file_path}: {str(e)}")
+            return await self._handle_unknown_format(file_path)
 
-        # Add title and format as markdown
-        return f"# {title}\n\n{content}"
+    async def _handle_xml_format(self, file_path: Path) -> Optional[ImportedNote]:
+        """Handle XML files."""
+        try:
+            content, used_encoding = self.read_file_safe(file_path)
+            title = self._extract_title_from_path(file_path)
+            
+            # Format XML content
+            body = self._format_xml_content(content, title)
+            tags = self.extract_hashtags_safe(content) + ["xml", "markup", "generic-import"]
+            
+            return self.create_imported_note_safe(
+                title=title,
+                body=body,
+                file_path=file_path,
+                tags=tags,
+                additional_metadata={
+                    "original_format": "xml",
+                    "encoding": used_encoding,
+                },
+            )
+        except Exception as e:
+            print(f"Warning: XML processing failed for {file_path}: {str(e)}")
+            return await self._handle_unknown_format(file_path)
 
-    def _extract_tags_from_content(self, content: str) -> List[str]:
-        """Extract hashtags and other tags from content."""
-        import re
+    async def _handle_code_format(self, file_path: Path) -> Optional[ImportedNote]:
+        """Handle code files."""
+        try:
+            content, used_encoding = self.read_file_safe(file_path)
+            title = self._extract_title_from_path(file_path)
+            extension = file_path.suffix.lower().lstrip(".")
+            
+            # Format code content
+            body = self._format_code_content(content, extension, title)
+            tags = self.extract_hashtags_safe(content) + [extension, "code", "generic-import"]
+            
+            return self.create_imported_note_safe(
+                title=title,
+                body=body,
+                file_path=file_path,
+                tags=tags,
+                additional_metadata={
+                    "original_format": extension,
+                    "encoding": used_encoding,
+                },
+            )
+        except Exception as e:
+            print(f"Warning: Code processing failed for {file_path}: {str(e)}")
+            return await self._handle_unknown_format(file_path)
 
-        tags = []
-
-        # Find hashtags
-        hashtag_pattern = r"#([a-zA-Z0-9_-]+)"
-        hashtags = re.findall(hashtag_pattern, content)
-        tags.extend(hashtags)
-
-        # Look for common tag patterns
-        tag_patterns = [
-            r"(?i)tags?:\s*([^\n]+)",  # "Tags: tag1, tag2"
-            r"(?i)keywords?:\s*([^\n]+)",  # "Keywords: word1, word2"
-        ]
-
-        for pattern in tag_patterns:
-            matches = re.findall(pattern, content)
-            for match in matches:
-                # Split by common separators
-                tag_parts = re.split(r"[,;|]", match)
-                for tag in tag_parts:
-                    tag = tag.strip().lower()
-                    if tag and len(tag) > 1:
-                        tags.append(tag)
-
-        return list(set(tags))  # Remove duplicates
+    async def _handle_log_format(self, file_path: Path) -> Optional[ImportedNote]:
+        """Handle log files."""
+        try:
+            content, used_encoding = self.read_file_safe(file_path)
+            title = self._extract_title_from_path(file_path)
+            
+            # Format log content
+            body = self._format_log_content(content, title)
+            tags = self.extract_hashtags_safe(content) + ["log", "text", "generic-import"]
+            
+            return self.create_imported_note_safe(
+                title=title,
+                body=body,
+                file_path=file_path,
+                tags=tags,
+                additional_metadata={
+                    "original_format": "log",
+                    "encoding": used_encoding,
+                },
+            )
+        except Exception as e:
+            print(f"Warning: Log processing failed for {file_path}: {str(e)}")
+            return await self._handle_unknown_format(file_path)
