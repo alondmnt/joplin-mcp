@@ -2,10 +2,22 @@
 
 import os
 from abc import ABC, abstractmethod
+from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from ..types.import_types import ImportedNote, ImportOptions
+from .utils import (
+    read_file_with_encoding,
+    validate_file_basic,
+    validate_file_size as util_validate_file_size,
+    get_file_metadata,
+    scan_directory_for_files,
+    validate_directory_has_files,
+    extract_title_from_content,
+    extract_hashtags,
+    parse_flexible_timestamp,
+)
 
 
 class ImportError(Exception):
@@ -164,23 +176,9 @@ class BaseImporter(ABC):
         Returns:
             List of file paths that this importer can handle
         """
-        path = Path(directory_path)
-        if not path.exists() or not path.is_dir():
-            return []
-
-        supported_files = []
-        extensions = [
-            ext.lstrip(".").lower() for ext in self.get_supported_extensions()
-        ]
-
-        # Recursively scan directory
-        for file_path in path.rglob("*"):
-            if file_path.is_file():
-                extension = file_path.suffix.lstrip(".").lower()
-                if extension in extensions:
-                    supported_files.append(str(file_path))
-
-        return sorted(supported_files)
+        # Use enhanced utility method
+        path_objects = self.scan_directory_safe(Path(directory_path))
+        return [str(p) for p in path_objects]
 
     def validate_source_exists(self, source: str) -> None:
         """Validate that the source path exists.
@@ -218,13 +216,10 @@ class BaseImporter(ABC):
         Raises:
             ImportValidationError: If file is too large
         """
-        path = Path(file_path)
-        if path.is_file():
-            size_mb = path.stat().st_size / (1024 * 1024)
-            if size_mb > max_size_mb:
-                raise ImportValidationError(
-                    f"File too large: {size_mb:.1f}MB (max: {max_size_mb}MB)"
-                )
+        try:
+            util_validate_file_size(Path(file_path), max_size_mb)
+        except Exception as e:
+            raise ImportValidationError(str(e)) from e
 
     async def get_file_list(self, source: str) -> List[str]:
         """Get list of files to process from source.
@@ -287,3 +282,190 @@ class BaseImporter(ABC):
             pass
 
         return self.options.target_notebook
+
+    # Enhanced utility methods using shared utilities
+    
+    def read_file_safe(self, file_path: Path, encodings: Optional[List[str]] = None) -> Tuple[str, str]:
+        """Safely read file content with encoding detection.
+        
+        Args:
+            file_path: Path to the file to read
+            encodings: Optional list of encodings to try
+            
+        Returns:
+            Tuple of (content, used_encoding)
+            
+        Raises:
+            ImportProcessingError: If file cannot be read
+        """
+        try:
+            return read_file_with_encoding(file_path, encodings)
+        except Exception as e:
+            raise ImportProcessingError(f"Cannot read file {file_path}: {str(e)}") from e
+    
+    def validate_file_comprehensive(self, file_path: Path, allow_empty: bool = False) -> None:
+        """Perform comprehensive file validation using shared utilities.
+        
+        Args:
+            file_path: Path to validate
+            allow_empty: Whether to allow empty files
+            
+        Raises:
+            ImportValidationError: If validation fails
+        """
+        try:
+            validate_file_basic(file_path, self.get_supported_extensions(), allow_empty)
+            
+            # Also validate size if specified in options
+            max_size = getattr(self.options, 'max_file_size_mb', None)
+            if max_size:
+                util_validate_file_size(file_path, max_size)
+                
+        except Exception as e:
+            raise ImportValidationError(str(e)) from e
+    
+    def validate_directory_comprehensive(self, directory_path: Path) -> None:
+        """Validate directory contains supported files.
+        
+        Args:
+            directory_path: Directory to validate
+            
+        Raises:
+            ImportValidationError: If validation fails
+        """
+        try:
+            validate_directory_has_files(directory_path, self.get_supported_extensions())
+        except Exception as e:
+            raise ImportValidationError(str(e)) from e
+    
+    def scan_directory_safe(self, directory_path: Path, recursive: bool = True) -> List[Path]:
+        """Scan directory for supported files using shared utilities.
+        
+        Args:
+            directory_path: Directory to scan
+            recursive: Whether to scan recursively
+            
+        Returns:
+            List of supported file paths
+        """
+        extensions = self.get_supported_extensions()
+        
+        # Special case: if no extensions specified, scan all files
+        # This allows importers like GenericImporter to handle any file type
+        if not extensions:
+            glob_method = directory_path.rglob if recursive else directory_path.glob
+            return [f for f in glob_method("*") if f.is_file()]
+        
+        return scan_directory_for_files(directory_path, extensions, recursive)
+    
+    def extract_title_safe(self, content: str, filename_fallback: str) -> str:
+        """Extract title from content using shared logic.
+        
+        Args:
+            content: File content to analyze
+            filename_fallback: Fallback title from filename
+            
+        Returns:
+            Extracted or generated title
+        """
+        return extract_title_from_content(content, filename_fallback)
+    
+    def extract_hashtags_safe(self, content: str) -> List[str]:
+        """Extract hashtags from content using shared logic.
+        
+        Args:
+            content: Content to analyze
+            
+        Returns:
+            List of unique hashtags
+        """
+        return extract_hashtags(content)
+    
+    def get_file_metadata_safe(self, file_path: Path) -> dict:
+        """Get file metadata using shared utilities.
+        
+        Args:
+            file_path: Path to the file
+            
+        Returns:
+            Dictionary with file metadata
+            
+        Raises:
+            ImportProcessingError: If metadata cannot be extracted
+        """
+        try:
+            return get_file_metadata(file_path)
+        except Exception as e:
+            raise ImportProcessingError(f"Cannot get metadata for {file_path}: {str(e)}") from e
+    
+    def parse_timestamp_safe(self, timestamp_value, formats: Optional[List[str]] = None) -> Optional[datetime]:
+        """Parse timestamp using flexible parsing.
+        
+        Args:
+            timestamp_value: Timestamp in various formats
+            formats: Optional list of formats to try
+            
+        Returns:
+            Parsed datetime or None
+        """
+        return parse_flexible_timestamp(timestamp_value, formats)
+    
+    def create_imported_note_safe(
+        self, 
+        title: str, 
+        body: str, 
+        file_path: Path,
+        tags: Optional[List[str]] = None,
+        notebook: Optional[str] = None,
+        is_todo: bool = False,
+        todo_completed: bool = False,
+        created_time: Optional[datetime] = None,
+        updated_time: Optional[datetime] = None,
+        additional_metadata: Optional[dict] = None
+    ) -> ImportedNote:
+        """Create ImportedNote with standard metadata population.
+        
+        Args:
+            title: Note title
+            body: Note content
+            file_path: Source file path
+            tags: Optional tags list
+            notebook: Optional notebook name
+            is_todo: Whether note is a todo
+            todo_completed: Whether todo is completed
+            created_time: Optional creation time
+            updated_time: Optional update time
+            additional_metadata: Additional metadata to include
+            
+        Returns:
+            Properly constructed ImportedNote
+        """
+        # Get file metadata if timestamps not provided
+        file_metadata = self.get_file_metadata_safe(file_path)
+        
+        if not created_time:
+            created_time = file_metadata["created_time"]
+        if not updated_time:
+            updated_time = file_metadata["updated_time"]
+        
+        # Build metadata
+        metadata = {
+            "import_method": self.__class__.__name__.lower(),
+            "original_format": self.get_display_name().lower(),
+            **file_metadata,
+        }
+        
+        if additional_metadata:
+            metadata.update(additional_metadata)
+        
+        return ImportedNote(
+            title=title,
+            body=body,
+            notebook=notebook,
+            tags=tags or [],
+            is_todo=is_todo,
+            todo_completed=todo_completed,
+            created_time=created_time,
+            updated_time=updated_time,
+            metadata=metadata,
+        )

@@ -11,6 +11,9 @@ from .raw_importer import RAWImporter
 from .txt_importer import TxtImporter
 from .zip_importer import ZIPImporter
 
+# Import utilities for use by importers
+from . import utils
+
 __all__ = [
     "BaseImporter",
     "MarkdownImporter",
@@ -22,4 +25,5 @@ __all__ = [
     "RAWImporter",
     "ZIPImporter",
     "GenericImporter",
+    "utils",
 ]
