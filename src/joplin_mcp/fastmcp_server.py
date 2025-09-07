@@ -2788,20 +2788,14 @@ async def import_from_file(
 
         # Detect format if not specified
         if not format:
-            try:
-                from .import_system import UnifiedImportSystem
-                unified_system = UnifiedImportSystem()
-                format = unified_system.detect_source_format(file_path)
-            except Exception as e:
-                # Fallback to local detection for files
-                if path.is_file():
-                    try:
-                        format = detect_file_format(file_path)
-                    except ValueError:
-                        format = "generic"
-                else:
-                    # For directories, default to generic
+            if path.is_file():
+                try:
+                    format = detect_file_format(file_path)
+                except ValueError:
                     format = "generic"
+            else:
+                # For directories, use generic importer to handle all file types
+                format = "generic"
 
         # Create import options
         base_options = ImportOptions(
