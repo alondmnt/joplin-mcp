@@ -71,6 +71,52 @@ def extract_hashtags(content: str) -> List[str]:
     return list(set(hashtags))
 
 
+def extract_html_title(html_content: str, filename_fallback: str) -> str:
+    """Extract title from HTML content using multiple strategies.
+    
+    Args:
+        html_content: HTML content to analyze
+        filename_fallback: Fallback title from filename
+        
+    Returns:
+        Extracted title using best available method
+    """
+    import re
+    
+    # Strategy 1: Extract from HTML <title> tag
+    title_match = re.search(r'<title[^>]*>([^<]+)</title>', html_content, re.IGNORECASE)
+    if title_match:
+        title = title_match.group(1).strip()
+        if title and title.lower() not in ['untitled', 'document', 'page']:
+            return title
+    
+    # Strategy 2: Convert to Markdown and extract from headings
+    try:
+        markdown_content = html_to_markdown(html_content)
+        # Look for first heading in converted markdown
+        markdown_title = extract_title_from_content(markdown_content, filename_fallback)
+        
+        # If we got a meaningful title from markdown (not just the filename fallback)
+        if markdown_title and not markdown_title.lower().startswith(filename_fallback.lower()):
+            return markdown_title
+    except Exception:
+        # If markdown conversion fails, continue to fallback
+        pass
+    
+    # Strategy 3: Look for first heading tag in HTML
+    heading_match = re.search(r'<h[1-6][^>]*>([^<]+)</h[1-6]>', html_content, re.IGNORECASE)
+    if heading_match:
+        title = heading_match.group(1).strip()
+        if title:
+            # Clean up any remaining HTML entities
+            title = re.sub(r'&[a-zA-Z0-9#]+;', '', title)
+            return title
+    
+    # Strategy 4: Fallback to cleaned filename
+    title = filename_fallback.replace("_", " ").replace("-", " ")
+    return " ".join(word.capitalize() for word in title.split()) or "Untitled"
+
+
 def html_to_markdown(html_content: str, title: Optional[str] = None) -> str:
     """Convert HTML content to Markdown.
     

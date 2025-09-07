@@ -12,6 +12,7 @@ from .file_utils import (
 from .content_processors import (
     extract_title_from_content,
     extract_hashtags,
+    extract_html_title,
     html_to_markdown,
     csv_to_markdown_table,
     clean_markdown,
@@ -39,6 +40,7 @@ __all__ = [
     "is_readable_text_file",
     "extract_title_from_content",
     "extract_hashtags",
+    "extract_html_title",
     "html_to_markdown",
     "csv_to_markdown_table",
     "clean_markdown",

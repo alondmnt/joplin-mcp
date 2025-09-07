@@ -10,7 +10,7 @@ from typing import List, Optional
 
 from ..types.import_types import ImportedNote
 from .base import BaseImporter
-from .utils import html_to_markdown, extract_hashtags
+from .utils import html_to_markdown, extract_hashtags, extract_html_title
 
 logger = logging.getLogger(__name__)
 
@@ -99,8 +99,8 @@ class HTMLImporter(BaseImporter):
         # Convert HTML to Markdown using shared utility
         markdown_content = html_to_markdown(content)
 
-        # Extract title using enhanced base class utilities
-        title = self.extract_title_safe(content, file_path.stem)
+        # Extract title using HTML-specific extraction
+        title = extract_html_title(content, file_path.stem)
 
         # Extract hashtags from the converted markdown content
         tags = self.extract_hashtags_safe(markdown_content)
