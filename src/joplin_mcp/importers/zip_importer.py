@@ -34,23 +34,10 @@ class ZIPImporter(BaseImporter):
         """Validate ZIP file can be processed."""
         path = Path(file_path)
 
-        # Check file exists and is readable
-        if not path.exists():
-            raise ImportValidationError(f"ZIP file not found: {file_path}")
+        # Use enhanced base class validation for basic checks
+        self.validate_file_comprehensive(path)
 
-        if not path.is_file():
-            raise ImportValidationError(f"Path is not a file: {file_path}")
-
-        # Check file extension
-        if path.suffix.lower() not in self.get_supported_extensions():
-            raise ImportValidationError(
-                f"Unsupported ZIP file extension: {path.suffix}"
-            )
-
-        if path.stat().st_size == 0:
-            raise ImportValidationError(f"File is empty: {file_path}")
-
-        # Try to open as ZIP file
+        # Additional ZIP-specific validation
         try:
             with zipfile.ZipFile(file_path, "r") as zip_file:
                 # Check if it's a valid ZIP file
@@ -59,6 +46,7 @@ class ZIPImporter(BaseImporter):
                 # Get list of files in the archive
                 file_list = zip_file.namelist()
                 if not file_list:
+                    from .base import ImportValidationError
                     raise ImportValidationError(f"ZIP file is empty: {file_path}")
 
                 # Check if it contains any supported file types
@@ -70,14 +58,14 @@ class ZIPImporter(BaseImporter):
                 )
 
                 if not has_supported_files:
+                    from .base import ImportValidationError
                     raise ImportValidationError(
                         f"ZIP file contains no supported file formats: {file_path}"
                     )
 
         except zipfile.BadZipFile as e:
+            from .base import ImportValidationError
             raise ImportValidationError(f"Invalid ZIP file: {file_path}") from e
-        except Exception as e:
-            raise ImportValidationError(f"Error reading ZIP file: {str(e)}") from e
 
         return True
 
@@ -160,48 +148,38 @@ class ZIPImporter(BaseImporter):
             # Extract title from filename or content
             title = self._extract_title(zip_file_path, text_content)
 
-            # Process content based on file type
-            extension = zip_file_path.suffix.lower()
-            if extension in {".html", ".htm"}:
-                body = self._process_html_content(text_content)
-            elif extension in {".md", ".markdown"}:
-                body = text_content  # Markdown is already in correct format
-            elif extension in {".txt", ".text"}:
-                body = self._convert_text_to_markdown(text_content, title)
-            elif extension == ".csv":
-                body = self._convert_csv_to_markdown(text_content, title)
-            else:
-                # Default: wrap in code block
-                body = f"# {title}\n\n```\n{text_content}\n```"
+            # Delegate file processing to GenericImporter for consistent handling
+            body = await self._delegate_to_generic_importer(zip_file_path, text_content)
 
-            # Extract any hashtags from content
-            tags = self._extract_hashtags(text_content)
+            # Extract hashtags using enhanced base class utilities
+            tags = self.extract_hashtags_safe(text_content)
 
             # Add OneNote tag if detected
             if is_onenote and "onenote" not in tags:
                 tags.append("onenote")
 
-            # Get file metadata
-            stat = zip_source.stat()
-            created_time = datetime.fromtimestamp(stat.st_ctime)
-            updated_time = datetime.fromtimestamp(stat.st_mtime)
+            # Get file metadata using enhanced base class utilities
+            file_metadata = self.get_file_metadata_safe(zip_source)
+            created_time = file_metadata.get("created_time")
+            updated_time = file_metadata.get("updated_time")
 
-            # Create imported note
-            note = ImportedNote(
+            # Prepare additional metadata
+            additional_metadata = {
+                "original_format": "zip",
+                "zip_path": str(zip_file_path),
+                "file_extension": extension,
+                "is_onenote": is_onenote,
+            }
+
+            # Create note using enhanced base class utilities
+            note = self.create_imported_note_safe(
                 title=title,
                 body=body,
+                file_path=zip_source,
+                tags=tags,
                 created_time=created_time,
                 updated_time=updated_time,
-                tags=tags,
-                notebook=None,
-                metadata={
-                    "original_format": "zip",
-                    "source_file": str(zip_source),
-                    "zip_path": str(zip_file_path),
-                    "file_extension": extension,
-                    "is_onenote": is_onenote,
-                    "import_method": "zip_importer",
-                },
+                additional_metadata=additional_metadata,
             )
 
             return note
@@ -238,74 +216,6 @@ class ZIPImporter(BaseImporter):
         # Fall back to filename
         return file_path.stem.replace("_", " ").replace("-", " ")
 
-    def _process_html_content(self, content: str) -> str:
-        """Process HTML content."""
-        try:
-            import markdownify
-            from bs4 import BeautifulSoup
-
-            # Parse and convert HTML to Markdown
-            soup = BeautifulSoup(content, "html.parser")
-
-            # Remove script tags for security
-            for script in soup.find_all("script"):
-                script.decompose()
-
-            # Convert to Markdown
-            markdown = markdownify.markdownify(
-                str(soup), heading_style="ATX", bullets="-", strip=["script", "style"]
-            )
-
-            return markdown.strip()
-
-        except ImportError:
-            # If BeautifulSoup/markdownify not available, return as code block
-            return f"```html\n{content}\n```"
-
-    def _convert_text_to_markdown(self, content: str, title: str) -> str:
-        """Convert plain text to Markdown."""
-        # Add title if not present
-        if not content.startswith("#"):
-            content = f"# {title}\n\n{content}"
-
-        return content
-
-    def _convert_csv_to_markdown(self, content: str, title: str) -> str:
-        """Convert CSV content to Markdown table."""
-        import csv
-        from io import StringIO
-
-        try:
-            # Parse CSV
-            csv_reader = csv.reader(StringIO(content))
-            rows = list(csv_reader)
-
-            if not rows:
-                return f"# {title}\n\nEmpty CSV file."
-
-            # Create Markdown table
-            markdown_lines = [f"# {title}", "", "CSV Data:", ""]
-
-            # Add headers
-            if rows:
-                headers = rows[0]
-                markdown_lines.append("| " + " | ".join(headers) + " |")
-                markdown_lines.append("| " + " | ".join(["---"] * len(headers)) + " |")
-
-                # Add data rows
-                for row in rows[1:]:
-                    # Pad row to match header count
-                    padded_row = row + [""] * (len(headers) - len(row))
-                    clean_row = [
-                        cell.replace("|", "\\|") for cell in padded_row[: len(headers)]
-                    ]
-                    markdown_lines.append("| " + " | ".join(clean_row) + " |")
-
-            return "\n".join(markdown_lines)
-
-        except Exception:
-            # Fallback: return as code block
-            return f"# {title}\n\n```csv\n{content}\n```"
 
     def _extract_hashtags(self, content: str) -> List[str]:
         """Extract hashtags from content."""
@@ -316,3 +226,45 @@ class ZIPImporter(BaseImporter):
         hashtags = re.findall(hashtag_pattern, content)
 
         return list(set(hashtags))
+
+    async def _delegate_to_generic_importer(self, file_path: Path, content: str) -> str:
+        """Delegate file processing to GenericImporter - let it decide what to do with the file."""
+        try:
+            # Dynamic import to avoid circular dependencies
+            from .generic_importer import GenericImporter
+            
+            # Create a GenericImporter instance with same options
+            generic_importer = GenericImporter(self.options)
+            
+            # Create a temporary file to process
+            import tempfile
+            import os
+            
+            # Write content to a temporary file so GenericImporter can process it
+            with tempfile.NamedTemporaryFile(mode='w', suffix=file_path.suffix, delete=False, encoding='utf-8') as temp_file:
+                temp_file.write(content)
+                temp_file_path = temp_file.name
+            
+            try:
+                # Let GenericImporter process the file and return the note
+                note = await generic_importer._parse_file(Path(temp_file_path))
+                
+                # Extract the body content from the note
+                if note and note.body:
+                    return note.body
+                else:
+                    # Fallback if GenericImporter couldn't process it
+                    title = self._extract_title(file_path, content)
+                    return f"# {title}\n\n```\n{content}\n```"
+                    
+            finally:
+                # Clean up temporary file
+                try:
+                    os.unlink(temp_file_path)
+                except OSError:
+                    pass
+                
+        except Exception:
+            # Ultimate fallback: wrap in code block with title
+            title = self._extract_title(file_path, content)
+            return f"# {title}\n\n```\n{content}\n```"
