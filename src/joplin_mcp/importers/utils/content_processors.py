@@ -316,15 +316,27 @@ def clean_markdown(markdown: str) -> str:
     # Remove empty list items
     markdown = re.sub(r"\n-\s*\n", "\n", markdown)
     
-    # Fix common conversion issues
-    markdown = re.sub(r"\*\*\s+", "**", markdown)  # Fix bold formatting
-    markdown = re.sub(r"\s+\*\*", "**", markdown)
-    markdown = re.sub(r"\*\s+", "*", markdown)  # Fix italic formatting  
-    markdown = re.sub(r"\s+\*", "*", markdown)
+    # Fix spacing issues from HTML conversion
+    # Fix missing spaces around bold/italic markers
+    markdown = re.sub(r"(\w)\*\*(\w)", r"\1 **\2", markdown)  # word**word -> word **word
+    markdown = re.sub(r"(\w)\*\*(\s)", r"\1** \2", markdown)  # word**space -> word** space
+    markdown = re.sub(r"(\w)\*(\w)", r"\1 *\2", markdown)     # word*word -> word *word  
+    markdown = re.sub(r"(\w)\*(\s)", r"\1* \2", markdown)     # word*space -> word* space
     
-    # Clean up links
+    # Fix list items that got merged with other content
+    markdown = re.sub(r"(\w)-\*", r"\1\n- *", markdown)      # word-* -> word\n- *
+    markdown = re.sub(r"-\*(\w)", r"- *\1", markdown)        # -*word -> - *word
+    
+    # Fix blockquotes that got merged
+    markdown = re.sub(r"(\w)>(\s)", r"\1\n\n> \2", markdown)  # word>space -> word\n\n> space
+    markdown = re.sub(r"\*>(\s)", r"*\n\n> \1", markdown)     # *>space -> *\n\n> space
+    
+    # Clean up links (but preserve spaces around them)
     markdown = re.sub(r"\[\s+", "[", markdown)
     markdown = re.sub(r"\s+\]", "]", markdown)
+    
+    # Final cleanup of excessive newlines
+    markdown = re.sub(r"\n{3,}", "\n\n", markdown)
     
     return markdown.strip()
 
