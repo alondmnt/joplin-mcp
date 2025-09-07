@@ -5,14 +5,12 @@ Handles CSV files by converting structured data to Markdown format,
 with each row becoming a separate note or one consolidated note with a table.
 """
 
-import csv
-import re
-from datetime import datetime
 from pathlib import Path
 from typing import List
 
 from ..types.import_types import ImportedNote
-from .base import BaseImporter, ImportProcessingError, ImportValidationError
+from .base import BaseImporter
+from .utils import csv_to_markdown_table, extract_hashtags
 
 
 class CSVImporter(BaseImporter):
@@ -35,264 +33,110 @@ class CSVImporter(BaseImporter):
         """Validate CSV file or directory can be processed."""
         path = Path(source_path)
 
-        # Check source exists and is readable
-        if not path.exists():
-            raise ImportValidationError(f"CSV source not found: {source_path}")
-
         if path.is_file():
-            # Validate single CSV file
-            extension = path.suffix.lower().lstrip(".")
-            if extension not in self.get_supported_extensions():
-                raise ImportValidationError(
-                    f"Unsupported CSV file extension: {path.suffix}"
-                )
-
-            if path.stat().st_size == 0:
-                raise ImportValidationError(f"File is empty: {source_path}")
-
-            # Validate CSV file structure
-            await self._validate_csv_file(path)
-
+            # Use enhanced base class validation
+            self.validate_file_comprehensive(path)
         elif path.is_dir():
-            # Validate directory contains CSV files
-            csv_files = list(path.rglob("*.csv"))
-
-            if not csv_files:
-                raise ImportValidationError(
-                    f"No CSV files found in directory: {source_path}"
-                )
-
-            # Validate at least one CSV file is readable
-            for csv_file in csv_files[:3]:  # Check first 3 files for performance
-                try:
-                    await self._validate_csv_file(csv_file)
-                    break  # If one is valid, assume others are too
-                except ImportValidationError:
-                    continue
-            else:
-                raise ImportValidationError(
-                    f"No valid CSV files found in directory: {source_path}"
-                )
+            # Use enhanced base class validation  
+            self.validate_directory_comprehensive(path)
         else:
+            from .base import ImportValidationError
             raise ImportValidationError(
                 f"Path is neither file nor directory: {source_path}"
             )
 
         return True
 
-    async def _validate_csv_file(self, file_path: Path) -> None:
-        """Validate a single CSV file structure."""
-        if file_path.stat().st_size == 0:
-            raise ImportValidationError(f"File is empty: {file_path}")
-
-        # Try to read and parse as CSV
-        try:
-            with open(file_path, encoding="utf-8") as f:
-                # Try to detect CSV format
-                sample = f.read(1024)
-                f.seek(0)
-
-                # Use csv.Sniffer to detect dialect
-                sniffer = csv.Sniffer()
-                try:
-                    dialect = sniffer.sniff(sample)
-                except csv.Error:
-                    # Fall back to default dialect
-                    dialect = csv.excel
-
-                # Try to read first few rows
-                reader = csv.reader(f, dialect=dialect)
-                rows = []
-                for i, row in enumerate(reader):
-                    if i >= 3:  # Read first 3 rows for validation
-                        break
-                    rows.append(row)
-
-                if not rows:
-                    raise ImportValidationError(
-                        f"CSV file appears to be empty: {file_path}"
-                    )
-
-                # Check if first row looks like headers
-                if len(rows) > 1:
-                    first_row = rows[0]
-                    if not first_row or all(not cell.strip() for cell in first_row):
-                        raise ImportValidationError(
-                            f"CSV file has empty header row: {file_path}"
-                        )
-
-        except UnicodeDecodeError:
-            # Try other encodings
-            for encoding in ["latin-1", "cp1252", "iso-8859-1"]:
-                try:
-                    with open(file_path, encoding=encoding) as f:
-                        sample = f.read(1024)
-                        # Basic validation that it looks like CSV
-                        if (
-                            "," not in sample
-                            and ";" not in sample
-                            and "\t" not in sample
-                        ):
-                            continue
-                    break
-                except UnicodeDecodeError:
-                    continue
-            else:
-                raise ImportValidationError(
-                    f"Unable to decode CSV file with common encodings: {file_path}"
-                )
-        except Exception as e:
-            raise ImportValidationError(f"Error reading CSV file: {str(e)}") from e
-
     async def parse(self, source_path: str) -> List[ImportedNote]:
         """Parse CSV file or directory and convert to ImportedNote objects."""
-        try:
-            path = Path(source_path)
+        path = Path(source_path)
 
-            if path.is_file():
-                # Parse single CSV file
-                notes = await self._parse_csv_file(path)
-                return notes
-            elif path.is_dir():
-                # Parse all CSV files in directory
-                all_notes = []
-                csv_files = list(path.rglob("*.csv"))
+        if path.is_file():
+            # Parse single CSV file
+            notes = await self._parse_csv_file(path)
+            return notes
+        elif path.is_dir():
+            # Parse all CSV files in directory using enhanced base class
+            all_notes = []
+            csv_files = self.scan_directory_safe(path)
 
-                for csv_file in csv_files:
-                    try:
-                        notes = await self._parse_csv_file(csv_file)
-                        all_notes.extend(notes)
-                    except Exception as e:
-                        # Log error but continue with other files
-                        print(f"Warning: Failed to parse {csv_file}: {str(e)}")
-                        continue
+            for csv_file in csv_files:
+                try:
+                    notes = await self._parse_csv_file(csv_file)
+                    all_notes.extend(notes)
+                except Exception as e:
+                    # Log error but continue with other files
+                    print(f"Warning: Failed to parse {csv_file}: {str(e)}")
+                    continue
 
-                return all_notes
-            else:
-                raise ImportProcessingError(
-                    f"Source is neither file nor directory: {source_path}"
-                )
-
-        except Exception as e:
-            if isinstance(e, (ImportValidationError, ImportProcessingError)):
-                raise
-            raise ImportProcessingError(f"CSV import failed: {str(e)}") from e
-
-    async def _parse_csv_file(self, file_path: Path) -> List[ImportedNote]:
-        """Parse a single CSV file and convert to ImportedNote objects."""
-        # Read CSV content with proper encoding
-        content = None
-        used_encoding = None
-        for encoding in ["utf-8", "latin-1", "cp1252", "iso-8859-1"]:
-            try:
-                with open(file_path, encoding=encoding) as f:
-                    content = f.read()
-                used_encoding = encoding
-                break
-            except UnicodeDecodeError:
-                continue
-
-        if content is None:
+            return all_notes
+        else:
+            from .base import ImportProcessingError
             raise ImportProcessingError(
-                f"Could not read CSV file with any supported encoding: {file_path}"
+                f"Source is neither file nor directory: {source_path}"
             )
 
-        # Parse CSV data
-        rows = []
-        with open(file_path, encoding=used_encoding) as f:
-            # Detect CSV dialect
-            sample = f.read(1024)
-            f.seek(0)
+    async def _parse_csv_file(self, file_path: Path) -> List[ImportedNote]:
+        """Parse a single CSV file and convert to ImportedNote(s)."""
+        # Read CSV content using enhanced base class utilities
+        content, used_encoding = self.read_file_safe(file_path)
 
+        # Get import mode from options - default to 'table' (preserving original behavior)
+        import_mode = getattr(self.options, "csv_import_mode", "table")
+
+        if import_mode == "rows":
+            return await self._create_notes_from_rows(file_path, content, used_encoding)
+        else:
+            # Default table mode
+            return await self._create_table_note(file_path, content, used_encoding)
+
+    async def _create_table_note(self, file_path: Path, content: str, used_encoding: str) -> List[ImportedNote]:
+        """Create a single note with CSV data as a Markdown table."""
+        # Extract title using enhanced base class utilities
+        title = self.extract_title_safe(content, file_path.stem)
+
+        # Convert CSV to Markdown table using shared utility
+        markdown_content = csv_to_markdown_table(content, title)
+
+        # Extract hashtags using enhanced base class utilities
+        tags = self.extract_hashtags_safe(content)
+
+        # Create note using enhanced base class utilities
+        note = self.create_imported_note_safe(
+            title=title,
+            body=markdown_content,
+            file_path=file_path,
+            tags=tags,
+            additional_metadata={
+                "encoding": used_encoding,
+                "import_mode": "table",
+            },
+        )
+        return [note]
+
+    async def _create_notes_from_rows(self, file_path: Path, content: str, used_encoding: str) -> List[ImportedNote]:
+        """Create separate notes from each CSV row (preserving original functionality)."""
+        # Parse CSV content to get rows
+        import csv
+        from io import StringIO
+        
+        rows = []
+        try:
+            # Detect CSV dialect
+            sample = content[:1024]
             sniffer = csv.Sniffer()
             try:
                 dialect = sniffer.sniff(sample)
             except csv.Error:
                 dialect = csv.excel
 
-            reader = csv.reader(f, dialect=dialect)
+            reader = csv.reader(StringIO(content), dialect=dialect)
             for row in reader:
                 rows.append(row)
+        except Exception:
+            # Fallback to simple CSV parsing
+            rows = [line.split(',') for line in content.strip().split('\n')]
 
-        if not rows:
-            raise ImportProcessingError(f"CSV file contains no data: {file_path}")
-
-        # Get import mode from options - default to 'table'
-        import_mode = getattr(self.options, "csv_import_mode", "table")
-
-        if import_mode == "rows":
-            return self._create_notes_from_rows(
-                file_path, rows, used_encoding or "utf-8"
-            )
-        else:
-            return self._create_table_note(file_path, rows, used_encoding or "utf-8")
-
-    def _create_table_note(
-        self, path: Path, rows: List[List[str]], encoding: str
-    ) -> List[ImportedNote]:
-        """Create a single note with CSV data as a Markdown table."""
-        if not rows:
-            return []
-
-        # Extract title from filename
-        title = path.stem.replace("_", " ").replace("-", " ").title()
-
-        # Create Markdown table
-        markdown_lines = [f"# {title}", "", "CSV Data imported as table:", ""]
-
-        # Add table headers (first row)
-        headers = rows[0] if rows else []
-        if headers:
-            # Clean and format headers
-            clean_headers = [self._clean_cell_content(header) for header in headers]
-            markdown_lines.append("| " + " | ".join(clean_headers) + " |")
-            markdown_lines.append(
-                "| " + " | ".join(["---"] * len(clean_headers)) + " |"
-            )
-
-            # Add data rows
-            for row in rows[1:]:
-                # Pad row to match header count
-                padded_row = row + [""] * (len(headers) - len(row))
-                clean_row = [
-                    self._clean_cell_content(cell)
-                    for cell in padded_row[: len(headers)]
-                ]
-                markdown_lines.append("| " + " | ".join(clean_row) + " |")
-
-        markdown_content = "\n".join(markdown_lines)
-
-        # Get file metadata
-        stat = path.stat()
-        created_time = datetime.fromtimestamp(stat.st_ctime)
-        updated_time = datetime.fromtimestamp(stat.st_mtime)
-
-        # Create the imported note
-        note = ImportedNote(
-            title=title,
-            body=markdown_content,
-            created_time=created_time,
-            updated_time=updated_time,
-            tags=[],
-            notebook=None,
-            metadata={
-                "original_format": "csv",
-                "source_file": str(path),
-                "encoding": encoding,
-                "file_size": stat.st_size,
-                "import_method": "csv_importer",
-                "import_mode": "table",
-                "row_count": len(rows),
-                "column_count": len(headers) if headers else 0,
-            },
-        )
-
-        return [note]
-
-    def _create_notes_from_rows(
-        self, path: Path, rows: List[List[str]], encoding: str
-    ) -> List[ImportedNote]:
-        """Create separate notes from each CSV row."""
         if not rows:
             return []
 
@@ -305,7 +149,7 @@ class CSVImporter(BaseImporter):
             if row and row[0].strip():
                 title = self._clean_cell_content(row[0])[:100]  # Limit title length
             else:
-                title = f"{path.stem} - Row {i}"
+                title = f"{file_path.stem} - Row {i}"
 
             # Create content from row data
             content_lines = [f"# {title}", ""]
@@ -318,42 +162,30 @@ class CSVImporter(BaseImporter):
 
             markdown_content = "\n".join(content_lines)
 
-            # Get file metadata
-            stat = path.stat()
-            created_time = datetime.fromtimestamp(stat.st_ctime)
-            updated_time = datetime.fromtimestamp(stat.st_mtime)
-
-            # Extract any hashtags from the row data
-            tags = set()
+            # Extract hashtags from row data
+            tags = []
             for cell in row:
-                tags.update(self._extract_hashtags(cell))
+                tags.extend(self.extract_hashtags_safe(cell))
 
-            # Create the imported note
-            note = ImportedNote(
+            # Create note using enhanced base class utilities
+            note = self.create_imported_note_safe(
                 title=title,
                 body=markdown_content,
-                created_time=created_time,
-                updated_time=updated_time,
-                tags=list(tags),
-                notebook=None,
-                metadata={
-                    "original_format": "csv",
-                    "source_file": str(path),
-                    "encoding": encoding,
-                    "file_size": stat.st_size,
-                    "import_method": "csv_importer",
+                file_path=file_path,
+                tags=list(set(tags)),  # Remove duplicates
+                additional_metadata={
+                    "encoding": used_encoding,
                     "import_mode": "rows",
                     "row_number": i,
                     "total_rows": len(rows) - 1,
                 },
             )
-
             notes.append(note)
 
         return notes
 
     def _clean_cell_content(self, content: str) -> str:
-        """Clean and format cell content for Markdown."""
+        """Clean and format cell content for Markdown (preserving original functionality)."""
         if not content:
             return ""
 
@@ -364,17 +196,7 @@ class CSVImporter(BaseImporter):
         cleaned = cleaned.replace("|", "\\|")
 
         # Replace newlines with spaces in table cells
+        import re
         cleaned = re.sub(r"\s+", " ", cleaned)
 
         return cleaned
-
-    def _extract_hashtags(self, content: str) -> List[str]:
-        """Extract hashtags from cell content."""
-        if not content:
-            return []
-
-        # Find hashtags in the content
-        hashtag_pattern = r"#([a-zA-Z0-9_-]+)"
-        hashtags = re.findall(hashtag_pattern, content)
-
-        return hashtags

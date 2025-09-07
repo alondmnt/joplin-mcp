@@ -26,6 +26,7 @@ except ImportError as e:
 
 from ..types.import_types import ImportedNote
 from .base import BaseImporter, ImportProcessingError, ImportValidationError
+from .utils import html_to_markdown
 
 
 class ENEXImporter(BaseImporter):
@@ -48,60 +49,34 @@ class ENEXImporter(BaseImporter):
         """Validate ENEX file or directory can be processed."""
         path = Path(source_path)
 
-        # Check source exists and is readable
-        if not path.exists():
-            raise ImportValidationError(f"ENEX source not found: {source_path}")
-
         if path.is_file():
-            # Validate single ENEX file
-            extension = path.suffix.lower().lstrip(".")
-            if extension not in self.get_supported_extensions():
-                raise ImportValidationError(
-                    f"Unsupported ENEX file extension: {path.suffix}"
-                )
-            # Validate it's a valid XML file
-            await self._validate_enex_file(path)
-
+            # Use enhanced base class validation
+            self.validate_file_comprehensive(path)
+            # Additional ENEX-specific validation
+            await self._validate_enex_structure(path)
         elif path.is_dir():
-            # Validate directory contains ENEX files
-            enex_files = list(path.rglob("*.enex"))
-            if not enex_files:
-                raise ImportValidationError(
-                    f"No ENEX files found in directory: {source_path}"
-                )
-            # Validate at least one ENEX file is valid
-            for enex_file in enex_files[:3]:  # Check first 3 files for performance
-                try:
-                    await self._validate_enex_file(enex_file)
-                    break  # If one is valid, assume others are too
-                except ImportValidationError:
-                    continue
-            else:
-                raise ImportValidationError(
-                    f"No valid ENEX files found in directory: {source_path}"
-                )
+            # Use enhanced base class validation
+            self.validate_directory_comprehensive(path)
         else:
+            from .base import ImportValidationError
             raise ImportValidationError(
                 f"Path is neither file nor directory: {source_path}"
             )
 
         return True
 
-    async def _validate_enex_file(self, file_path: Path) -> None:
-        """Validate a single ENEX file's XML structure."""
-        if file_path.stat().st_size == 0:
-            raise ImportValidationError(f"File is empty: {file_path}")
+    async def _validate_enex_structure(self, file_path: Path) -> None:
+        """Validate ENEX-specific XML structure."""
+        # Read file content using enhanced base class utilities
+        content, _ = self.read_file_safe(file_path)
 
-        # Try to parse as XML and validate ENEX structure
+        # Parse XML and validate ENEX structure
         try:
-            with open(file_path, encoding="utf-8") as f:
-                content = f.read()
-
-            # Parse XML
             root = ET.fromstring(content)
 
             # Check if it's a valid ENEX file
             if root.tag != "en-export":
+                from .base import ImportValidationError
                 raise ImportValidationError(
                     f"File is not a valid ENEX export (root element: {root.tag})"
                 )
@@ -109,78 +84,45 @@ class ENEXImporter(BaseImporter):
             # Check for at least one note
             notes = root.findall("note")
             if not notes:
+                from .base import ImportValidationError
                 raise ImportValidationError(f"ENEX file contains no notes: {file_path}")
 
         except ET.ParseError as e:
+            from .base import ImportValidationError
             raise ImportValidationError(f"Invalid XML in ENEX file: {str(e)}") from e
-        except UnicodeDecodeError:
-            # Try other encodings
-            for encoding in ["latin-1", "cp1252", "iso-8859-1"]:
-                try:
-                    with open(file_path, encoding=encoding) as f:
-                        content = f.read()
-                    root = ET.fromstring(content)
-                    break
-                except (UnicodeDecodeError, ET.ParseError):
-                    continue
-            else:
-                raise ImportValidationError(
-                    f"Unable to decode ENEX file with common encodings: {file_path}"
-                )
-        except Exception as e:
-            raise ImportValidationError(f"Error reading ENEX file: {str(e)}") from e
 
     async def parse(self, source_path: str) -> List[ImportedNote]:
         """Parse ENEX file or directory and convert to ImportedNote objects."""
-        try:
-            path = Path(source_path)
+        path = Path(source_path)
 
-            if path.is_file():
-                # Parse single ENEX file
-                return await self._parse_enex_file(path)
-            elif path.is_dir():
-                # Parse all ENEX files in directory
-                all_notes = []
-                enex_files = list(path.rglob("*.enex"))
+        if path.is_file():
+            # Parse single ENEX file
+            return await self._parse_enex_file(path)
+        elif path.is_dir():
+            # Parse all ENEX files in directory using enhanced base class
+            all_notes = []
+            enex_files = self.scan_directory_safe(path)
 
-                for enex_file in enex_files:
-                    try:
-                        notes = await self._parse_enex_file(enex_file)
-                        all_notes.extend(notes)
-                    except Exception as e:
-                        # Log error but continue with other files
-                        print(f"Warning: Failed to parse {enex_file}: {str(e)}")
-                        continue
+            for enex_file in enex_files:
+                try:
+                    notes = await self._parse_enex_file(enex_file)
+                    all_notes.extend(notes)
+                except Exception as e:
+                    # Log error but continue with other files
+                    print(f"Warning: Failed to parse {enex_file}: {str(e)}")
+                    continue
 
-                return all_notes
-            else:
-                raise ImportProcessingError(
-                    f"Source is neither file nor directory: {source_path}"
-                )
-
-        except Exception as e:
-            if isinstance(e, (ImportValidationError, ImportProcessingError)):
-                raise
-            raise ImportProcessingError(f"ENEX import failed: {str(e)}") from e
+            return all_notes
+        else:
+            from .base import ImportProcessingError
+            raise ImportProcessingError(
+                f"Source is neither file nor directory: {source_path}"
+            )
 
     async def _parse_enex_file(self, file_path: Path) -> List[ImportedNote]:
         """Parse a single ENEX file and convert to ImportedNote objects."""
-        # Read ENEX content with proper encoding
-        content = None
-        used_encoding = None
-        for encoding in ["utf-8", "latin-1", "cp1252", "iso-8859-1"]:
-            try:
-                with open(file_path, encoding=encoding) as f:
-                    content = f.read()
-                used_encoding = encoding
-                break
-            except UnicodeDecodeError:
-                continue
-
-        if content is None:
-            raise ImportProcessingError(
-                f"Could not read ENEX file with any supported encoding: {file_path}"
-            )
+        # Read ENEX content using enhanced base class utilities
+        content, used_encoding = self.read_file_safe(file_path)
 
         # Parse XML
         root = ET.fromstring(content)
@@ -192,7 +134,7 @@ class ENEXImporter(BaseImporter):
         for i, note_elem in enumerate(note_elements):
             try:
                 imported_note = self._parse_note_element(
-                    note_elem, file_path, used_encoding or "utf-8", i + 1
+                    note_elem, file_path, used_encoding, i + 1
                 )
                 if imported_note:
                     notes.append(imported_note)
@@ -243,12 +185,10 @@ class ENEXImporter(BaseImporter):
             # Extract notebook (if specified)
             notebook = self._extract_notebook(note_elem)
 
-            # Extract additional metadata
-            metadata = {
-                "original_format": "enex",
-                "source_file": str(source_path),
+            # Prepare additional metadata
+            additional_metadata = {
                 "encoding": encoding,
-                "import_method": "enex_importer",
+                "original_format": "enex",
                 "output_mode": output_mode,
                 "note_number": note_number,
             }
@@ -256,25 +196,24 @@ class ENEXImporter(BaseImporter):
             # Add source URL if present
             source_url_elem = note_elem.find("source-url")
             if source_url_elem is not None and source_url_elem.text:
-                metadata["source_url"] = source_url_elem.text
+                additional_metadata["source_url"] = source_url_elem.text
 
             # Add author if present
             author_elem = note_elem.find("author")
             if author_elem is not None and author_elem.text:
-                metadata["author"] = author_elem.text
+                additional_metadata["author"] = author_elem.text
 
-            # Create the imported note
-            note = ImportedNote(
+            # Create note using enhanced base class utilities
+            return self.create_imported_note_safe(
                 title=title,
                 body=body,
-                created_time=created_time,
-                updated_time=updated_time,
+                file_path=source_path,
                 tags=tags,
                 notebook=notebook,
-                metadata=metadata,
+                created_time=created_time,
+                updated_time=updated_time,
+                additional_metadata=additional_metadata,
             )
-
-            return note
 
         except Exception as e:
             raise ImportProcessingError(f"Error parsing note element: {str(e)}") from e
@@ -294,53 +233,28 @@ class ENEXImporter(BaseImporter):
         return cleaned_html
 
     def _convert_to_markdown(self, raw_content: str, title: str) -> str:
-        """Convert HTML content to Markdown."""
+        """Convert HTML content to Markdown using shared utility with ENEX-specific pre-processing."""
         try:
-            # Clean the raw content first
+            # ENEX-specific pre-processing: Clean the raw content first
+            # This removes XML declarations, DOCTYPE, and <en-note> wrapper tags
             cleaned_content = self._clean_enex_content(raw_content)
 
-            # Parse HTML content
-            soup = BeautifulSoup(cleaned_content, "html.parser")
-
-            # Remove script tags for security
-            for script in soup.find_all("script"):
-                script.decompose()
-
-            # Convert to Markdown using markdownify
-            markdown = markdownify.markdownify(
-                str(soup),
-                heading_style="ATX",  # Use # style headers
-                bullets="-",  # Use - for bullets
-                strip=["script", "style"],  # Strip these elements
-            )
-
-            # Clean up the markdown
-            markdown = self._clean_markdown(markdown)
-
-            # Add title if not already present
-            if not markdown.startswith("#"):
-                markdown = f"# {title}\n\n{markdown}"
+            # Use shared HTML to Markdown conversion utility
+            # This provides consistent conversion logic, better cleanup, and robust fallback
+            markdown = html_to_markdown(cleaned_content, title)
 
             return markdown.strip()
 
         except Exception:
-            # Fallback: return cleaned text
-            soup = BeautifulSoup(raw_content, "html.parser")
-            cleaned_text = soup.get_text()
-            return f"# {title}\n\n{cleaned_text}"
+            # Fallback: return cleaned text with title
+            try:
+                soup = BeautifulSoup(raw_content, "html.parser")
+                cleaned_text = soup.get_text()
+                return f"# {title}\n\n{cleaned_text}"
+            except Exception:
+                # Ultimate fallback
+                return f"# {title}\n\n{raw_content}"
 
-    def _clean_markdown(self, markdown: str) -> str:
-        """Clean up markdown formatting."""
-        # Remove excessive whitespace
-        markdown = re.sub(r"\n{3,}", "\n\n", markdown)
-
-        # Clean up list formatting
-        markdown = re.sub(r"\n\s*\n\s*-", "\n-", markdown)
-
-        # Remove empty list items
-        markdown = re.sub(r"\n-\s*\n", "\n", markdown)
-
-        return markdown.strip()
 
     def _clean_enex_content(self, content: str) -> str:
         """Clean ENEX content by removing XML declarations and DOCTYPE."""

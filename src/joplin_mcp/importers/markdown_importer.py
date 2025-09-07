@@ -1,20 +1,17 @@
 """Markdown file importer for Joplin MCP server."""
 
-import re
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
-# Optional dependency for YAML frontmatter parsing
-try:
-    import yaml
-
-    YAML_AVAILABLE = True
-except ImportError:
-    YAML_AVAILABLE = False
+from typing import List, Optional
 
 from ..types.import_types import ImportedNote
-from .base import BaseImporter, ImportProcessingError, ImportValidationError
+from .base import BaseImporter
+from .utils import (
+    extract_all_tags,
+    extract_title_from_content,
+    clean_markdown,
+    parse_frontmatter_timestamp,
+    extract_frontmatter_field,
+)
 
 
 class MarkdownImporter(BaseImporter):
@@ -34,288 +31,110 @@ class MarkdownImporter(BaseImporter):
 
     async def validate(self, source: str) -> bool:
         """Validate that the source can be imported."""
-        self.validate_source_exists(source)
-        self.validate_source_readable(source)
-
         path = Path(source)
 
         if path.is_file():
-            # Validate single file
-            if not self.supports_file(source):
-                raise ImportValidationError(
-                    f"File extension not supported: {path.suffix}"
-                )
-            self.validate_file_size(
-                source, self.options.import_options.get("max_file_size_mb", 100)
-            )
-            return True
-
+            # Use enhanced base class validation
+            self.validate_file_comprehensive(path)
         elif path.is_dir():
-            # Validate directory has at least one supported file
-            files = await self.get_file_list(source)
-            if not files:
-                raise ImportValidationError(
-                    f"No supported markdown files found in: {source}"
-                )
+            # Use enhanced base class validation  
+            self.validate_directory_comprehensive(path)
+        else:
+            from .base import ImportValidationError
+            raise ImportValidationError(f"Source is neither file nor directory: {source}")
 
-            # Check total size
-            total_size = sum(Path(f).stat().st_size for f in files) / (1024 * 1024)
-            max_total_size = self.options.import_options.get("max_total_size_mb", 500)
-            if total_size > max_total_size:
-                raise ImportValidationError(
-                    f"Total directory size too large: {total_size:.1f}MB (max: {max_total_size}MB)"
-                )
-
-            return True
-
-        raise ImportValidationError(f"Source is neither file nor directory: {source}")
+        return True
 
     async def parse(self, source: str) -> List[ImportedNote]:
         """Parse markdown files and return ImportedNote objects."""
         path = Path(source)
-        notes = []
 
         if path.is_file():
             # Parse single file
-            note = await self._parse_markdown_file(str(path), str(path.parent))
-            if note:
-                notes.append(note)
+            note = await self._parse_markdown_file(path)
+            return [note] if note else []
 
         elif path.is_dir():
-            # Parse directory
-            files = await self.get_file_list(source)
-            for file_path in files:
+            # Parse all markdown files in directory using enhanced base class
+            all_notes = []
+            markdown_files = self.scan_directory_safe(path)
+
+            for md_file in markdown_files:
                 try:
-                    note = await self._parse_markdown_file(file_path, source)
+                    note = await self._parse_markdown_file(md_file)
                     if note:
-                        notes.append(note)
+                        all_notes.append(note)
                 except Exception as e:
                     # Log error but continue processing other files
-                    print(f"Warning: Failed to parse {file_path}: {e}")
+                    print(f"Warning: Failed to parse {md_file}: {e}")
 
-        return notes
+            return all_notes
 
-    async def _parse_markdown_file(
-        self, file_path: str, base_path: str
-    ) -> Optional[ImportedNote]:
+        return []
+
+    async def _parse_markdown_file(self, file_path: Path) -> Optional[ImportedNote]:
         """Parse a single markdown file."""
-        try:
-            path = Path(file_path)
+        # Read markdown content using enhanced base class utilities
+        content, used_encoding = self.read_file_safe(file_path)
 
-            # Read file content
-            with open(path, encoding=self.options.encoding) as f:
-                content = f.read()
+        # Clean markdown content using shared utility
+        cleaned_content = clean_markdown(content)
 
-            # Extract frontmatter and content
-            frontmatter, body = self._extract_frontmatter(content)
+        # Extract title using enhanced base class utilities
+        title = self.extract_title_safe(cleaned_content, file_path.stem)
 
-            # Generate title
-            title = self._extract_title(frontmatter, body, path.stem)
-
-            # Extract notebook from directory structure
-            notebook = self.extract_notebook_from_path(file_path, base_path)
-            if frontmatter.get("notebook"):
-                notebook = frontmatter["notebook"]
-
-            # Extract tags
-            tags = self._extract_tags(frontmatter, body)
-
-            # Extract metadata
-            is_todo = frontmatter.get("todo", False) or frontmatter.get(
-                "is_todo", False
-            )
-            todo_completed = frontmatter.get("completed", False) or frontmatter.get(
-                "todo_completed", False
-            )
-
-            # Extract timestamps
-            created_time = self._parse_timestamp(
-                frontmatter.get("created", frontmatter.get("date"))
-            )
-            updated_time = self._parse_timestamp(
-                frontmatter.get("updated", frontmatter.get("modified"))
-            )
-
-            # Use file timestamps as fallback
-            if not created_time:
-                created_time = datetime.fromtimestamp(path.stat().st_ctime)
-            if not updated_time:
-                updated_time = datetime.fromtimestamp(path.stat().st_mtime)
-
-            # Create ImportedNote
-            note = ImportedNote(
-                title=title,
-                body=body,
-                notebook=notebook,
-                tags=tags,
-                is_todo=is_todo,
-                todo_completed=todo_completed,
-                created_time=created_time,
-                updated_time=updated_time,
-                metadata={
-                    "source_file": str(path),
-                    "frontmatter": frontmatter,
-                    "file_size": path.stat().st_size,
-                },
-            )
-
-            return note
-
-        except Exception as e:
-            raise ImportProcessingError(
-                f"Failed to parse markdown file {file_path}: {str(e)}"
-            ) from e
-
-    def _extract_frontmatter(self, content: str) -> tuple[Dict[str, Any], str]:
-        """Extract YAML frontmatter from markdown content."""
-        frontmatter: Dict[str, Any] = {}
-        body = content
-
-        # Check for YAML frontmatter (--- at start)
-        if content.startswith("---"):
-            parts = content.split("---", 2)
-            if len(parts) >= 3:
-                if YAML_AVAILABLE:
-                    try:
-                        frontmatter = yaml.safe_load(parts[1]) or {}
-                        body = parts[2].strip()
-                    except yaml.YAMLError:
-                        # If YAML parsing fails, treat as regular content
-                        pass
-                else:
-                    # Fallback when YAML is not available - basic key:value parsing
-                    frontmatter = self._fallback_yaml_parse(parts[1])
-                    body = parts[2].strip()
-
-        return frontmatter, body
-
-    def _extract_title(
-        self, frontmatter: Dict[str, Any], body: str, filename_fallback: str
-    ) -> str:
-        """Extract title from frontmatter, body, or filename."""
-        # Try frontmatter first
-        title = frontmatter.get("title")
-        if title:
-            return str(title).strip()
-
-        # Try first heading in body
-        lines = body.split("\n")
-        for line in lines:
-            line = line.strip()
-            if line.startswith("#"):
-                # Extract heading text
-                title = re.sub(r"^#+\s*", "", line).strip()
-                if title:
-                    return title
-
-        # Try first non-empty line
-        for line in lines:
-            line = line.strip()
-            if line and not line.startswith("#"):
-                # Use first 100 characters as title
-                return line[:100].strip()
-
-        # Fallback to filename
-        return filename_fallback.replace("_", " ").replace("-", " ").title()
-
-    def _extract_tags(self, frontmatter: Dict[str, Any], body: str) -> List[str]:
-        """Extract tags from frontmatter and body."""
-        tags = []
-
-        # From frontmatter
-        fm_tags = frontmatter.get("tags", frontmatter.get("categories", []))
-        if isinstance(fm_tags, str):
-            # Handle comma-separated tags
-            tags.extend([tag.strip() for tag in fm_tags.split(",") if tag.strip()])
-        elif isinstance(fm_tags, list):
-            tags.extend([str(tag).strip() for tag in fm_tags if tag])
-
-        # From body (hashtags)
+        # Extract all tags (frontmatter + hashtags) using enhanced utilities
+        # Respect extract_hashtags option from original implementation
         if self.options.import_options.get("extract_hashtags", True):
-            hashtag_pattern = r"#([a-zA-Z0-9_-]+)"
-            hashtags = re.findall(hashtag_pattern, body)
-            tags.extend(hashtags)
+            tags = extract_all_tags(content)
+        else:
+            # Only extract frontmatter tags, not hashtags from content
+            from .utils import extract_frontmatter_tags
+            tags = extract_frontmatter_tags(content)
 
-        # Remove duplicates and empty tags
-        return list({tag for tag in tags if tag})
+        # Extract todo flags from frontmatter
+        is_todo = bool(extract_frontmatter_field(content, "todo") or 
+                      extract_frontmatter_field(content, "is_todo"))
+        todo_completed = bool(extract_frontmatter_field(content, "completed") or 
+                             extract_frontmatter_field(content, "todo_completed"))
 
-    def _parse_timestamp(self, timestamp_str: Optional[str]) -> Optional[datetime]:
-        """Parse timestamp string to datetime object."""
-        if not timestamp_str:
-            return None
+        # Extract notebook from frontmatter (override for directory-based notebook)
+        notebook = extract_frontmatter_field(content, "notebook")
 
-        # Try different timestamp formats
-        formats = [
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%d %H:%M",
-            "%Y-%m-%d",
-            "%Y/%m/%d %H:%M:%S",
-            "%Y/%m/%d %H:%M",
-            "%Y/%m/%d",
-            "%d/%m/%Y %H:%M:%S",
-            "%d/%m/%Y %H:%M",
-            "%d/%m/%Y",
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%dT%H:%M:%SZ",
-            "%Y-%m-%dT%H:%M:%S.%fZ",
-        ]
+        # Extract timestamps from frontmatter using shared utilities
+        created_str = extract_frontmatter_field(content, "created") or \
+                     extract_frontmatter_field(content, "date")
+        updated_str = extract_frontmatter_field(content, "updated") or \
+                     extract_frontmatter_field(content, "modified")
+        
+        created_time = parse_frontmatter_timestamp(created_str) if created_str else None
+        updated_time = parse_frontmatter_timestamp(updated_str) if updated_str else None
 
-        timestamp_str = str(timestamp_str).strip()
+        # Use file timestamps as fallback (preserving original behavior)
+        file_metadata = self.get_file_metadata_safe(file_path)
+        if not created_time:
+            created_time = file_metadata.get("created_time")
+        if not updated_time:
+            updated_time = file_metadata.get("updated_time")
 
-        for fmt in formats:
-            try:
-                return datetime.strptime(timestamp_str, fmt)
-            except ValueError:
-                continue
+        # Note: We don't need complete frontmatter dict since we extract individual fields as needed
 
-        # If all formats fail, return None
-        return None
+        # Create note using enhanced base class utilities
+        return self.create_imported_note_safe(
+            title=title,
+            body=cleaned_content,
+            file_path=file_path,
+            tags=tags,
+            notebook=notebook,
+            is_todo=is_todo,
+            todo_completed=todo_completed,
+            created_time=created_time,
+            updated_time=updated_time,
+            additional_metadata={
+                "encoding": used_encoding,
+                "original_format": "markdown",
+                "source_file": str(file_path),
+                "file_size": file_metadata.get("size", 0),
+            },
+        )
 
-    def _fallback_yaml_parse(self, yaml_content: str) -> Dict[str, Any]:
-        """Fallback YAML parser when PyYAML is not available."""
-        frontmatter: Dict[str, Any] = {}
-
-        # Basic key: value parsing for common frontmatter fields
-        lines = yaml_content.strip().split("\n")
-
-        for line in lines:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-
-            # Handle simple key: value pairs
-            if ":" in line:
-                key, value_str = line.split(":", 1)
-                key = key.strip()
-                value_str = value_str.strip()
-                value: Any = value_str
-
-                # Remove quotes if present
-                if value_str.startswith('"') and value_str.endswith('"'):
-                    value = value_str[1:-1]
-                elif value_str.startswith("'") and value_str.endswith("'"):
-                    value = value_str[1:-1]
-                # Handle common YAML values
-                elif value_str.lower() in ["true", "yes"]:
-                    value = True
-                elif value_str.lower() in ["false", "no"]:
-                    value = False
-                elif value_str.isdigit():
-                    value = int(value_str)
-                elif value_str.replace(".", "", 1).isdigit():
-                    value = float(value_str)
-                elif value_str.startswith("[") and value_str.endswith("]"):
-                    # Basic list parsing - comma separated values
-                    list_content = value_str[1:-1].strip()
-                    if list_content:
-                        items = [
-                            item.strip().strip("\"'")
-                            for item in list_content.split(",")
-                        ]
-                        value = items
-                    else:
-                        value = []
-
-                frontmatter[key] = value
-
-        return frontmatter

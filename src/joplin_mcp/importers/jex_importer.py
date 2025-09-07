@@ -33,25 +33,12 @@ class JEXImporter(BaseImporter):
 
     async def validate(self, source: str) -> bool:
         """Validate that the source is a valid JEX file."""
-        self.validate_source_exists(source)
-        self.validate_source_readable(source)
-
         path = Path(source)
-        if not path.is_file():
-            raise ImportValidationError(
-                f"JEX format requires a single TAR archive file, not a directory. "
-                f"Path '{source}' is not a file. Use RAWImporter for directory exports."
-            )
 
-        if not self.supports_file(source):
-            raise ImportValidationError(f"File extension not supported: {path.suffix}")
+        # Use enhanced base class validation for basic checks
+        self.validate_file_comprehensive(path)
 
-        # Validate file size
-        self.validate_file_size(
-            source, self.options.import_options.get("max_file_size_mb", 500)
-        )
-
-        # Validate it's a valid TAR file
+        # Additional JEX-specific validation
         try:
             with tarfile.open(source, "r") as tar:
                 # Check if it looks like a JEX file
@@ -126,8 +113,9 @@ class JEXImporter(BaseImporter):
         # Look for notebook metadata files
         for json_file in extract_path.rglob("*.json"):
             try:
-                with open(json_file, encoding="utf-8") as f:
-                    data = json.load(f)
+                # Use enhanced base class utilities for file reading
+                content, _ = self.read_file_safe(json_file)
+                data = json.loads(content)
 
                 # Check if this is a notebook metadata file
                 if (
@@ -135,7 +123,7 @@ class JEXImporter(BaseImporter):
                 ):  # Type 2 = Notebook in Joplin
                     notebooks[data.get("id", "")] = data
 
-            except (json.JSONDecodeError, UnicodeDecodeError):
+            except (json.JSONDecodeError, Exception):
                 continue
 
         return notebooks
@@ -148,8 +136,9 @@ class JEXImporter(BaseImporter):
 
         for json_file in extract_path.rglob("*.json"):
             try:
-                with open(json_file, encoding="utf-8") as f:
-                    data = json.load(f)
+                # Use enhanced base class utilities for file reading
+                content, _ = self.read_file_safe(json_file)
+                data = json.loads(content)
 
                 # Check if this is a tag metadata file
                 if (
@@ -157,7 +146,7 @@ class JEXImporter(BaseImporter):
                 ):  # Type 5 = Tag in Joplin
                     tags[data.get("id", "")] = data
 
-            except (json.JSONDecodeError, UnicodeDecodeError):
+            except (json.JSONDecodeError, Exception):
                 continue
 
         return tags
@@ -170,8 +159,9 @@ class JEXImporter(BaseImporter):
 
         for json_file in extract_path.rglob("*.json"):
             try:
-                with open(json_file, encoding="utf-8") as f:
-                    data = json.load(f)
+                # Use enhanced base class utilities for file reading
+                content, _ = self.read_file_safe(json_file)
+                data = json.loads(content)
 
                 # Check if this is a resource metadata file
                 if (
@@ -179,7 +169,7 @@ class JEXImporter(BaseImporter):
                 ):  # Type 4 = Resource in Joplin
                     resources[data.get("id", "")] = data
 
-            except (json.JSONDecodeError, UnicodeDecodeError):
+            except (json.JSONDecodeError, Exception):
                 continue
 
         return resources
@@ -200,19 +190,14 @@ class JEXImporter(BaseImporter):
 
         if json_file.exists():
             try:
-                with open(json_file, encoding="utf-8") as f:
-                    note_metadata = json.load(f)
-            except (json.JSONDecodeError, UnicodeDecodeError):
+                # Use enhanced base class utilities for file reading
+                content, _ = self.read_file_safe(json_file)
+                note_metadata = json.loads(content)
+            except (json.JSONDecodeError, Exception):
                 pass
 
-        # Read note content
-        try:
-            with open(md_file, encoding="utf-8") as f:
-                body = f.read()
-        except UnicodeDecodeError:
-            # Try with different encoding
-            with open(md_file, encoding="latin-1") as f:
-                body = f.read()
+        # Read note content using enhanced base class utilities
+        body, used_encoding = self.read_file_safe(md_file)
 
         # Extract note information
         title = note_metadata.get("title", md_file.stem)
@@ -241,22 +226,27 @@ class JEXImporter(BaseImporter):
             body, resources_map, extract_path
         )
 
-        # Create ImportedNote
-        note = ImportedNote(
+        # Prepare additional metadata
+        additional_metadata = {
+            "encoding": used_encoding,
+            "original_format": "jex",
+            "joplin_id": note_metadata.get("id", ""),
+            "joplin_metadata": note_metadata,
+            "original_parent_id": parent_id,
+        }
+
+        # Create note using enhanced base class utilities
+        note = self.create_imported_note_safe(
             title=title,
             body=processed_body,
+            file_path=md_file,
             notebook=notebook,
             tags=tags,
             is_todo=is_todo,
             todo_completed=todo_completed,
             created_time=created_time,
             updated_time=updated_time,
-            metadata={
-                "source_file": str(md_file),
-                "joplin_id": note_metadata.get("id", ""),
-                "joplin_metadata": note_metadata,
-                "original_parent_id": parent_id,
-            },
+            additional_metadata=additional_metadata,
         )
 
         return note
@@ -273,8 +263,9 @@ class JEXImporter(BaseImporter):
         # Look for note-tag relationship files
         for json_file in extract_path.rglob("*.json"):
             try:
-                with open(json_file, encoding="utf-8") as f:
-                    data = json.load(f)
+                # Use enhanced base class utilities for file reading
+                content, _ = self.read_file_safe(json_file)
+                data = json.loads(content)
 
                 # Check if this is a note-tag relationship (type 6 in Joplin)
                 if (
@@ -289,7 +280,7 @@ class JEXImporter(BaseImporter):
                         if tag_title:
                             tags.append(tag_title)
 
-            except (json.JSONDecodeError, UnicodeDecodeError):
+            except (json.JSONDecodeError, Exception):
                 continue
 
         return tags

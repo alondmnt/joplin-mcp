@@ -47,11 +47,13 @@ class ImportedNote:
             else:
                 self.title = "Untitled Note"
 
-        # Set default timestamps if not provided
+        # Set default timestamps ONLY if not provided
+        # This prevents overriding timestamps that were explicitly set
         if self.created_time is None:
             self.created_time = datetime.now()
         if self.updated_time is None:
-            self.updated_time = self.created_time
+            # Use created_time if available, otherwise current time
+            self.updated_time = self.created_time if self.created_time else datetime.now()
 
 
 @dataclass

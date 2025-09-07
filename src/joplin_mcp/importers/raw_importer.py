@@ -19,8 +19,8 @@ class RAWImporter(BaseImporter):
 
     def get_supported_extensions(self) -> List[str]:
         """Return list of supported file extensions."""
-        # RAW format doesn't have extensions - it's directory-based
-        return []
+        # RAW format processes Markdown files within directories
+        return ["md"]
 
     def can_import(self, file_path: Path) -> bool:
         """Check if path can be imported as RAW format."""
@@ -35,26 +35,21 @@ class RAWImporter(BaseImporter):
         """Validate RAW directory can be processed."""
         path = Path(source_path)
 
-        # Check path exists and is directory
-        if not path.exists():
-            raise ImportValidationError(f"RAW directory not found: {source_path}")
+        # Use enhanced base class validation (will check if directory exists and is readable)
+        self.validate_directory_comprehensive(path)
 
-        if not path.is_dir():
-            raise ImportValidationError(
-                f"RAW format requires a directory: {source_path}"
-            )
-
-        # Check for RAW format structure
+        # Additional RAW-specific validation
         has_md_files = any(path.glob("*.md"))
-        resources_dir = path / "resources"
-
         if not has_md_files:
+            from .base import ImportValidationError
             raise ImportValidationError(
                 f"No Markdown files found in RAW directory: {source_path}"
             )
 
         # Resources directory is optional but common
+        resources_dir = path / "resources"
         if resources_dir.exists() and not resources_dir.is_dir():
+            from .base import ImportValidationError
             raise ImportValidationError(
                 f"Resources path exists but is not a directory: {resources_dir}"
             )
@@ -63,87 +58,86 @@ class RAWImporter(BaseImporter):
 
     async def parse(self, source_path: str) -> List[ImportedNote]:
         """Parse RAW directory and convert to ImportedNote objects."""
-        try:
-            path = Path(source_path)
+        path = Path(source_path)
 
-            # Find all markdown files
-            md_files = list(path.glob("*.md"))
+        # Find all markdown files using utility function directly
+        from .utils import scan_directory_for_files
+        md_files = scan_directory_for_files(path, ["md"])
 
-            if not md_files:
-                raise ImportProcessingError(
-                    f"No Markdown files found in RAW directory: {source_path}"
-                )
-
-            notes = []
-            resources_dir = path / "resources"
-
-            for md_file in md_files:
-                try:
-                    note = await self._parse_md_file(md_file, resources_dir)
-                    if note:
-                        notes.append(note)
-                except Exception as e:
-                    # Log error but continue with other files
-                    print(f"Warning: Failed to parse {md_file}: {str(e)}")
-                    continue
-
-            return notes
-
-        except Exception as e:
-            if isinstance(e, (ImportValidationError, ImportProcessingError)):
-                raise
+        if not md_files:
+            from .base import ImportProcessingError
             raise ImportProcessingError(
-                f"Error parsing RAW directory {source_path}: {str(e)}"
-            ) from e
+                f"No Markdown files found in RAW directory: {source_path}"
+            )
+
+        notes = []
+        resources_dir = path / "resources"
+
+        for md_file in md_files:
+            try:
+                note = await self._parse_md_file(md_file, resources_dir)
+                if note:
+                    notes.append(note)
+            except Exception as e:
+                # Log error but continue with other files
+                print(f"Warning: Failed to parse {md_file}: {str(e)}")
+                continue
+
+        return notes
 
     async def _parse_md_file(
         self, md_file: Path, resources_dir: Path
     ) -> Optional[ImportedNote]:
         """Parse a single Markdown file from RAW export."""
         try:
-            # Read file content
-            with open(md_file, encoding="utf-8") as f:
-                content = f.read()
+            # Read file content using enhanced base class utilities
+            content, used_encoding = self.read_file_safe(md_file)
 
             # Extract metadata from filename or content
             title = self._extract_title(md_file, content)
 
             # Parse Joplin-specific metadata if present
-            metadata, body = self._parse_joplin_metadata(content)
+            raw_metadata, body = self._parse_joplin_metadata(content)
 
             # Process resource links if resources directory exists
             if resources_dir.exists():
                 body = self._process_resource_links(body, resources_dir)
 
-            # Extract timestamps from metadata or file stats
-            created_time = self._parse_timestamp(
-                metadata.get("created_time")
-            ) or datetime.fromtimestamp(md_file.stat().st_ctime)
-            updated_time = self._parse_timestamp(
-                metadata.get("updated_time")
-            ) or datetime.fromtimestamp(md_file.stat().st_mtime)
+            # Extract timestamps from metadata or file stats using enhanced utilities
+            file_metadata = self.get_file_metadata_safe(md_file)
+            created_time = (
+                self._parse_timestamp(raw_metadata.get("created_time"))
+                or file_metadata.get("created_time")
+            )
+            updated_time = (
+                self._parse_timestamp(raw_metadata.get("updated_time"))
+                or file_metadata.get("updated_time")
+            )
 
             # Extract tags
-            tags = metadata.get("tags", [])
+            tags = raw_metadata.get("tags", [])
             if isinstance(tags, str):
                 tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
 
-            # Create imported note
-            note = ImportedNote(
+            # Prepare additional metadata
+            additional_metadata = {
+                "encoding": used_encoding,
+                "original_format": "raw",
+                **raw_metadata,
+            }
+
+            # Create note using enhanced base class utilities
+            note = self.create_imported_note_safe(
                 title=title,
                 body=body,
+                file_path=md_file,
+                tags=tags,
+                notebook=raw_metadata.get("notebook"),
+                is_todo=raw_metadata.get("is_todo", False),
+                todo_completed=raw_metadata.get("todo_completed", False),
                 created_time=created_time,
                 updated_time=updated_time,
-                tags=tags,
-                notebook=metadata.get("notebook"),
-                is_todo=metadata.get("is_todo", False),
-                todo_completed=metadata.get("todo_completed", False),
-                metadata={
-                    "original_format": "raw",
-                    "source_file": str(md_file),
-                    "import_method": "raw_importer",
-                    **metadata,
-                },
+                additional_metadata=additional_metadata,
             )
 
             return note
