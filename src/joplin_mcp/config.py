@@ -226,7 +226,7 @@ class JoplinMCPConfig:
         # Utility operations (1 tool)
         "ping_joplin": True,  # Test connection
         # Import operations (1 tool)
-        "import_from_file": True,  # Import single file
+        "import_from_file": False,  # Import single file or folder
     }
 
     # Tool categories for easier management
