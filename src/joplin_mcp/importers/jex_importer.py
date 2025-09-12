@@ -64,45 +64,24 @@ class JEXImporter(BaseImporter):
 
     async def parse(self, source: str) -> List[ImportedNote]:
         """Parse JEX file and return ImportedNote objects."""
-        notes = []
-
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
 
-                # Extract JEX archive
+                # Extract JEX archive (directory-style Joplin export)
                 with tarfile.open(source, "r") as tar:
                     tar.extractall(temp_path)
 
-                # Parse extracted content
-                notes = await self._parse_extracted_jex(temp_path)
+                # Delegate parsing to RAWImporter to avoid duplication
+                from .raw_importer import RAWImporter
+
+                raw_importer = RAWImporter(self.options)
+                return await raw_importer.parse(str(temp_path))
 
         except Exception as e:
             raise ImportProcessingError(f"Failed to parse JEX file {source}: {str(e)}") from e
 
-        return notes
-
-    async def _parse_extracted_jex(self, extract_path: Path) -> List[ImportedNote]:
-        """Parse extracted JEX directory structure."""
-        notes = []
-
-        # Load metadata files
-        notebooks_map = await self._load_notebooks_metadata(extract_path)
-        tags_map = await self._load_tags_metadata(extract_path)
-        resources_map = await self._load_resources_metadata(extract_path)
-
-        # Find and parse all note files
-        for md_file in extract_path.rglob("*.md"):
-            try:
-                note = await self._parse_jex_note(
-                    md_file, extract_path, notebooks_map, tags_map, resources_map
-                )
-                if note:
-                    notes.append(note)
-            except Exception as e:
-                print(f"Warning: Failed to parse note {md_file}: {e}")
-
-        return notes
+    # Note: Parsing delegated to RAWImporter; JSON metadata loaders below are retained for compatibility but unused.
 
     async def _load_notebooks_metadata(
         self, extract_path: Path
