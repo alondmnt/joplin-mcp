@@ -104,32 +104,54 @@ class JoplinImportEngine:
                     note, options, result
                 )
                 if success:
-                    result.add_success(note.title)
+                    # Only count as a created success if we actually created a note (have new_id)
+                    if new_id:
+                        result.add_success(note.title)
                     # Track created note info for link rewriting
-                    try:
-                        record: Dict[str, str] = {
-                            "new_id": new_id or "",
-                            "title": note.title,
-                        }
-                        # Try to capture original identifiers for mapping
-                        # RAW/JEX often include original Joplin id
-                        orig_id = None
-                        if isinstance(note.metadata, dict):
-                            orig_id = note.metadata.get("id") or note.metadata.get(
-                                "joplin_id"
-                            )
-                            source_file = note.metadata.get("source_file")
-                            if source_file:
-                                record["source_file"] = str(source_file)
-                            original_format = note.metadata.get("original_format")
-                            if original_format:
-                                record["original_format"] = str(original_format)
-                        if orig_id and isinstance(orig_id, str):
-                            record["original_id"] = orig_id
-                        created_records.append(record)
-                    except Exception:
-                        # Non-fatal tracking failure
-                        pass
+                    if new_id:
+                        try:
+                            record: Dict[str, str] = {
+                                "new_id": new_id or "",
+                                "title": note.title,
+                            }
+                            # Capture origin identifiers for mapping
+                            if isinstance(note.metadata, dict):
+                                orig_id = note.metadata.get("id") or note.metadata.get(
+                                    "joplin_id"
+                                )
+                                if orig_id and isinstance(orig_id, str):
+                                    record["original_id"] = orig_id
+
+                                source_file = note.metadata.get("source_file")
+                                if source_file:
+                                    from pathlib import Path as _P
+                                    try:
+                                        p = _P(str(source_file)).resolve()
+                                        record["source_file"] = str(p)
+                                        record["source_dir"] = str(p.parent)
+                                    except Exception:
+                                        record["source_file"] = str(source_file)
+
+                                # For ZIP-based notes, preserve internal zip path
+                                zip_path = note.metadata.get("zip_path")
+                                if zip_path:
+                                    # Normalize to POSIX-like
+                                    zp = str(zip_path).replace("\\", "/")
+                                    record["zip_path"] = zp
+                                    # Derive zip_dir
+                                    if "/" in zp:
+                                        record["zip_dir"] = zp.rsplit("/", 1)[0]
+                                    else:
+                                        record["zip_dir"] = ""
+
+                                original_format = note.metadata.get("original_format")
+                                if original_format:
+                                    record["original_format"] = str(original_format)
+
+                            created_records.append(record)
+                        except Exception:
+                            # Non-fatal tracking failure
+                            pass
                 else:
                     result.add_failure(note.title, message)
 
@@ -148,7 +170,7 @@ class JoplinImportEngine:
             result: Result object for tracking created resources
 
         Returns:
-            Tuple of (success: bool, message: str)
+            Tuple of (success: bool, message: str, new_id: Optional[str])
         """
         try:
             # Handle notebook assignment
@@ -168,7 +190,8 @@ class JoplinImportEngine:
                 if existing_id:
                     if options.handle_duplicates == "skip":
                         result.add_skip(note.title, "Note with same title exists")
-                        return True, "Skipped (duplicate)"
+                        # No new note created; do not count as success creation
+                        return True, "Skipped (duplicate)", None
                     elif options.handle_duplicates == "rename":
                         note.title = await self._generate_unique_title(
                             note.title, notebook_id
@@ -226,12 +249,29 @@ class JoplinImportEngine:
             if orig and new:
                 id_map[orig] = new
 
-        if not id_map:
-            # Nothing to rewrite for now (future: path-based mapping)
-            return
+        # Build path-based maps
+        fs_map: Dict[str, str] = {}
+        zip_map: Dict[str, str] = {}
+        for rec in created_records:
+            nid = rec.get("new_id")
+            if not nid:
+                continue
+            sf = rec.get("source_file")
+            if sf:
+                fs_map[sf] = nid
+            zp = rec.get("zip_path")
+            if zp:
+                zip_map[zp] = nid
 
-        # Pattern matches both image and normal md links: ![alt](:/id) or [text](:/id)
-        link_re = re.compile(r"(!?\[[^\]]*\])\(:\/([a-f0-9]{32})(#[^)]+)?\)")
+        # Patterns
+        # ID links: matches both image and normal md links: ![alt](:/id) or [text](:/id)
+        id_link_re = re.compile(r"(!?\[[^\]]*\])\(:\/([a-f0-9]{32})(#[^)]+)?\)")
+        # File links (non-image): [text](path[#anchor]) excluding schemes and joplin ids
+        # Capture optional leading ! to detect and skip images
+        file_link_re = re.compile(r"(!?)(\[[^\]]*\])\(([^)]+)\)")
+
+        def has_scheme(href: str) -> bool:
+            return re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", href) is not None
 
         # Iterate through created notes to rewrite bodies
         for rec in created_records:
@@ -244,18 +284,106 @@ class JoplinImportEngine:
                 note_obj = self.client.get_note(note_id, fields="id,title,body")
                 body = getattr(note_obj, "body", None)
                 if not body or ":/" not in body:
-                    continue
+                    pass  # We might still have file links to rewrite
 
-                def _sub(match: re.Match) -> str:
-                    prefix = match.group(1)
-                    old_id = match.group(2)
-                    anchor = match.group(3) or ""
-                    new_id = id_map.get(old_id)
-                    if new_id and new_id != old_id:
-                        return f"{prefix}(:/{new_id}{anchor})"
-                    return match.group(0)
+                new_body = body
 
-                new_body = link_re.sub(_sub, body)
+                # 1) Rewrite :/oldid links (both image and non-image)
+                if id_map and body:
+                    def _sub_id(match: re.Match) -> str:
+                        prefix = match.group(1)
+                        old_id = match.group(2)
+                        anchor = match.group(3) or ""
+                        new_id = id_map.get(old_id)
+                        if new_id and new_id != old_id:
+                            return f"{prefix}(:/{new_id}{anchor})"
+                        return match.group(0)
+
+                    new_body = id_link_re.sub(_sub_id, new_body)
+
+                # 2) Rewrite file path links to note IDs (non-image links only)
+                if (fs_map or zip_map) and new_body:
+                    base_dir = rec.get("source_dir")
+                    base_zip = rec.get("zip_dir")
+                    has_zip_ctx = bool(rec.get("zip_path"))
+
+                    def resolve_fs(target: str) -> Optional[str]:
+                        from pathlib import Path as _P
+                        try:
+                            p = _P(target)
+                            if not p.is_absolute() and base_dir:
+                                p = _P(base_dir) / p
+                            p = p.resolve()
+                            sp = str(p)
+                            if sp in fs_map:
+                                return fs_map[sp]
+                            # Try with common extensions if missing
+                            if p.suffix == "":
+                                for ext in (".md", ".markdown", ".html", ".htm"):
+                                    sp2 = str((p.with_suffix(ext)).resolve())
+                                    if sp2 in fs_map:
+                                        return fs_map[sp2]
+                        except Exception:
+                            return None
+                        return None
+
+                    def resolve_zip(target: str) -> Optional[str]:
+                        # Normalize posix path
+                        t = target.replace("\\", "/")
+                        # Join with base zip dir if relative
+                        if base_zip and not t.startswith("/") and not re.match(r"^[a-zA-Z]:/", t):
+                            t = f"{base_zip}/{t}" if base_zip else t
+                        # Normalize .. and . segments
+                        parts = []
+                        for part in t.split("/"):
+                            if part in ("", "."):
+                                continue
+                            if part == "..":
+                                if parts:
+                                    parts.pop()
+                                continue
+                            parts.append(part)
+                        norm = "/".join(parts)
+                        if norm in zip_map:
+                            return zip_map[norm]
+                        # Try common extensions if missing
+                        if "." not in (parts[-1] if parts else ""):
+                            for ext in (".md", ".markdown", ".html", ".htm"):
+                                cand = norm + ext
+                                if cand in zip_map:
+                                    return zip_map[cand]
+                        return None
+
+                    def _sub_file(match: re.Match) -> str:
+                        bang = match.group(1)  # '!' for images, '' otherwise
+                        prefix = match.group(2)
+                        href = (match.group(3) or "").strip()
+                        # Skip images for now; attachment handling comes later
+                        if bang == '!':
+                            return match.group(0)
+                        # Already joplin id or anchor-only
+                        if href.startswith(":/") or href.startswith("#") or has_scheme(href):
+                            return match.group(0)
+                        # Split anchor
+                        anchor = ""
+                        if "#" in href:
+                            href, anchor = href.split("#", 1)
+                            anchor = "#" + anchor
+
+                        # Resolve
+                        new_id = None
+                        if has_zip_ctx:
+                            new_id = resolve_zip(href)
+                        if not new_id:
+                            new_id = resolve_fs(href)
+
+                        if new_id:
+                            return f"{prefix}(:/{new_id}{anchor})"
+                        return match.group(0)
+
+                    new_body2 = file_link_re.sub(_sub_file, new_body)
+                    new_body = new_body2
+
                 if new_body != body:
                     self.client.modify_note(note_id, body=new_body)
                     result.add_warning(
