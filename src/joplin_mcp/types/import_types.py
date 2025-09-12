@@ -138,6 +138,7 @@ class ImportOptions:
     max_batch_size: int = 100
     attachment_handling: str = "link"  # link|embed|skip
     encoding: str = "utf-8"
+    max_file_size_mb: Optional[int] = None
     file_pattern: Optional[str] = None
     preserve_structure: bool = True
     preserve_directory_structure: bool = True
