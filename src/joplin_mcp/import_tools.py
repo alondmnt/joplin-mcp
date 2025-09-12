@@ -1,6 +1,7 @@
 """MCP import tools for Joplin MCP server."""
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -141,8 +142,38 @@ def detect_directory_format(directory_path: str) -> str:
 
     # Check for specific directory patterns
     # RAW format: Joplin Export Directory
+    # Heuristic 1: resources folder at root with markdown files
     if (path / "resources").exists() and any(path.glob("*.md")):
         return "raw"
+
+    # Heuristic 2: resources folder anywhere under the tree with markdown files
+    try:
+        if any(p.is_dir() for p in path.rglob("resources")) and any(path.rglob("*.md")):
+            return "raw"
+    except Exception:
+        pass
+
+    # Heuristic 3: detect Joplin KV metadata blocks at end of markdown files
+    # Simple check: look for lines like 'id: <32 hex>' and 'type_: <digit>'
+    try:
+        md_files = list(path.rglob("*.md"))
+        if md_files:
+            def looks_like_joplin_kv(md_path: Path) -> bool:
+                try:
+                    text = md_path.read_text(encoding="utf-8", errors="ignore")
+                    tail = "\n".join(text.strip().splitlines()[-40:])
+                    has_id = re.search(r"^id:\s*[a-f0-9]{32}$", tail, re.M) is not None
+                    has_type = re.search(r"^type_:\s*\d+", tail, re.M) is not None
+                    return has_id and has_type
+                except Exception:
+                    return False
+
+            sample = md_files[: min(10, len(md_files))]
+            matches = sum(1 for f in sample if looks_like_joplin_kv(f))
+            if matches >= 2:
+                return "raw"
+    except Exception:
+        pass
 
     # Count file types to determine predominant format
     extension_counts = {}
@@ -257,5 +288,4 @@ async def import_source(
     result = await engine.import_batch(notes, options)
 
     return format_import_result(result)
-
 
