@@ -114,8 +114,6 @@ def get_permission_settings() -> Dict[str, bool]:
         "update_tag",
         "tag_note",
         "untag_note",
-        "add_tag_to_note",
-        "remove_tag_from_note",
     ]
 
     delete_tools = ["delete_note", "delete_notebook", "delete_tag"]
