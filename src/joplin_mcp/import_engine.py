@@ -132,21 +132,9 @@ class JoplinImportEngine:
                                     except Exception:
                                         record["source_file"] = str(source_file)
 
-                                # For ZIP-based notes, preserve internal zip path
-                                zip_path = note.metadata.get("zip_path")
-                                if zip_path:
-                                    # Normalize to POSIX-like
-                                    zp = str(zip_path).replace("\\", "/")
-                                    record["zip_path"] = zp
-                                    # Derive zip_dir
-                                    if "/" in zp:
-                                        record["zip_dir"] = zp.rsplit("/", 1)[0]
-                                    else:
-                                        record["zip_dir"] = ""
-
-                                original_format = note.metadata.get("original_format")
-                                if original_format:
-                                    record["original_format"] = str(original_format)
+                            original_format = note.metadata.get("original_format")
+                            if original_format:
+                                record["original_format"] = str(original_format)
 
                                 raw_res = note.metadata.get("raw_resources_dir")
                                 if raw_res:
@@ -257,11 +245,9 @@ class JoplinImportEngine:
             if orig and new:
                 id_map[orig] = new
 
-        # Build path-based maps (exact and case-insensitive)
+        # Build path-based maps (exact and case-insensitive) for filesystem only
         fs_map: Dict[str, str] = {}
         fs_map_ci: Dict[str, str] = {}
-        zip_map: Dict[str, str] = {}
-        zip_map_ci: Dict[str, str] = {}
         for rec in created_records:
             nid = rec.get("new_id")
             if not nid:
@@ -270,10 +256,6 @@ class JoplinImportEngine:
             if sf:
                 fs_map[sf] = nid
                 fs_map_ci[sf.lower()] = nid
-            zp = rec.get("zip_path")
-            if zp:
-                zip_map[zp] = nid
-                zip_map_ci[zp.lower()] = nid
 
         # Patterns
         # ID links: matches both image and normal md links: ![alt](:/id) or [text](:/id)
@@ -330,10 +312,15 @@ class JoplinImportEngine:
         # Optionally filter by mode
         attachment_mode = getattr(options, "attachment_handling", "link")
 
-        # Global cache of uploaded resources (old_id -> new_resource_id)
-        uploaded_res_map: Dict[str, str] = {}
+        # Global caches of uploaded resources
+        uploaded_res_map: Dict[str, str] = {}         # old_id -> new_resource_id (RAW/JEX)
+        uploaded_path_map: Dict[str, str] = {}        # absolute fs path -> new_resource_id
 
         # Iterate through created notes to rewrite bodies
+        notes_modified = 0
+        uploaded_count = 0
+        reused_count = 0
+        unresolved_count = 0
         for rec in created_records:
             note_id = rec.get("new_id")
             if not note_id:
@@ -353,6 +340,9 @@ class JoplinImportEngine:
                     # Collect IDs present
                     candidates = set(m.group(1) for m in any_id_token_re.finditer(body))
                     res_id_map: Dict[str, str] = {}
+                    processed_rids: set[str] = set()
+                    # Note IDs that will be handled by note-id mapping later
+                    note_old_ids = set(id_map.keys()) if id_map else set()
                     for rid in candidates:
                         # Use cache if available
                         if rid in uploaded_res_map:
@@ -360,8 +350,12 @@ class JoplinImportEngine:
                             continue
                         fp = res_file_map.get(rid) or res_file_map_ci.get(rid.lower())
                         if not fp:
+                            # No local file found for this ID. If it's a note ID, skip unresolved
+                            if rid not in note_old_ids:
+                                unresolved_count += 1
                             continue
                         try:
+                            processed_rids.add(rid)
                             # If the resource with same ID and size already exists in Joplin, reuse it
                             try:
                                 res_meta = self.client.get_resource(id_=rid, fields="id,size")
@@ -380,6 +374,7 @@ class JoplinImportEngine:
                                 if remote_size is not None and int(remote_size) == int(local_size):
                                     res_id_map[rid] = rid
                                     uploaded_res_map[rid] = rid
+                                    reused_count += 1
                                     continue
                             except Exception:
                                 # Not found or error - proceed to upload
@@ -388,6 +383,7 @@ class JoplinImportEngine:
                             if isinstance(new_res_id, str) and new_res_id:
                                 res_id_map[rid] = new_res_id
                                 uploaded_res_map[rid] = new_res_id
+                                uploaded_count += 1
                         except Exception as e:
                             logger.warning(f"Failed to upload resource {rid} from {fp}: {e}")
                             continue
@@ -403,6 +399,11 @@ class JoplinImportEngine:
                             return match.group(0)
 
                         new_body = id_link_re.sub(_sub_res, new_body)
+
+                    # Count unresolved resource IDs that we attempted but couldn't replace
+                    for rid in processed_rids:
+                        if rid not in res_id_map:
+                            unresolved_count += 1
 
                 # 1) Rewrite :/oldid links (both image and non-image) for notes
                 if id_map and body:
@@ -420,11 +421,9 @@ class JoplinImportEngine:
 
                     new_body = id_link_re.sub(_sub_id, new_body)
 
-                # 2) Rewrite file path links to note IDs (non-image links only)
-                if (fs_map or zip_map) and new_body:
+                # 2) Rewrite file path links: to note IDs (when target is a note) or to resources (attachments)
+                if fs_map and new_body:
                     base_dir = rec.get("source_dir")
-                    base_zip = rec.get("zip_dir")
-                    has_zip_ctx = bool(rec.get("zip_path"))
 
                     def resolve_fs(target: str) -> Optional[str]:
                         from pathlib import Path as _P
@@ -455,49 +454,11 @@ class JoplinImportEngine:
                             return None
                         return None
 
-                    def resolve_zip(target: str) -> Optional[str]:
-                        # Normalize posix path
-                        t = target.replace("\\", "/")
-                        # Join with base zip dir if relative
-                        if base_zip and not t.startswith("/") and not re.match(r"^[a-zA-Z]:/", t):
-                            t = f"{base_zip}/{t}" if base_zip else t
-                        # Normalize .. and . segments
-                        parts = []
-                        for part in t.split("/"):
-                            if part in ("", "."):
-                                continue
-                            if part == "..":
-                                if parts:
-                                    parts.pop()
-                                continue
-                            parts.append(part)
-                        norm = "/".join(parts)
-                        if norm in zip_map:
-                            return zip_map[norm]
-                        # Try common extensions if missing
-                        if "." not in (parts[-1] if parts else ""):
-                            for ext in (".md", ".markdown", ".html", ".htm"):
-                                cand = norm + ext
-                                if cand in zip_map:
-                                    return zip_map[cand]
-                        # Case-insensitive fallback
-                        lnorm = norm.lower()
-                        if lnorm in zip_map_ci:
-                            return zip_map_ci[lnorm]
-                        if "." not in (parts[-1] if parts else ""):
-                            for ext in (".md", ".markdown", ".html", ".htm"):
-                                cand = (norm + ext).lower()
-                                if cand in zip_map_ci:
-                                    return zip_map_ci[cand]
-                        return None
-
                     def _sub_file(match: re.Match) -> str:
+                        nonlocal unresolved_count, uploaded_count
                         bang = match.group(1)  # '!' for images, '' otherwise
                         prefix = match.group(2)
                         href = (match.group(3) or "").strip()
-                        # Skip images for now; attachment handling comes later
-                        if bang == '!':
-                            return match.group(0)
                         # Already joplin id or anchor-only
                         if href.startswith(":/") or href.startswith("#") or has_scheme(href):
                             return match.group(0)
@@ -507,15 +468,60 @@ class JoplinImportEngine:
                             href, anchor = href.split("#", 1)
                             anchor = "#" + anchor
 
-                        # Resolve
+                        # Resolve for note mapping first
                         new_id = None
-                        if has_zip_ctx:
-                            new_id = resolve_zip(href)
-                        if not new_id:
-                            new_id = resolve_fs(href)
+                        new_id = resolve_fs(href)
 
-                        if new_id:
+                        # If target is a note (and not an image), rewrite to note ID
+                        if new_id and bang != '!':
                             return f"{prefix}(:/{new_id}{anchor})"
+
+                        # If not embedding attachments, leave link as-is
+                        if attachment_mode != "embed":
+                            return match.group(0)
+
+                        # Otherwise, attempt resource upload (attachments/images)
+                        # Resolve to actual file path (fs) or zip internal path
+                        abs_path: Optional[str] = None
+
+                        # Try filesystem resolution to a file path
+                        try:
+                            from pathlib import Path as _P
+                            p = _P(href)
+                            if not p.is_absolute() and base_dir:
+                                p = _P(base_dir) / p
+                            p2 = p.resolve()
+                            if p2.exists() and p2.is_file():
+                                abs_path = str(p2)
+                            elif p2.suffix == "":
+                                for ext in (".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".pdf"):
+                                    p3 = (p2.with_suffix(ext)).resolve()
+                                    if p3.exists() and p3.is_file():
+                                        abs_path = str(p3)
+                                        break
+                        except Exception:
+                            pass
+
+                        # Upload if we resolved a filesystem file
+                        res_id: Optional[str] = None
+                        try:
+                            if abs_path:
+                                # Dedupe by absolute path
+                                res_id = uploaded_path_map.get(abs_path)
+                                if not res_id:
+                                    res_id = self.client.add_resource(filename=abs_path)
+                                    if isinstance(res_id, str) and res_id:
+                                        uploaded_path_map[abs_path] = res_id
+                                        uploaded_count += 1
+                        except Exception:
+                            # Upload failed; leave link unchanged
+                            pass
+
+                        if res_id:
+                            return f"{bang}{prefix}(:/{res_id}{anchor})"
+
+                        # Could not resolve to note or resource
+                        unresolved_count += 1
                         return match.group(0)
 
                     new_body2 = file_link_re.sub(_sub_file, new_body)
@@ -523,13 +529,17 @@ class JoplinImportEngine:
 
                 if new_body != body:
                     self.client.modify_note(note_id, body=new_body)
-                    result.add_warning(
-                        f"Rewrote internal links in note '{rec.get('title', note_id)}'"
-                    )
+                    notes_modified += 1
             except Exception as e:
                 logger.warning(
                     f"Failed rewriting links for note {note_id}: {e}"
                 )
+
+        # Update summary counters
+        result.notes_rewritten += notes_modified
+        result.resources_uploaded += uploaded_count
+        result.resources_reused += reused_count
+        result.unresolved_links += unresolved_count
 
     async def ensure_notebook_exists(
         self, notebook_name: str, options: ImportOptions, result: ImportResult

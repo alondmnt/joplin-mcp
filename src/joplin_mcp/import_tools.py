@@ -68,6 +68,23 @@ PROCESSING_TIME: {result.processing_time:.2f}s"""
     else:
         response += "\nMESSAGE: Import failed - no items were successfully imported"
 
+    # Compact per-run summary (kept short for LLM context)
+    try:
+        if (
+            getattr(result, "notes_rewritten", 0)
+            or getattr(result, "resources_uploaded", 0)
+            or getattr(result, "resources_reused", 0)
+            or getattr(result, "unresolved_links", 0)
+        ):
+            response += (
+                f"\nSUMMARY: modified_notes={getattr(result, 'notes_rewritten', 0)}, "
+                f"uploaded_resources={getattr(result, 'resources_uploaded', 0)}, "
+                f"reused_resources={getattr(result, 'resources_reused', 0)}, "
+                f"unresolved_links={getattr(result, 'unresolved_links', 0)}"
+            )
+    except Exception:
+        pass
+
     return response
 
 
@@ -288,4 +305,3 @@ async def import_source(
     result = await engine.import_batch(notes, options)
 
     return format_import_result(result)
-

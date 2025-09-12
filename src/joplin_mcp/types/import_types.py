@@ -75,6 +75,11 @@ class ImportResult:
     skipped_items_list: List[str] = field(default_factory=list)
     processing_time: float = 0.0
     start_time: float = field(default_factory=time.time)
+    # Short per-run summary metrics
+    notes_rewritten: int = 0
+    resources_uploaded: int = 0
+    resources_reused: int = 0
+    unresolved_links: int = 0
 
     def add_success(self, note_title: str):
         """Record a successful import."""
