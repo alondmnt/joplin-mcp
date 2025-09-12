@@ -144,6 +144,7 @@ class GenericImporter(BaseImporter):
     async def _handle_unknown_format(self, file_path: Path) -> Optional[ImportedNote]:
         """Handle files with truly unknown or unsupported formats."""
         # Detect file characteristics
+        extension = file_path.suffix.lower()
         is_binary = self._is_binary_file(file_path)
         mime_type = self._detect_mime_type(file_path)
         file_metadata = self.get_file_metadata_safe(file_path)
@@ -173,7 +174,6 @@ class GenericImporter(BaseImporter):
                 tags = ["binary", "read-error", "generic-import"]
 
             # Add file type tags
-            extension = file_path.suffix.lower()
             if extension:
                 tags.append(f"ext{extension.replace('.', '-')}")
 
