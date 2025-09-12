@@ -164,6 +164,7 @@ class ZIPImporter(BaseImporter):
             updated_time = file_metadata.get("updated_time")
 
             # Prepare additional metadata
+            extension = zip_file_path.suffix.lower()
             additional_metadata = {
                 "original_format": "zip",
                 "zip_path": str(zip_file_path),
