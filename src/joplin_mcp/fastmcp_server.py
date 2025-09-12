@@ -2690,7 +2690,7 @@ async def import_from_file(
     file_path: Annotated[str, Field(description="Path to the file to import")],
     format: Annotated[
         Optional[str],
-        Field(description="File format (md, html, csv, enex, zip, jex, generic) - auto-detected if not specified"),
+        Field(description="File format (md, html, csv, jex, generic) - auto-detected if not specified"),
     ] = None,
     target_notebook: Annotated[
         Optional[str], Field(description="Target notebook name (optional, defaults to 'Imported')")
@@ -2705,8 +2705,6 @@ async def import_from_file(
     - Markdown files (.md, .markdown, .mdown, .mkd) with optional frontmatter and YAML fallback
     - HTML files (.html, .htm) with BeautifulSoup/markdownify fallback
     - CSV files (.csv) with table conversion
-    - ENEX files (.enex) - Evernote export format
-    - ZIP files (.zip) - Archive extraction and processing  
     - JEX files (.jex) - Joplin's native export format
     - Generic files - Fallback processing for unknown formats (including text files, code files, logs, etc.)
 
@@ -2788,7 +2786,7 @@ async def import_from_file(
                 except ValueError:
                     format = "generic"
             else:
-                # For directories, detect format (raw, md, html, csv, enex, zip) with fallback to generic
+                # For directories, detect format (raw, md, html, csv) with fallback to generic
                 try:
                     format = detect_directory_format(file_path)
                 except Exception:

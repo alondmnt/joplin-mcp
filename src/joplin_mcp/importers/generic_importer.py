@@ -80,14 +80,10 @@ class GenericImporter(BaseImporter):
                 return await self._handle_tsv_format(file_path)
             
             
-            elif extension in ["enex"]:
-                return await self._delegate_to_importer("enex_importer", "ENEXImporter", file_path)
-            
             elif extension in ["jex"]:
                 return await self._delegate_to_importer("jex_importer", "JEXImporter", file_path)
             
-            elif extension in ["zip"]:
-                return await self._delegate_to_importer("zip_importer", "ZIPImporter", file_path)
+            
             
             # Handle special formats that need custom processing
             elif extension in ["json"]:

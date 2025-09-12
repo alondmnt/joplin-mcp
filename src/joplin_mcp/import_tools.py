@@ -11,13 +11,11 @@ from .config import JoplinMCPConfig
 from .import_engine import JoplinImportEngine, get_joplin_client
 from .importers import (
     CSVImporter,
-    ENEXImporter,
     GenericImporter,
     HTMLImporter,
     JEXImporter,
     MarkdownImporter,
     RAWImporter,
-    ZIPImporter,
 )
 from .types.import_types import ImportOptions
 
@@ -97,9 +95,7 @@ def get_importer_for_format(file_format: str, options: ImportOptions):
         "html": HTMLImporter,
         "htm": HTMLImporter,
         "csv": CSVImporter,
-        "enex": ENEXImporter,
         "raw": RAWImporter,
-        "zip": ZIPImporter,
         "generic": GenericImporter,
     }
 
@@ -138,8 +134,7 @@ def detect_file_format(file_path: str) -> str:
         "html": "html",
         "htm": "html",
         "csv": "csv",
-        "enex": "enex",
-        "zip": "zip",
+        
     }
 
     detected_format = extension_map.get(extension)
@@ -211,8 +206,7 @@ def detect_directory_format(directory_path: str) -> str:
         "html": "html",
         "htm": "html",
         "csv": "csv",
-        "enex": "enex",
-        "zip": "zip",
+        
     }
 
     # Get supported extensions ordered by count
