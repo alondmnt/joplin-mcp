@@ -62,6 +62,11 @@ class MarkdownImporter(BaseImporter):
             for md_file in markdown_files:
                 try:
                     note = await self._parse_markdown_file(md_file)
+                    # Preserve directory structure as notebook if not set by frontmatter
+                    if note and not note.notebook and self.options.preserve_structure:
+                        derived_notebook = self.extract_notebook_from_path(str(md_file), str(path))
+                        if derived_notebook:
+                            note.notebook = derived_notebook
                     if note:
                         all_notes.append(note)
                 except Exception as e:
@@ -137,4 +142,3 @@ class MarkdownImporter(BaseImporter):
                 "file_size": file_metadata.get("size", 0),
             },
         )
-
