@@ -26,7 +26,7 @@ except ImportError as e:
 
 from ..types.import_types import ImportedNote
 from .base import BaseImporter, ImportProcessingError, ImportValidationError
-from .utils import html_to_markdown
+from .utils import html_to_markdown, parse_evernote_timestamp
 
 
 class ENEXImporter(BaseImporter):
@@ -175,9 +175,15 @@ class ENEXImporter(BaseImporter):
             else:
                 body = self._convert_to_markdown(raw_content, title)
 
-            # Parse timestamps
-            created_time = self._parse_timestamp(note_elem.find("created"))
-            updated_time = self._parse_timestamp(note_elem.find("updated"))
+            # Parse timestamps using shared Evernote parser
+            created_elem = note_elem.find("created")
+            updated_elem = note_elem.find("updated")
+            created_time = (
+                parse_evernote_timestamp(created_elem.text) if created_elem is not None and created_elem.text else None
+            )
+            updated_time = (
+                parse_evernote_timestamp(updated_elem.text) if updated_elem is not None and updated_elem.text else None
+            )
 
             # Extract tags
             tags = self._extract_tags(note_elem)
@@ -273,35 +279,7 @@ class ENEXImporter(BaseImporter):
 
         return content
 
-    def _parse_timestamp(
-        self, timestamp_elem: Optional[ET.Element]
-    ) -> Optional[datetime]:
-        """Parse Evernote timestamp format."""
-        if timestamp_elem is None or not timestamp_elem.text:
-            return None
-
-        try:
-            # Evernote timestamps are in format: YYYYMMDDTHHMMSSZ
-            timestamp_str = timestamp_elem.text
-
-            # Handle different timestamp formats
-            if "T" in timestamp_str:
-                # Format: 20230101T120000Z
-                clean_timestamp = timestamp_str.replace("T", "").replace("Z", "")
-                if len(clean_timestamp) >= 14:
-                    return datetime.strptime(clean_timestamp[:14], "%Y%m%d%H%M%S")
-            else:
-                # Try other common formats
-                for fmt in ["%Y%m%d%H%M%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"]:
-                    try:
-                        return datetime.strptime(timestamp_str, fmt)
-                    except ValueError:
-                        continue
-
-            return None
-
-        except Exception:
-            return None
+    # Note: timestamp parsing delegated to shared utility parse_evernote_timestamp
 
     def _extract_tags(self, note_elem: ET.Element) -> List[str]:
         """Extract tags from note element."""
