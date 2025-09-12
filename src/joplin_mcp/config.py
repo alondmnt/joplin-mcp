@@ -86,7 +86,9 @@ class ConfigParser:
                     f"Invalid integer value for {field_name}: '{value}'. Use a numeric value (e.g., '30', '8080')"
                 ) from e
             else:
-                raise ConfigError(f"Invalid integer value for {field_name}: {value}") from e
+                raise ConfigError(
+                    f"Invalid integer value for {field_name}: {value}"
+                ) from e
 
     @staticmethod
     def get_env_var(name: str, prefix: str = "JOPLIN_") -> Optional[str]:
@@ -197,56 +199,76 @@ class JoplinMCPConfig:
     # Default tool configurations - optimized for LLMs (19 tools total)
     DEFAULT_TOOLS = {
         # Finding notes (5 tools enabled by default, 1 disabled)
-        "find_notes": True,              # Find notes by text content
-        "find_notes_with_tag": True,     # Find notes by tag
+        "find_notes": True,  # Find notes by text content
+        "find_notes_with_tag": True,  # Find notes by tag
         "find_notes_in_notebook": True,  # Find notes by notebook
-        "get_all_notes": False,          # Get all notes - disabled by default (can fill context window)
-        "get_note": True,               # Get formatted note details
-        "get_links": True,              # Extract links to other notes from a note
-        
+        "get_all_notes": False,  # Get all notes - disabled by default (can fill context window)
+        "get_note": True,  # Get formatted note details
+        "get_links": True,  # Extract links to other notes from a note
         # Managing notes (3 tools)
-        "create_note": True,             # Create new note
-        "update_note": True,             # Update existing note
-        "delete_note": True,             # Delete note
-        
+        "create_note": True,  # Create new note
+        "update_note": True,  # Update existing note
+        "delete_note": True,  # Delete note
         # Managing notebooks (4 tools)
-        "list_notebooks": True,          # List all notebooks
-        "create_notebook": True,         # Create new notebook
-        "update_notebook": False,        # Update notebook (disabled by default)
-        "delete_notebook": True,         # Delete notebook
-        
+        "list_notebooks": True,  # List all notebooks
+        "create_notebook": True,  # Create new notebook
+        "update_notebook": False,  # Update notebook (disabled by default)
+        "delete_notebook": True,  # Delete notebook
         # Managing tags (5 tools)
-        "list_tags": True,               # List all tags
-        "create_tag": True,              # Create new tag
-        "update_tag": False,             # Update tag (disabled by default)
-        "delete_tag": True,              # Delete tag
-        "get_tags_by_note": True,        # Get tags for a note
-        
+        "list_tags": True,  # List all tags
+        "create_tag": True,  # Create new tag
+        "update_tag": False,  # Update tag (disabled by default)
+        "delete_tag": True,  # Delete tag
+        "get_tags_by_note": True,  # Get tags for a note
         # Tag-note relationships (2 tools)
-        "tag_note": True,                # Add tag to note
-        "untag_note": True,              # Remove tag from note
-        
+        "tag_note": True,  # Add tag to note
+        "untag_note": True,  # Remove tag from note
         # Utility operations (1 tool)
-        "ping_joplin": True,             # Test connection
-        
-        # get_notes_by_notebook, get_tag, search_tags, get_notes_by_tag)
-        # get_all_notes, update_tag and update_notebook are disabled by default but available if needed
+        "ping_joplin": True,  # Test connection
+        # Import operations (1 tool)
+        "import_from_file": False,  # Import single file or folder
     }
 
     # Tool categories for easier management
     TOOL_CATEGORIES = {
-        "finding": ["find_notes", "find_notes_with_tag", "find_notes_in_notebook", "get_all_notes", "get_note", "get_links"],
+        "finding": [
+            "find_notes",
+            "find_notes_with_tag",
+            "find_notes_in_notebook",
+            "get_all_notes",
+            "get_note",
+            "get_links",
+        ],
         "notes": ["create_note", "update_note", "delete_note"],
-        "notebooks": ["list_notebooks", "create_notebook", "update_notebook", "delete_notebook"],
-        "tags": ["list_tags", "create_tag", "update_tag", "delete_tag", "get_tags_by_note", "tag_note", "untag_note"],
+        "notebooks": [
+            "list_notebooks",
+            "create_notebook",
+            "update_notebook",
+            "delete_notebook",
+        ],
+        "tags": [
+            "list_tags",
+            "create_tag",
+            "update_tag",
+            "delete_tag",
+            "get_tags_by_note",
+            "tag_note",
+            "untag_note",
+        ],
         "utilities": ["ping_joplin"],
+        "import": [
+            "import_from_file",
+            "import_from_directory",
+            "import_csv_data",
+            "import_archive",
+        ],
     }
 
     # Content exposure levels for privacy control
     CONTENT_EXPOSURE_LEVELS = {
         "none": "No content shown - titles and metadata only",
         "preview": "Short preview snippets (300 characters)",
-        "full": "Full content access"
+        "full": "Full content access",
     }
 
     # Default connection settings
@@ -254,17 +276,31 @@ class JoplinMCPConfig:
         "host": "localhost",
         "port": 41184,
         "timeout": 30,
-        "verify_ssl": False
+        "verify_ssl": False,
     }
 
     # Default content exposure settings
     DEFAULT_CONTENT_EXPOSURE = {
         "search_results": "preview",  # Search results show previews
-        "individual_notes": "full",   # Individual note retrieval shows full content
-        "listings": "none",           # Note listings show no content
-        "max_preview_length": 300,    # Maximum preview length in characters
+        "individual_notes": "full",  # Individual note retrieval shows full content
+        "listings": "none",  # Note listings show no content
+        "max_preview_length": 300,  # Maximum preview length in characters
         "smart_toc_threshold": 2000,  # Show TOC for notes longer than this (in characters)
-        "enable_smart_toc": True      # Enable smart TOC behavior in get_note
+        "enable_smart_toc": True,  # Enable smart TOC behavior in get_note
+    }
+
+    # Default import settings
+    DEFAULT_IMPORT_SETTINGS = {
+        "max_file_size_mb": 100,  # Maximum file size in MB
+        "max_batch_size": 100,  # Maximum notes per batch
+        "allowed_formats": ["md", "html", "csv"],  # Allowed import formats
+        "create_missing_notebooks": True,  # Auto-create notebooks
+        "create_missing_tags": True,  # Auto-create tags
+        "preserve_timestamps": True,  # Preserve original timestamps
+        "handle_duplicates": "skip",  # How to handle duplicates: skip|overwrite|rename
+        "attachment_handling": "embed",  # How to handle attachments: link|embed|skip
+        "preserve_structure": True,  # Preserve directory structure as notebooks
+        "default_encoding": "utf-8",  # Default file encoding
     }
 
     def __init__(
@@ -276,24 +312,36 @@ class JoplinMCPConfig:
         verify_ssl: bool = None,
         tools: Optional[Dict[str, bool]] = None,
         content_exposure: Optional[Dict[str, Union[str, int]]] = None,
+        import_settings: Optional[Dict[str, Any]] = None,
     ):
         """Initialize configuration with default values."""
         # Use centralized defaults if not provided
         self.host = host if host is not None else self.DEFAULT_CONNECTION["host"]
         self.port = port if port is not None else self.DEFAULT_CONNECTION["port"]
         self.token = token
-        self.timeout = timeout if timeout is not None else self.DEFAULT_CONNECTION["timeout"]
-        self.verify_ssl = verify_ssl if verify_ssl is not None else self.DEFAULT_CONNECTION["verify_ssl"]
-        
+        self.timeout = (
+            timeout if timeout is not None else self.DEFAULT_CONNECTION["timeout"]
+        )
+        self.verify_ssl = (
+            verify_ssl
+            if verify_ssl is not None
+            else self.DEFAULT_CONNECTION["verify_ssl"]
+        )
+
         # Initialize tools configuration
         self.tools = self.DEFAULT_TOOLS.copy()
         if tools:
             self.tools.update(tools)
-        
+
         # Initialize content exposure configuration
         self.content_exposure = self.DEFAULT_CONTENT_EXPOSURE.copy()
         if content_exposure:
             self.content_exposure.update(content_exposure)
+
+        # Initialize import settings configuration
+        self.import_settings = self.DEFAULT_IMPORT_SETTINGS.copy()
+        if import_settings:
+            self.import_settings.update(import_settings)
 
     def is_tool_enabled(self, tool_name: str) -> bool:
         """Check if a specific tool is enabled."""
@@ -318,7 +366,9 @@ class JoplinMCPConfig:
     def set_content_exposure_level(self, context: str, level: str) -> None:
         """Set content exposure level for a specific context."""
         if level not in self.CONTENT_EXPOSURE_LEVELS:
-            raise ConfigError(f"Invalid content exposure level: {level}. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}")
+            raise ConfigError(
+                f"Invalid content exposure level: {level}. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}"
+            )
         self.content_exposure[context] = level
 
     def get_max_preview_length(self) -> int:
@@ -405,10 +455,18 @@ class JoplinMCPConfig:
         # Load max preview length from environment
         max_preview_env = os.environ.get(f"{prefix}MAX_PREVIEW_LENGTH")
         if max_preview_env is not None:
-            content_exposure["max_preview_length"] = ConfigParser.parse_int(max_preview_env, "max_preview_length")
+            content_exposure["max_preview_length"] = ConfigParser.parse_int(
+                max_preview_env, "max_preview_length"
+            )
 
         return cls(
-            host=host, port=port, token=token, timeout=timeout, verify_ssl=verify_ssl, tools=tools, content_exposure=content_exposure
+            host=host,
+            port=port,
+            token=token,
+            timeout=timeout,
+            verify_ssl=verify_ssl,
+            tools=tools,
+            content_exposure=content_exposure,
         )
 
     def validate(self) -> None:
@@ -416,34 +474,44 @@ class JoplinMCPConfig:
         ConfigValidator.validate_token_format(self.token)
         ConfigValidator.validate_port_range(self.port)
         ConfigValidator.validate_timeout_positive(self.timeout)
-        
+
         # Validate tools configuration
         if not isinstance(self.tools, dict):
             raise ConfigError("Tools configuration must be a dictionary")
-        
+
         for tool_name, enabled in self.tools.items():
             if tool_name not in self.DEFAULT_TOOLS:
                 raise ConfigError(f"Unknown tool in configuration: {tool_name}")
             if not isinstance(enabled, bool):
-                raise ConfigError(f"Tool configuration for '{tool_name}' must be boolean, got {type(enabled)}")
-        
+                raise ConfigError(
+                    f"Tool configuration for '{tool_name}' must be boolean, got {type(enabled)}"
+                )
+
         # Validate content exposure configuration
         if not isinstance(self.content_exposure, dict):
             raise ConfigError("Content exposure configuration must be a dictionary")
-        
+
         for key, value in self.content_exposure.items():
             if key == "max_preview_length":
                 if not isinstance(value, int) or value < 0:
-                    raise ConfigError(f"max_preview_length must be a non-negative integer, got {type(value)}")
+                    raise ConfigError(
+                        f"max_preview_length must be a non-negative integer, got {type(value)}"
+                    )
             elif key == "smart_toc_threshold":
                 if not isinstance(value, int) or value < 0:
-                    raise ConfigError(f"smart_toc_threshold must be a non-negative integer, got {type(value)}")
+                    raise ConfigError(
+                        f"smart_toc_threshold must be a non-negative integer, got {type(value)}"
+                    )
             elif key == "enable_smart_toc":
                 if not isinstance(value, bool):
-                    raise ConfigError(f"enable_smart_toc must be a boolean, got {type(value)}")
+                    raise ConfigError(
+                        f"enable_smart_toc must be a boolean, got {type(value)}"
+                    )
             elif key in ["search_results", "individual_notes", "listings"]:
                 if value not in self.CONTENT_EXPOSURE_LEVELS:
-                    raise ConfigError(f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}")
+                    raise ConfigError(
+                        f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}"
+                    )
             else:
                 raise ConfigError(f"Unknown content exposure setting: {key}")
 
@@ -482,7 +550,9 @@ class JoplinMCPConfig:
         token_display = "***" if self.token else None
         enabled_count = len(self.get_enabled_tools())
         total_count = len(self.tools)
-        content_levels = {k: v for k, v in self.content_exposure.items() if k != "max_preview_length"}
+        content_levels = {
+            k: v for k, v in self.content_exposure.items() if k != "max_preview_length"
+        }
         return (
             f"JoplinMCPConfig(host='{self.host}', port={self.port}, "
             f"token={token_display}, timeout={self.timeout}, "
@@ -532,12 +602,16 @@ class JoplinMCPConfig:
             try:
                 validated_data = cls._validate_file_data(data)
             except ConfigError as config_error:
-                raise ConfigError(f"Error in file {file_path}: {config_error}") from config_error
+                raise ConfigError(
+                    f"Error in file {file_path}: {config_error}"
+                ) from config_error
 
             return cls(**validated_data)
 
         except OSError as os_error:
-            raise ConfigError(f"Error reading configuration file {file_path}: {os_error}") from os_error
+            raise ConfigError(
+                f"Error reading configuration file {file_path}: {os_error}"
+            ) from os_error
 
     @classmethod
     def _validate_file_data(cls, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -669,9 +743,7 @@ class JoplinMCPConfig:
                                 f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(cls.CONTENT_EXPOSURE_LEVELS.keys())}"
                             )
                     else:
-                        raise ConfigError(
-                            f"Unknown content exposure setting: {key}"
-                        )
+                        raise ConfigError(f"Unknown content exposure setting: {key}")
                     content_exposure[key] = value
                 validated["content_exposure"] = content_exposure
             else:
@@ -726,7 +798,11 @@ class JoplinMCPConfig:
         merged_content_exposure = config.content_exposure.copy()
         # Override with environment content exposure
         for key, value in env_config.content_exposure.items():
-            env_var_name = f"{prefix}CONTENT_{key.upper()}" if key != "max_preview_length" else f"{prefix}MAX_PREVIEW_LENGTH"
+            env_var_name = (
+                f"{prefix}CONTENT_{key.upper()}"
+                if key != "max_preview_length"
+                else f"{prefix}MAX_PREVIEW_LENGTH"
+            )
             if env_var_name in os.environ:
                 merged_content_exposure[key] = value
         # Override with direct content exposure overrides
@@ -820,29 +896,55 @@ class JoplinMCPConfig:
         else:
             for tool_name, enabled in self.tools.items():
                 if tool_name not in self.DEFAULT_TOOLS:
-                    errors.append(ConfigError(f"Unknown tool in configuration: {tool_name}"))
+                    errors.append(
+                        ConfigError(f"Unknown tool in configuration: {tool_name}")
+                    )
                 if not isinstance(enabled, bool):
-                    errors.append(ConfigError(f"Tool configuration for '{tool_name}' must be boolean, got {type(enabled)}"))
+                    errors.append(
+                        ConfigError(
+                            f"Tool configuration for '{tool_name}' must be boolean, got {type(enabled)}"
+                        )
+                    )
 
         # Content exposure validation
         if not isinstance(self.content_exposure, dict):
-            errors.append(ConfigError("Content exposure configuration must be a dictionary"))
+            errors.append(
+                ConfigError("Content exposure configuration must be a dictionary")
+            )
         else:
             for key, value in self.content_exposure.items():
                 if key == "max_preview_length":
                     if not isinstance(value, int) or value < 0:
-                        errors.append(ConfigError(f"max_preview_length must be a non-negative integer, got {type(value)}"))
+                        errors.append(
+                            ConfigError(
+                                f"max_preview_length must be a non-negative integer, got {type(value)}"
+                            )
+                        )
                 elif key == "smart_toc_threshold":
                     if not isinstance(value, int) or value < 0:
-                        errors.append(ConfigError(f"smart_toc_threshold must be a non-negative integer, got {type(value)}"))
+                        errors.append(
+                            ConfigError(
+                                f"smart_toc_threshold must be a non-negative integer, got {type(value)}"
+                            )
+                        )
                 elif key == "enable_smart_toc":
                     if not isinstance(value, bool):
-                        errors.append(ConfigError(f"enable_smart_toc must be a boolean, got {type(value)}"))
+                        errors.append(
+                            ConfigError(
+                                f"enable_smart_toc must be a boolean, got {type(value)}"
+                            )
+                        )
                 elif key in ["search_results", "individual_notes", "listings"]:
                     if value not in self.CONTENT_EXPOSURE_LEVELS:
-                        errors.append(ConfigError(f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}"))
+                        errors.append(
+                            ConfigError(
+                                f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}"
+                            )
+                        )
                 else:
-                    errors.append(ConfigError(f"Unknown content exposure setting: {key}"))
+                    errors.append(
+                        ConfigError(f"Unknown content exposure setting: {key}")
+                    )
 
         return errors
 
@@ -998,7 +1100,9 @@ class JoplinMCPConfig:
                 else:
                     raise ConfigError(f"Unsupported format: {format}")
         except OSError as os_error:
-            raise ConfigError(f"Error writing configuration file {file_path}: {os_error}") from os_error
+            raise ConfigError(
+                f"Error writing configuration file {file_path}: {os_error}"
+            ) from os_error
 
     def test_connection(self) -> bool:
         """Test if the configuration allows successful connection to Joplin.
@@ -1046,73 +1150,77 @@ class JoplinMCPConfig:
 
     @classmethod
     def create_interactively(
-        cls, 
+        cls,
         token: Optional[str] = None,
         include_permissions: bool = True,
         include_content_privacy: bool = True,
-        **defaults
+        **defaults,
     ) -> "JoplinMCPConfig":
         """Create configuration interactively with user prompts.
-        
+
         Args:
             token: Pre-provided token (skip token prompt if provided)
             include_permissions: Whether to prompt for tool permissions
             include_content_privacy: Whether to prompt for content privacy settings
             defaults: Default values for configuration options
-        
+
         Returns:
             Configured JoplinMCPConfig instance
         """
-        from .ui_integration import get_permission_settings, get_token_interactively, get_content_privacy_settings
-        
+        from .ui_integration import (
+            get_content_privacy_settings,
+            get_permission_settings,
+            get_token_interactively,
+        )
+
         # Get token if not provided
         if not token:
             token = get_token_interactively()
-        
+
         # Get permission settings if requested
         if include_permissions:
             tool_permissions = get_permission_settings()
         else:
             tool_permissions = cls.DEFAULT_TOOLS.copy()
-        
+
         # Get content privacy settings if requested
         if include_content_privacy:
             content_privacy = get_content_privacy_settings()
         else:
             content_privacy = cls.DEFAULT_CONTENT_EXPOSURE.copy()
-        
+
         # Create configuration with user choices and defaults
         config_kwargs = {
             "host": defaults.get("host", cls.DEFAULT_CONNECTION["host"]),
             "port": defaults.get("port", cls.DEFAULT_CONNECTION["port"]),
             "token": token,
             "timeout": defaults.get("timeout", cls.DEFAULT_CONNECTION["timeout"]),
-            "verify_ssl": defaults.get("verify_ssl", cls.DEFAULT_CONNECTION["verify_ssl"]),
+            "verify_ssl": defaults.get(
+                "verify_ssl", cls.DEFAULT_CONNECTION["verify_ssl"]
+            ),
             "tools": tool_permissions,
-            "content_exposure": content_privacy
+            "content_exposure": content_privacy,
         }
-        
+
         return cls(**config_kwargs)
 
     def save_interactively(
-        self, 
-        suggested_path: Optional[Path] = None,
-        include_token: bool = True
+        self, suggested_path: Optional[Path] = None, include_token: bool = True
     ) -> Path:
         """Save configuration to a file with interactive path selection.
-        
+
         Args:
             suggested_path: Suggested file path
             include_token: Whether to include token in saved file
-        
+
         Returns:
             Path where config was saved
         """
         if not suggested_path:
             suggested_path = Path.cwd() / "joplin-mcp.json"
-        
+
         config_path = suggested_path
-        
+
         # Prepare config data
         config_data = {
             "host": self.host,
@@ -1120,15 +1228,15 @@ class JoplinMCPConfig:
             "timeout": self.timeout,
             "verify_ssl": self.verify_ssl,
             "tools": self.tools.copy(),
-            "content_exposure": self.content_exposure.copy()
+            "content_exposure": self.content_exposure.copy(),
         }
-        
+
         if include_token and self.token:
             config_data["token"] = self.token
-        
+
         # Save configuration
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(config_path, 'w') as f:
+        with open(config_path, "w") as f:
             json.dump(config_data, f, indent=2)
-        
+
         return config_path

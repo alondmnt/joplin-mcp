@@ -38,6 +38,7 @@ __all__ = [
     "__description__",
 ]
 
+
 def get_version() -> str:
     """Get the current version of joplin-mcp."""
     return __version__
@@ -73,6 +74,10 @@ def get_server_info() -> dict:
             "tag_note",
             "untag_note",
             "ping_joplin",
+            "import_from_file",
+            "import_from_directory",
+            "import_csv_data",
+            "import_archive",
         ],
         "mcp_version": "1.0.0",
     }
