@@ -2800,6 +2800,7 @@ async def import_from_file(
                 "attachment_handling", "link"
             ),
             encoding=config.import_settings.get("default_encoding", "utf-8"),
+            max_file_size_mb=config.import_settings.get("max_file_size_mb", 100),
         )
 
         # Apply additional options
