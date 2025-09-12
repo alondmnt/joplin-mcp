@@ -106,11 +106,11 @@ class RAWImporter(BaseImporter):
             # Extract timestamps from metadata or file stats using enhanced utilities
             file_metadata = self.get_file_metadata_safe(md_file)
             created_time = (
-                self._parse_timestamp(raw_metadata.get("created_time"))
+                self.parse_timestamp_safe(raw_metadata.get("created_time"))
                 or file_metadata.get("created_time")
             )
             updated_time = (
-                self._parse_timestamp(raw_metadata.get("updated_time"))
+                self.parse_timestamp_safe(raw_metadata.get("updated_time"))
                 or file_metadata.get("updated_time")
             )
 
@@ -227,23 +227,4 @@ class RAWImporter(BaseImporter):
 
         return re.sub(resource_pattern, replace_resource, content)
 
-    def _parse_timestamp(self, timestamp_str: Optional[str]) -> Optional[datetime]:
-        """Parse timestamp from various formats."""
-        if not timestamp_str:
-            return None
-
-        try:
-            # Try ISO format first
-            return datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-        except Exception:
-            try:
-                # Try other common formats
-                for fmt in ["%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"]:
-                    try:
-                        return datetime.strptime(timestamp_str, fmt)
-                    except ValueError:
-                        continue
-            except Exception:
-                pass
-
-        return None
+    # Note: timestamp parsing delegated to BaseImporter.parse_timestamp_safe
