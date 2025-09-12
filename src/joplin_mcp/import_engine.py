@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import re
 from typing import Dict, List, Optional, Tuple
 
 from joppy.client_api import ClientApi
@@ -54,16 +55,25 @@ class JoplinImportEngine:
             # Pre-populate caches for performance
             await self._populate_caches()
 
+            # Prepare tracking for created notes to support link rewriting
+            created_records: List[Dict[str, str]] = []
+
             # Process notes in batches to avoid overwhelming Joplin
             batch_size = min(options.max_batch_size, 50)
 
             for i in range(0, len(notes), batch_size):
                 batch = notes[i : i + batch_size]
-                await self._process_batch(batch, options, result)
+                await self._process_batch(batch, options, result, created_records)
 
                 # Small delay between batches to be gentle on Joplin
                 if i + batch_size < len(notes):
                     await asyncio.sleep(0.1)
+
+            # After creating all notes, attempt to rewrite internal note links
+            try:
+                await self._rewrite_internal_note_links(created_records, result)
+            except Exception as e:
+                logger.warning(f"Internal link rewrite failed: {e}")
 
         except Exception as e:
             result.add_failure("Batch Processing", f"Critical error: {str(e)}")
@@ -75,7 +85,11 @@ class JoplinImportEngine:
         return result
 
     async def _process_batch(
-        self, batch: List[ImportedNote], options: ImportOptions, result: ImportResult
+        self,
+        batch: List[ImportedNote],
+        options: ImportOptions,
+        result: ImportResult,
+        created_records: List[Dict[str, str]],
     ) -> None:
         """Process a single batch of notes.
 
@@ -86,9 +100,36 @@ class JoplinImportEngine:
         """
         for note in batch:
             try:
-                success, message = await self.create_note_safe(note, options, result)
+                success, message, new_id = await self.create_note_safe(
+                    note, options, result
+                )
                 if success:
                     result.add_success(note.title)
+                    # Track created note info for link rewriting
+                    try:
+                        record: Dict[str, str] = {
+                            "new_id": new_id or "",
+                            "title": note.title,
+                        }
+                        # Try to capture original identifiers for mapping
+                        # RAW/JEX often include original Joplin id
+                        orig_id = None
+                        if isinstance(note.metadata, dict):
+                            orig_id = note.metadata.get("id") or note.metadata.get(
+                                "joplin_id"
+                            )
+                            source_file = note.metadata.get("source_file")
+                            if source_file:
+                                record["source_file"] = str(source_file)
+                            original_format = note.metadata.get("original_format")
+                            if original_format:
+                                record["original_format"] = str(original_format)
+                        if orig_id and isinstance(orig_id, str):
+                            record["original_id"] = orig_id
+                        created_records.append(record)
+                    except Exception:
+                        # Non-fatal tracking failure
+                        pass
                 else:
                     result.add_failure(note.title, message)
 
@@ -98,7 +139,7 @@ class JoplinImportEngine:
 
     async def create_note_safe(
         self, note: ImportedNote, options: ImportOptions, result: ImportResult
-    ) -> Tuple[bool, str]:
+    ) -> Tuple[bool, str, Optional[str]]:
         """Safely create a single note with error handling.
 
         Args:
@@ -144,7 +185,7 @@ class JoplinImportEngine:
 
             # add_note returns the note ID directly as a string
             if not note_id or not isinstance(note_id, str):
-                return False, "Failed to get note ID from creation response"
+                return False, "Failed to get note ID from creation response", None
 
             # Handle tags
             if note.tags:
@@ -154,7 +195,7 @@ class JoplinImportEngine:
             if options.preserve_timestamps and (note.created_time or note.updated_time):
                 await self._update_note_timestamps(note_id, note)
 
-            return True, f"Created successfully (ID: {note_id})"
+            return True, f"Created successfully (ID: {note_id})", note_id
 
         except Exception as e:
             error_msg = str(e)
@@ -163,7 +204,67 @@ class JoplinImportEngine:
                     result.add_skip(note.title, "Duplicate note")
                     return True, "Skipped (duplicate)"
 
-            return False, f"Creation failed: {error_msg}"
+            return False, f"Creation failed: {error_msg}", None
+
+    async def _rewrite_internal_note_links(
+        self, created_records: List[Dict[str, str]], result: ImportResult
+    ) -> None:
+        """Rewrite internal note links of the form [text](:/oldid) to their new IDs.
+
+        Args:
+            created_records: List of dicts with keys including 'new_id' and optional 'original_id'.
+            result: ImportResult to record warnings.
+        """
+        if not created_records:
+            return
+
+        # Build mapping from original Joplin IDs to new IDs
+        id_map: Dict[str, str] = {}
+        for rec in created_records:
+            orig = rec.get("original_id")
+            new = rec.get("new_id")
+            if orig and new:
+                id_map[orig] = new
+
+        if not id_map:
+            # Nothing to rewrite for now (future: path-based mapping)
+            return
+
+        # Pattern matches both image and normal md links: ![alt](:/id) or [text](:/id)
+        link_re = re.compile(r"(!?\[[^\]]*\])\(:\/([a-f0-9]{32})(#[^)]+)?\)")
+
+        # Iterate through created notes to rewrite bodies
+        for rec in created_records:
+            note_id = rec.get("new_id")
+            if not note_id:
+                continue
+
+            try:
+                # Fetch the current note content (ensure body is included)
+                note_obj = self.client.get_note(note_id, fields="id,title,body")
+                body = getattr(note_obj, "body", None)
+                if not body or ":/" not in body:
+                    continue
+
+                def _sub(match: re.Match) -> str:
+                    prefix = match.group(1)
+                    old_id = match.group(2)
+                    anchor = match.group(3) or ""
+                    new_id = id_map.get(old_id)
+                    if new_id and new_id != old_id:
+                        return f"{prefix}(:/{new_id}{anchor})"
+                    return match.group(0)
+
+                new_body = link_re.sub(_sub, body)
+                if new_body != body:
+                    self.client.modify_note(note_id, body=new_body)
+                    result.add_warning(
+                        f"Rewrote internal links in note '{rec.get('title', note_id)}'"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"Failed rewriting links for note {note_id}: {e}"
+                )
 
     async def ensure_notebook_exists(
         self, notebook_name: str, options: ImportOptions, result: ImportResult

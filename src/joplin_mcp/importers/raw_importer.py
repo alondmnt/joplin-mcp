@@ -123,6 +123,8 @@ class RAWImporter(BaseImporter):
 
             # Extract title from cleaned body or filename
             title = self._extract_title(md_file, body)
+            # Remove duplicated title line from body if present
+            body = self._remove_title_from_body(body, title)
 
             # Process resource links if resources directory exists
             if resources_dir.exists():
@@ -323,3 +325,50 @@ class RAWImporter(BaseImporter):
         return re.sub(resource_pattern, replace_resource, content)
 
     # Note: timestamp parsing delegated to BaseImporter.parse_timestamp_safe
+
+    def _remove_title_from_body(self, body: str, title: str) -> str:
+        """RAW/JEX helper: remove a plain first line matching the title.
+
+        Keeps a leading markdown header like '# Title'. Only removes the first
+        non-empty line if it equals the title (case and whitespace insensitive)
+        and one blank line that follows it.
+        """
+        if not body or not title:
+            return body
+
+        lines = body.split("\n")
+
+        # Find first non-empty line index
+        idx = 0
+        while idx < len(lines) and not lines[idx].strip():
+            idx += 1
+        if idx >= len(lines):
+            return body
+
+        first = lines[idx].rstrip()
+
+        def normalize(s: str) -> str:
+            s = s.strip().lower()
+            # Remove simple markdown markers characters for comparison
+            import re as _re
+            s = _re.sub(r"[\s#*_`~]+", " ", s)
+            s = " ".join(s.split())
+            return s
+
+        normalized_title = normalize(title)
+
+        # Keep if it's a markdown header line
+        import re as _re
+        m = _re.match(r"^\s*#{1,6}\s*(.*?)\s*#*\s*$", first)
+        header_text = m.group(1) if m else None
+        if header_text and normalize(header_text) == normalized_title:
+            return body
+
+        # Remove if it's a plain line equal to the title
+        if normalize(first) == normalized_title:
+            del lines[idx]
+            if idx < len(lines) and not lines[idx].strip():
+                del lines[idx]
+            return "\n".join(lines).rstrip()
+
+        return body
