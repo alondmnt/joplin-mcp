@@ -70,12 +70,29 @@ class RAWImporter(BaseImporter):
                 f"No Markdown files found in RAW directory: {source_path}"
             )
 
+        # Pre-scan notebooks to map parent_id -> notebook title
+        notebooks_by_id: Dict[str, str] = {}
+        for md_file in md_files:
+            try:
+                content, _ = self.read_file_safe(md_file)
+                meta_preview, body_preview = self._parse_kv_metadata_block(content)
+                type_val = str(meta_preview.get("type_", "")).strip()
+                if type_val == "2":  # Notebook item
+                    nb_id = str(meta_preview.get("id", "")).strip()
+                    if nb_id:
+                        # Derive notebook title from first non-empty line
+                        title_candidate = self._extract_title(md_file, body_preview)
+                        if title_candidate:
+                            notebooks_by_id[nb_id] = title_candidate
+            except Exception:
+                continue
+
         notes = []
         resources_dir = path / "resources"
 
         for md_file in md_files:
             try:
-                note = await self._parse_md_file(md_file, resources_dir)
+                note = await self._parse_md_file(md_file, resources_dir, notebooks_by_id)
                 if note:
                     notes.append(note)
             except Exception as e:
@@ -86,18 +103,26 @@ class RAWImporter(BaseImporter):
         return notes
 
     async def _parse_md_file(
-        self, md_file: Path, resources_dir: Path
+        self, md_file: Path, resources_dir: Path, notebooks_by_id: Dict[str, str]
     ) -> Optional[ImportedNote]:
         """Parse a single Markdown file from RAW export."""
         try:
             # Read file content using enhanced base class utilities
             content, used_encoding = self.read_file_safe(md_file)
 
-            # Extract metadata from filename or content
-            title = self._extract_title(md_file, content)
-
-            # Parse Joplin-specific metadata if present
+            # Parse Joplin-specific metadata (frontmatter/comments or KV block)
             raw_metadata, body = self._parse_joplin_metadata(content)
+            if not raw_metadata:
+                # Fallback to key:value block at end (Joplin export style)
+                raw_metadata, body = self._parse_kv_metadata_block(content)
+
+            # Skip non-note items (e.g., notebooks type_=2, resources type_=4)
+            type_val = str(raw_metadata.get("type_", "")).strip()
+            if type_val and type_val != "1":
+                return None
+
+            # Extract title from cleaned body or filename
+            title = self._extract_title(md_file, body)
 
             # Process resource links if resources directory exists
             if resources_dir.exists():
@@ -119,6 +144,13 @@ class RAWImporter(BaseImporter):
             if isinstance(tags, str):
                 tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
 
+            # Resolve notebook from parent_id if available
+            notebook = raw_metadata.get("notebook")
+            if not notebook:
+                parent_id = str(raw_metadata.get("parent_id", "")).strip()
+                if parent_id and parent_id in notebooks_by_id:
+                    notebook = notebooks_by_id[parent_id]
+
             # Prepare additional metadata
             additional_metadata = {
                 "encoding": used_encoding,
@@ -132,9 +164,9 @@ class RAWImporter(BaseImporter):
                 body=body,
                 file_path=md_file,
                 tags=tags,
-                notebook=raw_metadata.get("notebook"),
-                is_todo=raw_metadata.get("is_todo", False),
-                todo_completed=raw_metadata.get("todo_completed", False),
+                notebook=notebook,
+                is_todo=bool(int(raw_metadata.get("is_todo", 0))) if isinstance(raw_metadata.get("is_todo", 0), (int, str)) else bool(raw_metadata.get("is_todo", False)),
+                todo_completed=bool(int(raw_metadata.get("todo_completed", 0))) if isinstance(raw_metadata.get("todo_completed", 0), (int, str)) else bool(raw_metadata.get("todo_completed", False)),
                 created_time=created_time,
                 updated_time=updated_time,
                 additional_metadata=additional_metadata,
@@ -205,6 +237,69 @@ class RAWImporter(BaseImporter):
                 content = re.sub(pattern, "", content)
 
         return metadata, content.strip()
+
+    def _parse_kv_metadata_block(self, content: str) -> Tuple[Dict[str, Any], str]:
+        """Parse trailing key: value metadata block used by Joplin RAW/JEX exports.
+
+        Returns a tuple of (metadata_dict, body_without_metadata).
+        """
+        lines = content.split("\n")
+        meta_lines: List[str] = []
+
+        # Walk from end collecting key: value lines
+        i = len(lines) - 1
+        kv_pattern = re.compile(r"^[a-z_][a-z0-9_]*:\s*(.*)$", re.IGNORECASE)
+        while i >= 0:
+            line = lines[i].rstrip()
+            if not line:
+                # allow blank lines in between metadata? stop at first blank after we started collecting
+                if meta_lines:
+                    break
+                i -= 1
+                continue
+            if kv_pattern.match(line):
+                meta_lines.append(line)
+                i -= 1
+                continue
+            # stop once a non kv line encountered after starting
+            if meta_lines:
+                break
+            i -= 1
+
+        metadata: Dict[str, Any] = {}
+        if meta_lines:
+            # meta_lines are collected bottom-up; reverse to restore order
+            meta_lines.reverse()
+            for ln in meta_lines:
+                m = kv_pattern.match(ln)
+                if not m:
+                    continue
+                key, val = ln.split(":", 1)
+                key = key.strip()
+                val = val.strip()
+
+                # Coerce some types
+                if key in {"is_todo", "todo_completed", "is_conflict", "encryption_applied", "encryption_blob_encrypted", "is_shared"}:
+                    if val.lower() in {"true", "false"}:
+                        metadata[key] = val.lower() == "true"
+                    else:
+                        try:
+                            metadata[key] = bool(int(val))
+                        except Exception:
+                            metadata[key] = False
+                elif key in {"order", "size", "ocr_status", "type_"}:
+                    try:
+                        metadata[key] = int(val)
+                    except Exception:
+                        metadata[key] = val
+                else:
+                    metadata[key] = val
+
+            # Remove metadata block from body
+            body = "\n".join(lines[: i + 1]).rstrip()
+            return metadata, body
+
+        return {}, content.strip()
 
     def _process_resource_links(self, content: str, resources_dir: Path) -> str:
         """Process resource links in content."""
