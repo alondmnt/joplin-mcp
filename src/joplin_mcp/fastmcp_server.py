@@ -2738,7 +2738,12 @@ async def import_from_file(
     from .import_engine import JoplinImportEngine
     from .importers.base import ImportProcessingError, ImportValidationError
     from .types.import_types import ImportOptions
-    from .import_tools import format_import_result, get_importer_for_format, detect_file_format
+    from .import_tools import (
+        format_import_result,
+        get_importer_for_format,
+        detect_file_format,
+        detect_directory_format,
+    )
 
     try:
         # Load configuration
@@ -2783,8 +2788,11 @@ async def import_from_file(
                 except ValueError:
                     format = "generic"
             else:
-                # For directories, use generic importer to handle all file types
-                format = "generic"
+                # For directories, detect format (raw, md, html, csv, enex, zip) with fallback to generic
+                try:
+                    format = detect_directory_format(file_path)
+                except Exception:
+                    format = "generic"
 
         # Create import options
         base_options = ImportOptions(
@@ -2813,6 +2821,16 @@ async def import_from_file(
 
         # Get appropriate importer
         importer = get_importer_for_format(format, base_options)
+
+        # If importing a directory with an importer that doesn't support directories,
+        # fall back to GenericImporter which can delegate per-file.
+        if path.is_dir() and hasattr(importer, "supports_directory"):
+            try:
+                if not importer.supports_directory():
+                    from .importers.generic_importer import GenericImporter as _Generic
+                    importer = _Generic(base_options)
+            except Exception:
+                pass
 
         # Validate and parse file
         try:
