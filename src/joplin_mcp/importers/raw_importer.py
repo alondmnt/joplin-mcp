@@ -126,8 +126,10 @@ class RAWImporter(BaseImporter):
             # Remove duplicated title line from body if present
             body = self._remove_title_from_body(body, title)
 
-            # Process resource links if resources directory exists
-            if resources_dir.exists():
+            # Resource link processing:
+            # For 'embed' mode (default), keep Joplin :/resourceId links so the engine can upload and rewrite.
+            # Only rewrite to local resources paths in 'link' mode for readability.
+            if resources_dir.exists() and getattr(self.options, "attachment_handling", "embed") == "link":
                 body = self._process_resource_links(body, resources_dir)
 
             # Extract timestamps from metadata or file stats using enhanced utilities
@@ -159,6 +161,10 @@ class RAWImporter(BaseImporter):
                 "original_format": "raw",
                 **raw_metadata,
             }
+
+            # Include resources directory for downstream attachment handling
+            if resources_dir and resources_dir.exists():
+                additional_metadata["raw_resources_dir"] = str(resources_dir.resolve())
 
             # Create note using enhanced base class utilities
             note = self.create_imported_note_safe(

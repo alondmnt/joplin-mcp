@@ -136,7 +136,7 @@ class ImportOptions:
     preserve_timestamps: bool = True
     handle_duplicates: str = "skip"  # skip|overwrite|rename
     max_batch_size: int = 100
-    attachment_handling: str = "link"  # link|embed|skip
+    attachment_handling: str = "embed"  # link|embed|skip
     encoding: str = "utf-8"
     max_file_size_mb: Optional[int] = None
     file_pattern: Optional[str] = None
