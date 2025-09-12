@@ -145,8 +145,8 @@ class ZIPImporter(BaseImporter):
             if not text_content:
                 return None
 
-            # Extract title from filename or content
-            title = self._extract_title(zip_file_path, text_content)
+            # Extract title using shared utility
+            title = self.extract_title_safe(text_content, zip_file_path.stem)
 
             # Delegate file processing to GenericImporter for consistent handling
             body = await self._delegate_to_generic_importer(zip_file_path, text_content)
@@ -203,30 +203,7 @@ class ZIPImporter(BaseImporter):
 
         return None
 
-    def _extract_title(self, file_path: Path, content: str) -> str:
-        """Extract title from filename or content."""
-        # Try to find title in content first
-        lines = content.split("\n")
-        for line in lines:
-            line = line.strip()
-            if line.startswith("# "):
-                return line[2:].strip()
-            elif line and len(line) <= 100 and not line.startswith("#"):
-                return line
-
-        # Fall back to filename
-        return file_path.stem.replace("_", " ").replace("-", " ")
-
-
-    def _extract_hashtags(self, content: str) -> List[str]:
-        """Extract hashtags from content."""
-        import re
-
-        # Find hashtags in the content
-        hashtag_pattern = r"#([a-zA-Z0-9_-]+)"
-        hashtags = re.findall(hashtag_pattern, content)
-
-        return list(set(hashtags))
+    # Note: Title and hashtag extraction now use BaseImporter helpers
 
     async def _delegate_to_generic_importer(self, file_path: Path, content: str) -> str:
         """Delegate file processing to GenericImporter - let it decide what to do with the file."""
@@ -255,7 +232,7 @@ class ZIPImporter(BaseImporter):
                     return note.body
                 else:
                     # Fallback if GenericImporter couldn't process it
-                    title = self._extract_title(file_path, content)
+                    title = self.extract_title_safe(content, file_path.stem)
                     return f"# {title}\n\n```\n{content}\n```"
                     
             finally:
@@ -267,5 +244,5 @@ class ZIPImporter(BaseImporter):
                 
         except Exception:
             # Ultimate fallback: wrap in code block with title
-            title = self._extract_title(file_path, content)
+            title = self.extract_title_safe(content, file_path.stem)
             return f"# {title}\n\n```\n{content}\n```"
