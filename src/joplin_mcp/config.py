@@ -258,9 +258,6 @@ class JoplinMCPConfig:
         "utilities": ["ping_joplin"],
         "import": [
             "import_from_file",
-            "import_from_directory",
-            "import_csv_data",
-            "import_archive",
         ],
     }
 

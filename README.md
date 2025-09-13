@@ -30,7 +30,7 @@ This MCP server provides **22 optimized tools** for comprehensive Joplin integra
 - **Link**: `tag_note`, `untag_note`
 
 ### **Import**
-- **File Import**: `import_from_file` - Import Markdown, HTML, CSV, TXT, ENEX, ZIP, JEX files and directories
+- **File Import**: `import_from_file` - Import Markdown, HTML, CSV, TXT, JEX files and directories
   > **Note**: Import tools are disabled by default for security. Enable with `"import_from_file": true` in your config.
 
 ### **System**
@@ -432,6 +432,6 @@ Available tools: 21 tools ready
 | `tag_note` | Update | Add tags to notes |
 | `untag_note` | Update | Remove tags from notes |
 | **Import Tools** | | |
-| `import_from_file` | Write | Import files/directories (MD, HTML, CSV, TXT, ENEX, ZIP, JEX) |
+| `import_from_file` | Write | Import files/directories (MD, HTML, CSV, TXT, JEX) |
 | **System Tools** | | |
 | `ping_joplin` | Read | Test connectivity |

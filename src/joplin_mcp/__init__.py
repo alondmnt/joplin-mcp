@@ -75,9 +75,6 @@ def get_server_info() -> dict:
             "untag_note",
             "ping_joplin",
             "import_from_file",
-            "import_from_directory",
-            "import_csv_data",
-            "import_archive",
         ],
         "mcp_version": "1.0.0",
     }
