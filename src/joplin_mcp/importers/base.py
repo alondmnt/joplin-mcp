@@ -374,14 +374,15 @@ class BaseImporter(ABC):
         return extract_title_from_content(content, filename_fallback)
     
     def extract_hashtags_safe(self, content: str) -> List[str]:
-        """Extract hashtags from content using shared logic.
+        """Extract hashtags from content using shared logic and options.
         
-        Args:
-            content: Content to analyze
-            
-        Returns:
-            List of unique hashtags
+        Respects import option 'extract_hashtags' (default: True).
         """
+        try:
+            if not getattr(self.options, "import_options", {}).get("extract_hashtags", True):
+                return []
+        except Exception:
+            pass
         return extract_hashtags(content)
     
     def get_file_metadata_safe(self, file_path: Path) -> dict:

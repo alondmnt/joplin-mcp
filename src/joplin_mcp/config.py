@@ -290,14 +290,12 @@ class JoplinMCPConfig:
     DEFAULT_IMPORT_SETTINGS = {
         "max_file_size_mb": 100,  # Maximum file size in MB
         "max_batch_size": 100,  # Maximum notes per batch
-        "allowed_formats": ["md", "html", "csv"],  # Allowed import formats
         "create_missing_notebooks": True,  # Auto-create notebooks
         "create_missing_tags": True,  # Auto-create tags
         "preserve_timestamps": True,  # Preserve original timestamps
         "handle_duplicates": "skip",  # How to handle duplicates: skip|overwrite|rename
         "attachment_handling": "embed",  # How to handle attachments: link|embed|skip
         "preserve_structure": True,  # Preserve directory structure as notebooks
-        "default_encoding": "utf-8",  # Default file encoding
     }
 
     def __init__(
@@ -748,6 +746,56 @@ class JoplinMCPConfig:
                     f"Invalid data type for 'content_exposure': expected dictionary, got {type(data['content_exposure'])}"
                 )
 
+        # Import settings - optional dict influencing import defaults
+        if "import_settings" in data:
+            if data["import_settings"] is None:
+                # Use defaults
+                pass
+            elif isinstance(data["import_settings"], dict):
+                raw_settings: Dict[str, Any] = data["import_settings"]
+                import_settings: Dict[str, Any] = {}
+
+                def _as_int(v):
+                    if isinstance(v, int):
+                        return v
+                    if isinstance(v, str) and v.isdigit():
+                        return int(v)
+                    raise ConfigError("Invalid integer in import_settings")
+
+                def _as_bool(v):
+                    if isinstance(v, bool):
+                        return v
+                    if isinstance(v, str):
+                        lv = v.strip().lower()
+                        if lv in ("true", "1", "yes", "y"):
+                            return True
+                        if lv in ("false", "0", "no", "n"):
+                            return False
+                    raise ConfigError("Invalid boolean in import_settings")
+
+                for key, val in raw_settings.items():
+                    if key in ("max_file_size_mb", "max_batch_size"):
+                        import_settings[key] = _as_int(val)
+                    elif key in ("create_missing_notebooks", "create_missing_tags", "preserve_timestamps", "preserve_structure"):
+                        import_settings[key] = _as_bool(val)
+                    elif key == "handle_duplicates":
+                        if val not in ("skip", "overwrite", "rename"):
+                            raise ConfigError("import_settings.handle_duplicates must be one of skip|overwrite|rename")
+                        import_settings[key] = val
+                    elif key == "attachment_handling":
+                        if val not in ("link", "embed", "skip"):
+                            raise ConfigError("import_settings.attachment_handling must be one of link|embed|skip")
+                        import_settings[key] = val
+                    else:
+                        # Allow importer-specific defaults to pass through
+                        import_settings[key] = val
+
+                validated["import_settings"] = import_settings
+            else:
+                raise ConfigError(
+                    f"Invalid data type for 'import_settings': expected dictionary, got {type(data['import_settings'])}"
+                )
+
         return validated
 
     @classmethod
@@ -806,6 +854,11 @@ class JoplinMCPConfig:
         if "content_exposure" in overrides:
             merged_content_exposure.update(overrides["content_exposure"])
 
+        # Merge import settings (file + overrides; no env mapping currently)
+        merged_import_settings = getattr(config, "import_settings", {}).copy()
+        if "import_settings" in overrides and isinstance(overrides["import_settings"], dict):
+            merged_import_settings.update(overrides["import_settings"])
+
         merged_data = {
             "host": get_value(
                 "host", "host_override", env_config.host, config.host, "localhost"
@@ -828,6 +881,7 @@ class JoplinMCPConfig:
             ),
             "tools": merged_tools,
             "content_exposure": merged_content_exposure,
+            "import_settings": merged_import_settings,
         }
 
         return cls(**merged_data)

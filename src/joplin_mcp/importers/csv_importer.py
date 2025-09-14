@@ -84,22 +84,35 @@ class CSVImporter(BaseImporter):
         # Read CSV content using enhanced base class utilities
         content, used_encoding = self.read_file_safe(file_path)
 
-        # Get import mode from options - default to 'table' (preserving original behavior)
-        import_mode = getattr(self.options, "csv_import_mode", "table")
+        # Get import mode from options - default to 'table'
+        csv_opts = getattr(self.options, "import_options", {}) or {}
+        import_mode = csv_opts.get(
+            "csv_import_mode", getattr(self.options, "csv_import_mode", "table")
+        )
+        delimiter_opt = csv_opts.get("csv_delimiter")
 
         if import_mode == "rows":
-            return await self._create_notes_from_rows(file_path, content, used_encoding)
+            return await self._create_notes_from_rows(
+                file_path, content, used_encoding, delimiter_opt
+            )
         else:
             # Default table mode
-            return await self._create_table_note(file_path, content, used_encoding)
+            return await self._create_table_note(
+                file_path, content, used_encoding, delimiter_opt
+            )
 
-    async def _create_table_note(self, file_path: Path, content: str, used_encoding: str) -> List[ImportedNote]:
+    async def _create_table_note(
+        self, file_path: Path, content: str, used_encoding: str, delimiter_opt: str = None
+    ) -> List[ImportedNote]:
         """Create a single note with CSV data as a Markdown table."""
         # Title from path (prefer filename over CSV content heuristics)
         title = self._title_from_path(file_path)
 
         # Convert CSV to Markdown table using shared utility
-        markdown_content = csv_to_markdown_table(content, title)
+        if delimiter_opt and isinstance(delimiter_opt, str) and len(delimiter_opt) == 1:
+            markdown_content = csv_to_markdown_table(content, title, delimiter=delimiter_opt)
+        else:
+            markdown_content = csv_to_markdown_table(content, title)
 
         # Extract hashtags using enhanced base class utilities
         tags = self.extract_hashtags_safe(content)
@@ -129,7 +142,9 @@ class CSVImporter(BaseImporter):
         title = " ".join(title.split())
         return title or file_path.name
 
-    async def _create_notes_from_rows(self, file_path: Path, content: str, used_encoding: str) -> List[ImportedNote]:
+    async def _create_notes_from_rows(
+        self, file_path: Path, content: str, used_encoding: str, delimiter_opt: str = None
+    ) -> List[ImportedNote]:
         """Create separate notes from each CSV row (preserving original functionality)."""
         # Parse CSV content to get rows
         import csv
@@ -137,15 +152,17 @@ class CSVImporter(BaseImporter):
         
         rows = []
         try:
-            # Detect CSV dialect
-            sample = content[:1024]
-            sniffer = csv.Sniffer()
-            try:
-                dialect = sniffer.sniff(sample)
-            except csv.Error:
-                dialect = csv.excel
-
-            reader = csv.reader(StringIO(content), dialect=dialect)
+            if delimiter_opt and isinstance(delimiter_opt, str) and len(delimiter_opt) == 1:
+                reader = csv.reader(StringIO(content), delimiter=delimiter_opt)
+            else:
+                # Detect CSV dialect
+                sample = content[:1024]
+                sniffer = csv.Sniffer()
+                try:
+                    dialect = sniffer.sniff(sample)
+                except csv.Error:
+                    dialect = csv.excel
+                reader = csv.reader(StringIO(content), dialect=dialect)
             for row in reader:
                 rows.append(row)
         except Exception:
