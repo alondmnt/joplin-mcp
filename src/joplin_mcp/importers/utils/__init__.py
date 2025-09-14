@@ -29,6 +29,9 @@ from .timestamp_utils import (
     parse_joplin_timestamp,
     parse_evernote_timestamp,
 )
+from .detectors import (
+    looks_like_raw_export,
+)
 
 __all__ = [
     "read_file_with_encoding",
@@ -54,4 +57,5 @@ __all__ = [
     "parse_html_meta_timestamp",
     "parse_joplin_timestamp",
     "parse_evernote_timestamp",
+    "looks_like_raw_export",
 ]

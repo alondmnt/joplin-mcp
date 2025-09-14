@@ -12,7 +12,7 @@ from typing import List, Optional
 
 from ..types.import_types import ImportedNote
 from .base import BaseImporter, ImportProcessingError, ImportValidationError
-from .utils import csv_to_markdown_table
+from .utils import csv_to_markdown_table, looks_like_raw_export
 
 
 class GenericImporter(BaseImporter):
@@ -54,12 +54,72 @@ class GenericImporter(BaseImporter):
         path = Path(source_path)
 
         if path.is_dir():
-            # Use standard directory processing from BaseImporter
-            return await super().parse_directory(source_path)
+            # Custom directory processing that can delegate RAW subtrees
+            return await self._parse_directory_with_delegation(path)
         else:
             # Process single file
             note = await self._parse_file(path)
             return [note] if note else []
+
+    async def _parse_directory_with_delegation(self, dir_path: Path) -> List[ImportedNote]:
+        """Parse a directory, delegating nested RAW exports to RAWImporter.
+
+        - Skips typical non-content folders (e.g., resources, VCS dirs)
+        - When a subdirectory looks like a RAW export root, parse that subtree using RAWImporter
+        - Otherwise, parse files individually with GenericImporter logic
+        """
+        notes: List[ImportedNote] = []
+
+        # Import RAWImporter lazily to avoid circular dependencies
+        try:
+            raw_module = __import__("joplin_mcp.importers.raw_importer", fromlist=["RAWImporter"])
+            RAWImporter = getattr(raw_module, "RAWImporter")
+        except Exception:
+            RAWImporter = None  # Fallback: treat everything generically
+
+        skip_dirs = {"resources", ".git", ".svn", "__pycache__"}
+
+        # DFS traversal with manual stack to allow subtree delegation
+        stack: List[Path] = [dir_path]
+        root = dir_path.resolve()
+
+        while stack:
+            current = stack.pop()
+            # If not the root and the directory looks like a RAW export, delegate the whole subtree
+            if RAWImporter and current.resolve() != root and looks_like_raw_export(current):
+                try:
+                    importer = RAWImporter(self.options)
+                    sub_notes = await importer.parse(str(current))
+                    notes.extend(sub_notes)
+                except Exception:
+                    # If delegation fails, fall back to generic traversal of this directory
+                    pass
+                # Do not descend into this subtree further whether delegation succeeded or not
+                continue
+
+            # Normal traversal: iterate contents
+            try:
+                for child in current.iterdir():
+                    if child.is_dir():
+                        # Skip known non-content folders
+                        if child.name.lower() in skip_dirs:
+                            continue
+                        stack.append(child)
+                    elif child.is_file():
+                        try:
+                            note = await self._parse_file(child)
+                            if note:
+                                notes.append(note)
+                        except Exception as e:
+                            logging.getLogger(__name__).warning(
+                                "Failed to parse %s: %s", child, str(e)
+                            )
+            except Exception as e:
+                logging.getLogger(__name__).warning(
+                    "Failed to scan directory %s: %s", current, str(e)
+                )
+
+        return notes
 
     async def _parse_file(self, file_path: Path) -> Optional[ImportedNote]:
         """Parse a single file by delegating to specialized importers or handling unknown formats."""

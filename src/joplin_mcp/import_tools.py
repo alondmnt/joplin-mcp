@@ -18,6 +18,7 @@ from .importers import (
     RAWImporter,
 )
 from .types.import_types import ImportOptions
+from .importers.utils import looks_like_raw_export
 
 logger = logging.getLogger(__name__)
 
@@ -146,48 +147,26 @@ def detect_file_format(file_path: str) -> str:
 
 
 def detect_directory_format(directory_path: str) -> str:
-    """Detect format from directory contents."""
+    """Detect format from directory contents.
+
+    Rules:
+    - Classify as RAW only when the directory itself looks like a Joplin export
+      (resources folder at the root and markdown present at or under the root),
+      to avoid misclassifying mixed trees that contain a nested RAW subfolder.
+    - If multiple supported types (md/html/csv) are present, return "generic" so the
+      GenericImporter can delegate per-file and handle mixed content.
+    - Otherwise, return the single supported format present.
+    """
     path = Path(directory_path)
 
     if not path.exists() or not path.is_dir():
         raise ValueError(f"Directory not found: {directory_path}")
 
-    # Check for specific directory patterns
-    # RAW format: Joplin Export Directory
-    # Heuristic 1: resources folder at root with markdown files
-    if (path / "resources").exists() and any(path.glob("*.md")):
+    # RAW detection using shared heuristic (root-level sensitive)
+    if looks_like_raw_export(path):
         return "raw"
 
-    # Heuristic 2: resources folder anywhere under the tree with markdown files
-    try:
-        if any(p.is_dir() for p in path.rglob("resources")) and any(path.rglob("*.md")):
-            return "raw"
-    except Exception:
-        pass
-
-    # Heuristic 3: detect Joplin KV metadata blocks at end of markdown files
-    # Simple check: look for lines like 'id: <32 hex>' and 'type_: <digit>'
-    try:
-        md_files = list(path.rglob("*.md"))
-        if md_files:
-            def looks_like_joplin_kv(md_path: Path) -> bool:
-                try:
-                    text = md_path.read_text(encoding="utf-8", errors="ignore")
-                    tail = "\n".join(text.strip().splitlines()[-40:])
-                    has_id = re.search(r"^id:\s*[a-f0-9]{32}$", tail, re.M) is not None
-                    has_type = re.search(r"^type_:\s*\d+", tail, re.M) is not None
-                    return has_id and has_type
-                except Exception:
-                    return False
-
-            sample = md_files[: min(10, len(md_files))]
-            matches = sum(1 for f in sample if looks_like_joplin_kv(f))
-            if matches >= 2:
-                return "raw"
-    except Exception:
-        pass
-
-    # Count file types to determine predominant format
+    # Scan extensions in tree
     extension_counts = {}
     for file_path in path.rglob("*"):
         if file_path.is_file():
@@ -197,7 +176,7 @@ def detect_directory_format(directory_path: str) -> str:
     if not extension_counts:
         raise ValueError(f"No files found in directory: {directory_path}")
 
-    # Find most common supported extension
+    # Supported mapping
     extension_map = {
         "md": "md",
         "markdown": "md",
@@ -206,24 +185,21 @@ def detect_directory_format(directory_path: str) -> str:
         "html": "html",
         "htm": "html",
         "csv": "csv",
-        
     }
 
-    # Get supported extensions ordered by count
-    supported_extensions = []
-    for ext, count in sorted(
-        extension_counts.items(), key=lambda x: x[1], reverse=True
-    ):
-        if ext in extension_map:
-            supported_extensions.append((ext, count))
+    # Collect supported types present
+    present_supported = {extension_map[ext] for ext in extension_counts.keys() if ext in extension_map}
 
-    if not supported_extensions:
-        # Fall back to generic format for directories with no supported files
+    if not present_supported:
+        # Fall back to generic when no recognized types
         return "generic"
 
-    # Return format of most common supported extension
-    most_common_ext = supported_extensions[0][0]
-    return extension_map[most_common_ext]
+    if len(present_supported) > 1:
+        # Mixed content – use GenericImporter
+        return "generic"
+
+    # Single supported type present
+    return next(iter(present_supported))
 
 
 async def import_source(
