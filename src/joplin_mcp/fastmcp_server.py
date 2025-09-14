@@ -30,6 +30,7 @@
 """
 
 import datetime
+import time
 import logging
 import os
 from enum import Enum
@@ -246,6 +247,99 @@ def get_joplin_client() -> ClientApi:
     # Prefer configured base URL if available without token
     url = config.base_url if config else os.getenv("JOPLIN_URL", "http://localhost:41184")
     return ClientApi(token=token, url=url)
+
+
+# === NOTEBOOK PATH UTILITIES ===
+
+def _build_notebook_map(notebooks: List[Any]) -> Dict[str, Dict[str, Optional[str]]]:
+    """Build a map of notebook_id -> {title, parent_id}."""
+    mapping: Dict[str, Dict[str, Optional[str]]] = {}
+    for nb in notebooks or []:
+        try:
+            nb_id = getattr(nb, "id", None)
+            if not nb_id:
+                continue
+            mapping[nb_id] = {
+                "title": getattr(nb, "title", "Untitled"),
+                "parent_id": getattr(nb, "parent_id", None),
+            }
+        except Exception:
+            # Be resilient to unexpected notebook structures
+            continue
+    return mapping
+
+
+def _compute_notebook_path(
+    notebook_id: Optional[str],
+    notebooks_map: Dict[str, Dict[str, Optional[str]]],
+    sep: str = " / ",
+) -> Optional[str]:
+    """Compute full notebook path from root to the specified notebook.
+
+    Returns a string like "Parent / Child / Notebook" or None if unavailable.
+    """
+    if not notebook_id:
+        return None
+
+    parts: List[str] = []
+    seen: set[str] = set()
+    curr = notebook_id
+    while curr and curr not in seen:
+        seen.add(curr)
+        info = notebooks_map.get(curr)
+        if not info:
+            break
+        title = (info.get("title") or "Untitled").strip()
+        parts.append(title)
+        curr = info.get("parent_id")
+
+    if not parts:
+        return None
+    return sep.join(reversed(parts))
+
+
+# === NOTEBOOK MAP CACHE ===
+
+_NOTEBOOK_MAP_CACHE: Dict[str, Any] = {"built_at": 0.0, "map": None}
+_DEFAULT_NOTEBOOK_TTL_SECONDS = 90  # sensible default; adjustable via env var
+
+
+def _get_notebook_cache_ttl() -> int:
+    try:
+        env_val = os.getenv("JOPLIN_MCP_NOTEBOOK_CACHE_TTL")
+        if env_val:
+            ttl = int(env_val)
+            # Clamp to reasonable bounds to avoid accidental huge/small values
+            return max(5, min(ttl, 3600))
+    except Exception:
+        pass
+    return _DEFAULT_NOTEBOOK_TTL_SECONDS
+
+
+def get_notebook_map_cached(force_refresh: bool = False) -> Dict[str, Dict[str, Optional[str]]]:
+    """Return cached notebook map with TTL; refresh if stale or forced."""
+    ttl = _get_notebook_cache_ttl()
+    now = time.monotonic()
+
+    if not force_refresh:
+        built_at = _NOTEBOOK_MAP_CACHE.get("built_at", 0.0) or 0.0
+        cached_map = _NOTEBOOK_MAP_CACHE.get("map")
+        if cached_map is not None and (now - built_at) < ttl:
+            return cached_map
+
+    client = get_joplin_client()
+    fields_list = "id,title,parent_id"
+    notebooks = client.get_all_notebooks(fields=fields_list)
+    nb_map = _build_notebook_map(notebooks)
+    _NOTEBOOK_MAP_CACHE["map"] = nb_map
+    _NOTEBOOK_MAP_CACHE["built_at"] = now
+    return nb_map
+
+
+def invalidate_notebook_map_cache() -> None:
+    """Invalidate the cached notebook map so next access refreshes it."""
+    _NOTEBOOK_MAP_CACHE["built_at"] = 0.0
+    _NOTEBOOK_MAP_CACHE["map"] = None
 
 
 def apply_pagination(
@@ -1121,6 +1215,14 @@ def format_item_list(items: List[Any], item_type: ItemType) -> str:
     count = len(items)
     result_parts = [f"ITEM_TYPE: {item_type.value}", f"TOTAL_ITEMS: {count}", ""]
 
+    # Precompute notebook map if listing notebooks to enable path display
+    notebooks_map: Optional[Dict[str, Dict[str, Optional[str]]]] = None
+    if item_type == ItemType.notebook:
+        try:
+            notebooks_map = _build_notebook_map(items)  # items already are notebooks
+        except Exception:
+            notebooks_map = None
+
     for i, item in enumerate(items, 1):
         title = getattr(item, "title", "Untitled")
         item_id = getattr(item, "id", "unknown")
@@ -1138,6 +1240,18 @@ def format_item_list(items: List[Any], item_type: ItemType) -> str:
         parent_id = getattr(item, "parent_id", None)
         if parent_id:
             result_parts.append(f"  parent_id: {parent_id}")
+
+        # Add full path for notebooks
+        if item_type == ItemType.notebook:
+            try:
+                if notebooks_map:
+                    path = _compute_notebook_path(item_id, notebooks_map)
+                else:
+                    path = None
+                if path:
+                    result_parts.append(f"  path: {path}")
+            except Exception:
+                pass
 
         # Add creation time if available
         created_time = getattr(item, "created_time", None)
@@ -1182,10 +1296,18 @@ def format_item_details(item: Any, item_type: ItemType) -> str:
         if updated_date:
             metadata.append(f"Updated: {updated_date}")
 
-    # Parent (for notebooks)
+    # Parent and path (for notebooks)
     parent_id = getattr(item, "parent_id", None)
     if parent_id:
         metadata.append(f"Parent: {parent_id}")
+    if item_type == ItemType.notebook:
+        try:
+            nb_map = get_notebook_map_cached()
+            path = _compute_notebook_path(getattr(item, "id", None), nb_map)
+            if path:
+                metadata.append(f"Path: {path}")
+        except Exception:
+            pass
 
     if metadata:
         result_parts.append("**Metadata:**")
@@ -1228,10 +1350,18 @@ def format_note_details(
         if updated_date:
             result_parts.append(f"UPDATED: {updated_date}")
 
-    # Notebook reference
+    # Notebook reference and path
     parent_id = getattr(note, "parent_id", None)
     if parent_id:
         result_parts.append(f"NOTEBOOK_ID: {parent_id}")
+        try:
+            nb_map = get_notebook_map_cached()
+            nb_path = _compute_notebook_path(parent_id, nb_map)
+            if nb_path:
+                result_parts.append(f"NOTEBOOK_PATH: {nb_path}")
+        except Exception:
+            # Path resolution is best-effort; ignore failures
+            pass
 
     # Todo status
     is_todo = getattr(note, "is_todo", 0)
@@ -1313,6 +1443,7 @@ def _format_note_entry(
     context: str,
     original_query: Optional[str],
     query: str,
+    notebooks_map: Optional[Dict[str, Dict[str, Optional[str]]]] = None,
 ) -> List[str]:
     """Format a single note entry for search results."""
     title = getattr(note, "title", "Untitled")
@@ -1338,6 +1469,17 @@ def _format_note_entry(
     parent_id = getattr(note, "parent_id", None)
     if parent_id:
         entry.append(f"  notebook_id: {parent_id}")
+        try:
+            nb_path: Optional[str] = None
+            if notebooks_map is None:
+                temp_map = get_notebook_map_cached()
+                nb_path = _compute_notebook_path(parent_id, temp_map)
+            else:
+                nb_path = _compute_notebook_path(parent_id, notebooks_map)
+            if nb_path:
+                entry.append(f"  notebook_path: {nb_path}")
+        except Exception:
+            pass
 
     # Add todo status
     is_todo = getattr(note, "is_todo", 0)
@@ -1424,13 +1566,22 @@ def format_search_results_with_pagination(
     """Format search results with pagination information for display optimized for LLM comprehension."""
     config = _module_config
 
+    # Build notebook map once for efficient path resolution
+    notebooks_map: Optional[Dict[str, Dict[str, Optional[str]]]] = None
+    try:
+        notebooks_map = get_notebook_map_cached()
+    except Exception:
+        notebooks_map = None  # Best-effort only
+
     # Build all parts
     result_parts = _build_pagination_header(query, total_count, limit, offset)
 
     # Add note entries
     for i, note in enumerate(results, 1):
         result_parts.extend(
-            _format_note_entry(note, i, config, context, original_query, query)
+            _format_note_entry(
+                note, i, config, context, original_query, query, notebooks_map
+            )
         )
 
     # Add pagination summary
@@ -2470,6 +2621,8 @@ async def create_notebook(
         notebook_kwargs["parent_id"] = parent_id.strip()
 
     notebook = client.add_notebook(**notebook_kwargs)
+    # Invalidate notebook path cache to reflect new structure immediately
+    invalidate_notebook_map_cache()
     return format_creation_success(ItemType.notebook, title, str(notebook))
 
 
@@ -2487,6 +2640,8 @@ async def update_notebook(
     """
     client = get_joplin_client()
     client.modify_notebook(notebook_id, title=title)
+    # Invalidate cache in case the notebook moved/renamed
+    invalidate_notebook_map_cache()
     return format_update_success(ItemType.notebook, notebook_id)
 
 
@@ -2505,6 +2660,8 @@ async def delete_notebook(
     """
     client = get_joplin_client()
     client.delete_notebook(notebook_id)
+    # Invalidate cache since structure changed
+    invalidate_notebook_map_cache()
     return format_delete_success(ItemType.notebook, notebook_id)
 
 
