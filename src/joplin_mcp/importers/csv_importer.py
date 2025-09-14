@@ -95,8 +95,8 @@ class CSVImporter(BaseImporter):
 
     async def _create_table_note(self, file_path: Path, content: str, used_encoding: str) -> List[ImportedNote]:
         """Create a single note with CSV data as a Markdown table."""
-        # Extract title using enhanced base class utilities
-        title = self.extract_title_safe(content, file_path.stem)
+        # Title from path (prefer filename over CSV content heuristics)
+        title = self._title_from_path(file_path)
 
         # Convert CSV to Markdown table using shared utility
         markdown_content = csv_to_markdown_table(content, title)
@@ -116,6 +116,18 @@ class CSVImporter(BaseImporter):
             },
         )
         return [note]
+
+    def _title_from_path(self, file_path: Path) -> str:
+        """Derive a human-friendly title from a file path.
+
+        Replaces common separators with spaces and collapses whitespace.
+        """
+        title = file_path.stem
+        # Replace separators
+        title = title.replace("_", " ").replace("-", " ").replace(".", " ")
+        # Collapse spaces
+        title = " ".join(title.split())
+        return title or file_path.name
 
     async def _create_notes_from_rows(self, file_path: Path, content: str, used_encoding: str) -> List[ImportedNote]:
         """Create separate notes from each CSV row (preserving original functionality)."""
