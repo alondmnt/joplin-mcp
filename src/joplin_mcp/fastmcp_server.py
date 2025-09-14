@@ -2748,6 +2748,7 @@ async def import_from_file(
     - Directories: recursive; RAW exports auto-detected; mixed dirs supported.
     - import_options (dict, not JSON string). Common: csv_import_mode (table|rows),
       csv_delimiter (e.g., ";"), extract_hashtags (bool).
+      In csv row mode, each note body is YAML frontmatter built from the row.
 
     Returns a compact result summary with counts and errors/warnings.
 

@@ -7,11 +7,11 @@ with each row becoming a separate note or one consolidated note with a table.
 
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Any
 
 from ..types.import_types import ImportedNote
 from .base import BaseImporter
-from .utils import csv_to_markdown_table, extract_hashtags
+from .utils import csv_to_markdown_table, extract_hashtags, extract_frontmatter_tags
 
 
 class CSVImporter(BaseImporter):
@@ -145,7 +145,12 @@ class CSVImporter(BaseImporter):
     async def _create_notes_from_rows(
         self, file_path: Path, content: str, used_encoding: str, delimiter_opt: str = None
     ) -> List[ImportedNote]:
-        """Create separate notes from each CSV row (preserving original functionality)."""
+        """Create separate notes from each CSV row using YAML frontmatter.
+
+        Each note body contains only a YAML frontmatter block constructed from
+        the CSV headers and row values. The note title is derived from the
+        first column (if present) or a fallback of "<filename> - Row <n>".
+        """
         # Parse CSV content to get rows
         import csv
         from io import StringIO
@@ -175,6 +180,9 @@ class CSVImporter(BaseImporter):
         notes = []
         headers = rows[0] if rows else []
 
+        # Precompute sanitized header keys to keep order stable
+        sanitized_headers = [self._sanitize_key(h) for h in headers]
+
         # Create a note for each data row
         for i, row in enumerate(rows[1:], 1):  # Skip header row
             # Create title from first column or row number
@@ -183,28 +191,48 @@ class CSVImporter(BaseImporter):
             else:
                 title = f"{file_path.stem} - Row {i}"
 
-            # Create content from row data
-            content_lines = [f"# {title}", ""]
+            # Build frontmatter dict from row data
+            fm: Dict[str, Any] = {}
+            for raw_header, key, value in zip(headers, sanitized_headers, row):
+                if not raw_header or not raw_header.strip():
+                    continue
+                if value is None:
+                    continue
+                value_str = str(value).strip()
+                if value_str == "":
+                    continue
 
-            for header, value in zip(headers, row):
-                if header.strip() and value.strip():
-                    clean_header = self._clean_cell_content(header)
-                    clean_value = self._clean_cell_content(value)
-                    content_lines.append(f"**{clean_header}**: {clean_value}")
+                # Special handling for tag-like fields
+                if key in {"tags", "keywords", "categories"}:
+                    parsed_tags = self._parse_tags_value(value_str)
+                    if parsed_tags:
+                        fm[key] = parsed_tags
+                    continue
 
-            markdown_content = "\n".join(content_lines)
+                fm[key] = value_str
+
+            # Convert dict to YAML frontmatter
+            markdown_content = self._to_yaml_frontmatter(fm)
 
             # Extract hashtags from row data
             tags = []
             for cell in row:
                 tags.extend(self.extract_hashtags_safe(cell))
 
+            # Also include tags from frontmatter if present
+            try:
+                fm_tags = extract_frontmatter_tags(markdown_content)
+                if fm_tags:
+                    tags.extend(fm_tags)
+            except Exception:
+                pass
+
             # Create note using enhanced base class utilities
             note = self.create_imported_note_safe(
                 title=title,
                 body=markdown_content,
                 file_path=file_path,
-                tags=list(set(tags)),  # Remove duplicates
+                tags=sorted(list(set(tags))),  # Remove duplicates, stable order
                 additional_metadata={
                     "encoding": used_encoding,
                     "import_mode": "rows",
@@ -232,3 +260,86 @@ class CSVImporter(BaseImporter):
         cleaned = re.sub(r"\s+", " ", cleaned)
 
         return cleaned
+
+    def _sanitize_key(self, key: str) -> str:
+        """Sanitize CSV header into a YAML-safe key.
+
+        - Lowercase
+        - Trim surrounding whitespace
+        - Replace spaces and dashes with underscore
+        - Remove characters other than letters, numbers and underscore
+        - Collapse multiple underscores
+        """
+        if not key:
+            return ""
+        import re as _re
+        k = key.strip().lower()
+        k = k.replace(" ", "_").replace("-", "_")
+        k = _re.sub(r"[^a-z0-9_]+", "", k)
+        k = _re.sub(r"_+", "_", k)
+        return k
+
+    def _parse_tags_value(self, value: str) -> List[str]:
+        """Parse a CSV cell value into a list of tags.
+
+        Supports formats like:
+        - "tag1, tag2, tag3"
+        - "tag1 tag2 tag3"
+        - "[tag1, tag2, tag3]"
+        - "tag1; tag2; tag3"
+        """
+        import re as _re
+        v = value.strip().strip("[]")
+        # Split on commas, semicolons, or whitespace sequences
+        parts = [p.strip().strip("\"'") for p in _re.split(r"[,;\s]+", v) if p.strip()]
+        # Remove empty and deduplicate while preserving order
+        seen = set()
+        tags: List[str] = []
+        for p in parts:
+            if p and p not in seen:
+                seen.add(p)
+                tags.append(p)
+        return tags
+
+    def _to_yaml_frontmatter(self, data: Dict[str, Any]) -> str:
+        """Convert dict to a YAML frontmatter block.
+
+        Attempts to use PyYAML if available; otherwise falls back to a simple
+        serializer that handles strings and list-of-strings. Keys are assumed
+        to be pre-sanitized.
+        """
+        # First try PyYAML for robust quoting/escaping
+        try:
+            import yaml  # type: ignore
+            dumped = yaml.safe_dump(
+                data,
+                sort_keys=False,
+                allow_unicode=True,
+                default_flow_style=False,
+            ).strip()
+            return f"---\n{dumped}\n---\n"
+        except Exception:
+            pass
+
+        # Fallback minimal YAML writer
+        def _quote_scalar(s: str) -> str:
+            # Quote if contains special YAML-significant characters
+            import re as _re
+            if s == "" or _re.search(r"[:#\-\n\r\t]|^\s|\s$", s):
+                esc = s.replace("\"", "\\\"")
+                return f'"{esc}"'
+            return s
+
+        lines = ["---"]
+        for k, v in data.items():
+            if isinstance(v, list):
+                if not v:
+                    lines.append(f"{k}: []")
+                else:
+                    lines.append(f"{k}:")
+                    for item in v:
+                        lines.append(f"  - {_quote_scalar(str(item))}")
+            else:
+                lines.append(f"{k}: {_quote_scalar(str(v))}")
+        lines.append("---")
+        return "\n".join(lines) + "\n"
