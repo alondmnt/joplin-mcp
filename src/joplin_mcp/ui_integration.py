@@ -415,15 +415,15 @@ class ChatInterface(ABC):
         )
 
         if is_development:
-            # Development install - use run_fastmcp_server.py
+            # Development install - run the module directly and set PYTHONPATH to src
             project_root = config_path.parent
-            server_script = project_root / "run_fastmcp_server.py"
+            src_path = project_root / "src"
 
             mcp_config = {
                 "command": python_path,
-                "args": [str(server_script)],
+                "args": ["-m", "joplin_mcp.server", "--config", str(config_path)],
                 "cwd": str(project_root),
-                "env": {"PYTHONPATH": str(project_root)},
+                "env": {"PYTHONPATH": str(src_path)},
             }
         else:
             # Pip install - use module command
@@ -438,7 +438,8 @@ class ChatInterface(ABC):
     def get_joplin_environment_variables(self, config_path: Path) -> Dict[str, str]:
         """Extract Joplin environment variables from config file.
 
-        Subclasses can override this to use different config reading methods.
+        Standardizes on JOPLIN_TOKEN, JOPLIN_HOST, JOPLIN_PORT, JOPLIN_VERIFY_SSL.
+        Also sets JOPLIN_URL for maximum compatibility where supported.
         """
         env_vars = {}
 
@@ -446,30 +447,37 @@ class ChatInterface(ABC):
             return env_vars
 
         try:
-            # Default implementation using JoplinMCPConfig
+            # Preferred path using typed config loader
             from .config import JoplinMCPConfig
 
-            joplin_config = JoplinMCPConfig.from_file(config_path)
+            cfg = JoplinMCPConfig.from_file(config_path)
 
-            if joplin_config.token:
-                env_vars["JOPLIN_API_TOKEN"] = joplin_config.token
-            if joplin_config.base_url:
-                env_vars["JOPLIN_API_BASE_URL"] = joplin_config.base_url
-            if not joplin_config.verify_ssl:
+            if cfg.token:
+                env_vars["JOPLIN_TOKEN"] = cfg.token
+            # Provide both URL and discrete host/port for consumers
+            env_vars["JOPLIN_HOST"] = str(cfg.host)
+            env_vars["JOPLIN_PORT"] = str(cfg.port)
+            if not cfg.verify_ssl:
                 env_vars["JOPLIN_VERIFY_SSL"] = "false"
+            # Optional convenience var used by some fallbacks
+            env_vars["JOPLIN_URL"] = cfg.base_url
 
         except Exception:
-            # Fallback to raw JSON reading for backward compatibility
+            # Fallback to raw JSON reading
             try:
                 with open(config_path) as f:
-                    raw_config = json.load(f)
-
-                # Legacy field names for backward compatibility
-                if raw_config.get("token"):
-                    env_vars["JOPLIN_TOKEN"] = raw_config["token"]
-                if not raw_config.get("verify_ssl", True):
+                    raw = json.load(f)
+                token = raw.get("token")
+                if token:
+                    env_vars["JOPLIN_TOKEN"] = token
+                host = raw.get("host")
+                port = raw.get("port")
+                if host is not None:
+                    env_vars["JOPLIN_HOST"] = str(host)
+                if port is not None:
+                    env_vars["JOPLIN_PORT"] = str(port)
+                if raw.get("verify_ssl") is False:
                     env_vars["JOPLIN_VERIFY_SSL"] = "false"
-
             except (json.JSONDecodeError, FileNotFoundError):
                 pass
 
