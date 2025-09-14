@@ -2738,39 +2738,23 @@ async def import_from_file(
         Optional[str], Field(description="Target notebook name (optional, defaults to 'Imported')")
     ] = 'Imported',
     import_options: Annotated[
-        Optional[Dict[str, Any]], Field(description="Additional import options")
+        Optional[Union[Dict[str, Any], str]],
+        Field(description="Additional import options (object/dict; string is auto-parsed)")
     ] = None,
 ) -> str:
-    """Import notes from a single file or directory.
+    """Import notes from a file or directory.
 
-    Supports importing from various file formats including:
-    - Markdown files (.md, .markdown, .mdown, .mkd) with optional frontmatter and YAML fallback
-    - HTML files (.html, .htm) with BeautifulSoup/markdownify fallback
-    - CSV files (.csv) with table conversion
-    - JEX files (.jex) - Joplin's native export format
-    - Generic files - Fallback processing for unknown formats (including text files, code files, logs, etc.)
+    - Formats: md, html, csv, jex, generic (auto-detected if omitted).
+    - Directories: recursive; RAW exports auto-detected; mixed dirs supported.
+    - import_options (dict, not JSON string). Common: csv_import_mode (table|rows),
+      csv_delimiter (e.g., ";"), extract_hashtags (bool).
 
-    The importer will preserve metadata, tags, and notebook structure where possible.
-    Directory imports are supported for most formats with recursive file processing.
-
-    Returns:
-        str: Detailed import result with statistics and any errors/warnings
+    Returns a compact result summary with counts and errors/warnings.
 
     Examples:
-        Import a markdown file:
-        import_from_file("/path/to/notes.md")
-
-        Import HTML content:
-        import_from_file("/path/to/webpage.html", target_notebook="Web Clips")
-
-        Import directory of files:
-        import_from_file("/path/to/notes-folder/", target_notebook="Imported Notes")
-
-        Import CSV data:
-        import_from_file("/path/to/data.csv", target_notebook="Data Tables")
-
-        Import JEX backup:
-        import_from_file("/path/to/backup.jex")
+      import_from_file("/path/note.md")
+      import_from_file("/path/data.csv", format="csv", target_notebook="CSV Rows",
+                       import_options={"csv_import_mode": "rows"})
     """
     # Import required modules (lazy import to avoid circular dependencies)
     from pathlib import Path
@@ -2850,8 +2834,22 @@ async def import_from_file(
             max_file_size_mb=config.import_settings.get("max_file_size_mb", 100),
         )
 
-        # Apply additional options
+        # Apply additional options (accept dict or JSON/Python-dict string)
         if import_options:
+            if isinstance(import_options, str):
+                try:
+                    import json, ast
+                    try:
+                        parsed = json.loads(import_options)
+                    except json.JSONDecodeError:
+                        parsed = ast.literal_eval(import_options)
+                    if isinstance(parsed, dict):
+                        import_options = parsed
+                    else:
+                        return "VALIDATION_ERROR: import_options string did not parse to an object"
+                except Exception:
+                    return "VALIDATION_ERROR: import_options must be an object or JSON/dict string"
+            # Merge structured options
             for key, value in import_options.items():
                 if hasattr(base_options, key):
                     setattr(base_options, key, value)
