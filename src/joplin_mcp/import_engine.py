@@ -49,6 +49,47 @@ class JoplinImportEngine:
             ImportResult with comprehensive processing information
         """
         result = ImportResult()
+
+        # Input-level de-duplication to avoid importing identical notes twice
+        # in a single run (e.g., same RAW + JEX content).
+        try:
+            filtered: List[ImportedNote] = []
+            seen_ids: set = set()
+            seen_title_nb: set = set()
+
+            def norm(s: Optional[str]) -> str:
+                return (s or "").strip().lower()
+
+            for n in notes:
+                orig_id = None
+                try:
+                    if isinstance(n.metadata, dict):
+                        orig_id = n.metadata.get("id") or n.metadata.get("joplin_id")
+                except Exception:
+                    orig_id = None
+
+                if isinstance(orig_id, str) and orig_id:
+                    key = orig_id.lower()
+                    if key in seen_ids:
+                        result.add_skip(n.title, "Duplicate in batch (same original id)")
+                        continue
+                    seen_ids.add(key)
+                    filtered.append(n)
+                else:
+                    nb_key = norm(n.notebook)
+                    t_key = norm(n.title)
+                    key2 = (t_key, nb_key)
+                    if key2 in seen_title_nb:
+                        result.add_skip(n.title, "Duplicate in batch (same title in notebook)")
+                        continue
+                    seen_title_nb.add(key2)
+                    filtered.append(n)
+
+            notes = filtered
+        except Exception:
+            # Fail open on any unexpected error
+            pass
+
         result.total_processed = len(notes)
 
         try:
