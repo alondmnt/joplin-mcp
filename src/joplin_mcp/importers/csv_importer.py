@@ -5,6 +5,7 @@ Handles CSV files by converting structured data to Markdown format,
 with each row becoming a separate note or one consolidated note with a table.
 """
 
+import logging
 from pathlib import Path
 from typing import List
 
@@ -66,7 +67,9 @@ class CSVImporter(BaseImporter):
                     all_notes.extend(notes)
                 except Exception as e:
                     # Log error but continue with other files
-                    print(f"Warning: Failed to parse {csv_file}: {str(e)}")
+                    logging.getLogger(__name__).warning(
+                        "Failed to parse %s: %s", csv_file, str(e)
+                    )
                     continue
 
             return all_notes

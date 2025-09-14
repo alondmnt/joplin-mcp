@@ -5,6 +5,7 @@ Handles unknown file formats and "Other applications..." imports.
 Acts as a fallback importer for unsupported formats with intelligent delegation to specialized importers.
 """
 
+import logging
 import mimetypes
 from pathlib import Path
 from typing import List, Optional
@@ -134,7 +135,9 @@ class GenericImporter(BaseImporter):
             
         except Exception as e:
             # If delegation fails, fall back to unknown format handling
-            print(f"Warning: Delegation to {class_name} failed for {file_path}: {str(e)}")
+            logging.getLogger(__name__).warning(
+                "Delegation to %s failed for %s: %s", class_name, file_path, str(e)
+            )
             return await self._handle_unknown_format(file_path)
 
     async def _handle_unknown_format(self, file_path: Path) -> Optional[ImportedNote]:
@@ -363,7 +366,9 @@ class GenericImporter(BaseImporter):
                 },
             )
         except Exception as e:
-            print(f"Warning: TSV processing failed for {file_path}: {str(e)}")
+            logging.getLogger(__name__).warning(
+                "TSV processing failed for %s: %s", file_path, str(e)
+            )
             return await self._handle_unknown_format(file_path)
 
     async def _handle_json_format(self, file_path: Path) -> Optional[ImportedNote]:
@@ -387,7 +392,9 @@ class GenericImporter(BaseImporter):
                 },
             )
         except Exception as e:
-            print(f"Warning: JSON processing failed for {file_path}: {str(e)}")
+            logging.getLogger(__name__).warning(
+                "JSON processing failed for %s: %s", file_path, str(e)
+            )
             return await self._handle_unknown_format(file_path)
 
     async def _handle_xml_format(self, file_path: Path) -> Optional[ImportedNote]:
@@ -411,7 +418,9 @@ class GenericImporter(BaseImporter):
                 },
             )
         except Exception as e:
-            print(f"Warning: XML processing failed for {file_path}: {str(e)}")
+            logging.getLogger(__name__).warning(
+                "XML processing failed for %s: %s", file_path, str(e)
+            )
             return await self._handle_unknown_format(file_path)
 
     async def _handle_code_format(self, file_path: Path) -> Optional[ImportedNote]:
@@ -436,7 +445,9 @@ class GenericImporter(BaseImporter):
                 },
             )
         except Exception as e:
-            print(f"Warning: Code processing failed for {file_path}: {str(e)}")
+            logging.getLogger(__name__).warning(
+                "Code processing failed for %s: %s", file_path, str(e)
+            )
             return await self._handle_unknown_format(file_path)
 
     async def _handle_log_format(self, file_path: Path) -> Optional[ImportedNote]:
@@ -460,5 +471,7 @@ class GenericImporter(BaseImporter):
                 },
             )
         except Exception as e:
-            print(f"Warning: Log processing failed for {file_path}: {str(e)}")
+            logging.getLogger(__name__).warning(
+                "Log processing failed for %s: %s", file_path, str(e)
+            )
             return await self._handle_unknown_format(file_path)

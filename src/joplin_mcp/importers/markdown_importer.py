@@ -1,5 +1,6 @@
 """Markdown file importer for Joplin MCP server."""
 
+import logging
 from pathlib import Path
 from typing import List, Optional
 
@@ -71,7 +72,9 @@ class MarkdownImporter(BaseImporter):
                         all_notes.append(note)
                 except Exception as e:
                     # Log error but continue processing other files
-                    print(f"Warning: Failed to parse {md_file}: {e}")
+                    logging.getLogger(__name__).warning(
+                        "Failed to parse %s: %s", md_file, e
+                    )
 
             return all_notes
 

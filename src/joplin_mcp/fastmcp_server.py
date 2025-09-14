@@ -74,30 +74,51 @@ def _load_module_config() -> JoplinMCPConfig:
     logger.info("Auto-discovering Joplin MCP configuration...")
 
     try:
-        config = JoplinMCPConfig.auto_discover()
+        loaded_from: Optional[Path] = None
 
-        # Check if a config file was actually found vs. using defaults
-        for path in JoplinMCPConfig.get_default_config_paths():
-            if path.exists():
-                logger.info(f"Successfully loaded configuration from: {path}")
-                break
-        else:
-            # Also check current directory (for development)
-            cwd = Path.cwd()
-            local_paths = [
-                cwd / "joplin-mcp.json",
-                cwd / "joplin-mcp.yaml",
-                cwd / "joplin-mcp.yml",
-            ]
-
-            for path in local_paths:
-                if path.exists():
-                    logger.info(f"Successfully loaded configuration from: {path}")
-                    break
+        # Highest priority: explicit config path via environment
+        explicit_config = os.getenv("JOPLIN_MCP_CONFIG") or os.getenv(
+            "JOPLIN_CONFIG_FILE"
+        )
+        if explicit_config:
+            cfg_path = Path(explicit_config)
+            if cfg_path.exists():
+                logger.info(f"Using explicit configuration from: {cfg_path}")
+                config = JoplinMCPConfig.from_file(cfg_path)
+                loaded_from = cfg_path
             else:
                 logger.warning(
-                    "No configuration file found. Using environment variables and defaults."
+                    f"Explicit config path set but not found: {cfg_path}. Falling back to discovery."
                 )
+                config = JoplinMCPConfig.auto_discover()
+        else:
+            config = JoplinMCPConfig.auto_discover()
+
+        # Only emit the "not found" warning when we truly didn't load from any file
+        if loaded_from is None:
+            # See if auto-discovery found a file
+            for path in JoplinMCPConfig.get_default_config_paths():
+                if path.exists():
+                    loaded_from = path
+                    break
+            # Also check current directory (for development)
+            if loaded_from is None:
+                cwd = Path.cwd()
+                for path in [
+                    cwd / "joplin-mcp.json",
+                    cwd / "joplin-mcp.yaml",
+                    cwd / "joplin-mcp.yml",
+                ]:
+                    if path.exists():
+                        loaded_from = path
+                        break
+
+        if loaded_from is None:
+            logger.warning(
+                "No configuration file found. Using environment variables and defaults."
+            )
+        else:
+            logger.info(f"Successfully loaded configuration from: {loaded_from}")
 
         return config
 
@@ -109,6 +130,14 @@ def _load_module_config() -> JoplinMCPConfig:
 
 # Load config for tool registration filtering
 _module_config = _load_module_config()
+try:
+    enabled = sorted([k for k, v in _module_config.tools.items() if v])
+    logger.info(
+        "Module config loaded; enabled tools count=%d", len(enabled)
+    )
+    logger.debug("Enabled tools: %s", enabled)
+except Exception:
+    pass
 
 
 # Enums for type safety
@@ -187,24 +216,36 @@ OptionalBoolType = Optional[
 
 
 def get_joplin_client() -> ClientApi:
-    """Get a configured joppy client instance."""
-    try:
-        config = JoplinMCPConfig.load()
-        if config.token:
-            return ClientApi(token=config.token, url=config.base_url)
-        else:
-            token = os.getenv("JOPLIN_TOKEN")
-            if not token:
-                raise ValueError(
-                    "No token found in config file or JOPLIN_TOKEN environment variable"
-                )
-            return ClientApi(token=token, url=config.base_url)
-    except Exception:
-        token = os.getenv("JOPLIN_TOKEN")
-        if not token:
-            raise ValueError("JOPLIN_TOKEN environment variable is required")
-        url = os.getenv("JOPLIN_URL", "http://localhost:41184")
-        return ClientApi(token=token, url=url)
+    """Get a configured joppy client instance.
+
+    Priority:
+    1) Use runtime config if set (server --config)
+    2) Else use module config (auto-discovered on import, honors JOPLIN_MCP_CONFIG)
+    3) Else fall back to environment variables
+    """
+    # Prefer the runtime config if available, else the module-level config
+    config = _config or _module_config
+
+    # If for some reason neither exists (unlikely), try loader
+    if config is None:
+        try:
+            config = JoplinMCPConfig.load()
+        except Exception:
+            config = None
+
+    if config and getattr(config, "token", None):
+        return ClientApi(token=config.token, url=config.base_url)
+
+    # Fallback to environment variables
+    token = os.getenv("JOPLIN_TOKEN")
+    if not token:
+        raise ValueError(
+            "Authentication token missing. Set 'token' in joplin-mcp.json or JOPLIN_TOKEN env var."
+        )
+
+    # Prefer configured base URL if available without token
+    url = config.base_url if config else os.getenv("JOPLIN_URL", "http://localhost:41184")
+    return ClientApi(token=token, url=url)
 
 
 def apply_pagination(
@@ -920,6 +961,7 @@ def conditional_tool(tool_name: str):
             tool_name, True
         ):  # Default to True if not specified
             # Tool is enabled - register it with FastMCP
+            logger.debug("Registering tool: %s", tool_name)
             return mcp.tool()(func)
         else:
             # Tool is disabled - return function without registering

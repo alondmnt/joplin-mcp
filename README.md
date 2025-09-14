@@ -309,10 +309,10 @@ The server supports both STDIO and HTTP transports:
 
 ```bash
 # STDIO (default)
-joplin-mcp-server
+joplin-mcp-server --config ~/.joplin-mcp.json
 
-# HTTP transport 
-python run_fastmcp_server.py --transport http --port 8000
+# HTTP transport (development, from repo)
+PYTHONPATH=src python -m joplin_mcp.server --transport http --port 8000 --config ./joplin-mcp.json
 ```
 
 # Claude Desktop HTTP config
@@ -372,11 +372,10 @@ python run_fastmcp_server.py --transport http --port 8000
 
 ## Project Structure
 
-- **`run_fastmcp_server.py`** - FastMCP server launcher
 - **`src/joplin_mcp/`** - Main package directory
   - `fastmcp_server.py` - Server implementation with 21 tools and Pydantic validation types
   - `config.py` - Configuration management
-  - `server.py` - Legacy server implementation  
+  - `server.py` - Server entrypoint (module and CLI)
   - `ui_integration.py` - UI integration utilities
 - **`docs/`** - Documentation (troubleshooting, privacy controls, enhancement proposals)
 - **`tests/`** - Test suite
@@ -387,10 +386,10 @@ Test your connection:
 
 ```bash
 # For pip install
-joplin-mcp-server
+joplin-mcp-server --config ~/.joplin-mcp.json
 
-# For development  
-python run_fastmcp_server.py
+# For development (from repo)
+PYTHONPATH=src python -m joplin_mcp.server --config ./joplin-mcp.json
 ```
 
 You should see:

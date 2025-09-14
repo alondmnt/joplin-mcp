@@ -1,6 +1,7 @@
 """Base classes for import functionality."""
 
 import os
+import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
@@ -153,7 +154,9 @@ class BaseImporter(ABC):
                 all_notes.extend(notes)
             except Exception as e:
                 # Log error but continue with other files
-                print(f"Warning: Failed to import {file_path}: {str(e)}")
+                logging.getLogger(__name__).warning(
+                    "Failed to import %s: %s", file_path, str(e)
+                )
                 continue
 
         return all_notes

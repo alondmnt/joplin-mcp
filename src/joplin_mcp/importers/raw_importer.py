@@ -6,6 +6,7 @@ Markdown files and a resources folder with attachments.
 """
 
 import re
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -97,7 +98,9 @@ class RAWImporter(BaseImporter):
                     notes.append(note)
             except Exception as e:
                 # Log error but continue with other files
-                print(f"Warning: Failed to parse {md_file}: {str(e)}")
+                logging.getLogger(__name__).warning(
+                    "Failed to parse %s: %s", md_file, str(e)
+                )
                 continue
 
         return notes
