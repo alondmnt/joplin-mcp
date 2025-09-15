@@ -371,6 +371,7 @@ Note: Claude Desktop currently uses STDIO transport and does not consume HTTP/SS
 | `tools.list_tags` | `true` | Allow listing all tags |
 | `tools.get_tags_by_note` | `true` | Allow getting tags for specific notes |
 | `tools.ping_joplin` | `true` | Allow testing server connectivity |
+| `tools.import_from_file` | `false` | Allow importing files/directories (MD, HTML, CSV, TXT, JEX) |
 
 #### Content Exposure (Privacy Settings)
 | Option | Default | Description |
