@@ -324,7 +324,8 @@ joplin-mcp-server --config ~/.joplin-mcp.json
 PYTHONPATH=src python -m joplin_mcp.server --transport http --port 8000 --config ./joplin-mcp.json
 ```
 
-# Claude Desktop HTTP config
+# HTTP client config
+Note: Claude Desktop currently uses STDIO transport and does not consume HTTP/SSE configs directly. The following example applies to clients that support network transports.
 ```json
 {
   "mcpServers": {
@@ -378,6 +379,48 @@ PYTHONPATH=src python -m joplin_mcp.server --transport http --port 8000 --config
 | `content_exposure.individual_notes` | `"full"` | Content visibility for individual notes: `"none"`, `"preview"`, `"full"` |
 | `content_exposure.listings` | `"none"` | Content visibility in note listings: `"none"`, `"preview"`, `"full"` |
 | `content_exposure.max_preview_length` | `300` | Maximum length of content previews (characters) |
+
+## Docker
+
+Run the MCP server in a container. Default transport is HTTP for broad compatibility; switch via environment variables.
+
+### Build
+```bash
+docker build -t joplin-mcp .
+```
+
+### Run (HTTP default)
+```bash
+docker run --rm \
+  -p 8000:8000 \
+  -e JOPLIN_TOKEN=your_api_token \
+  joplin-mcp
+```
+
+### With mounted config
+```bash
+docker run --rm \
+  -p 8000:8000 \
+  -v $PWD/joplin-mcp.json:/config/joplin-mcp.json:ro \
+  joplin-mcp
+```
+
+### Choose transport
+- SSE (streaming): `-e MCP_TRANSPORT=sse`
+- Streamable HTTP: `-e MCP_TRANSPORT=streamable-http`
+- STDIO (no port): `-e MCP_TRANSPORT=stdio`
+
+Example (SSE):
+```bash
+docker run --rm \
+  -p 8000:8000 \
+  -e JOPLIN_TOKEN=your_api_token \
+  -e MCP_TRANSPORT=sse \
+  joplin-mcp
+```
+
+The container listens on `0.0.0.0:8000` by default. If exposing publicly, place behind a reverse proxy and terminate TLS there. For SSE, ensure proxy keep-alives and buffering are configured appropriately.
+
 
 ## Project Structure
 
