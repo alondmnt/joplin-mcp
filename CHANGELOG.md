@@ -1,3 +1,23 @@
+# [v0.4.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.4.0)
+*Released on 2025-09-16T14:10:31Z*
+
+- add: tool `import_from_file` supporting Markdown, HTML, CSV, TXT, JEX, directories and attachments (#6 by @casistack)
+- add: Dockerfile (#3)
+- add: notebook path to output (#5)
+- fix: Claude setup to follow the tool permissions in the config JSON
+- refactor: single entry point `joplin_mcp.server`
+
+**Full Changelog**: https://github.com/alondmnt/joplin-mcp/compare/v0.3.1...v0.4.0
+
+---
+
+# [v0.3.1](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.3.1)
+*Released on 2025-08-29T04:19:17Z*
+
+
+
+---
+
 # [v0.3.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.3.0)
 *Released on 2025-07-25T01:54:52Z*
 
