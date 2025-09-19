@@ -426,7 +426,7 @@ The container listens on `0.0.0.0:8000` by default. If exposing publicly, place 
 ## Project Structure
 
 - **`src/joplin_mcp/`** - Main package directory
-  - `fastmcp_server.py` - Server implementation with 21 tools and Pydantic validation types
+  - `fastmcp_server.py` - Server implementation with 22 tools and Pydantic validation types
   - `config.py` - Configuration management
   - `server.py` - Server entrypoint (module and CLI)
   - `ui_integration.py` - UI integration utilities
@@ -451,7 +451,7 @@ Starting Joplin FastMCP Server...
 Successfully connected to Joplin!
 Found X notebooks, Y notes, Z tags
 FastMCP server starting...
-Available tools: 21 tools ready
+Available tools: 22 tools ready
 ```
 
 ## Complete Tool Reference
@@ -464,6 +464,7 @@ Available tools: 21 tools ready
 | `find_notes_in_notebook` | Read | Find notes in specific notebook (supports task filtering) |
 | `get_all_notes` | Read | Get all notes, most recent first *(disabled by default)* |
 | `get_note` | Read | Get specific note by ID |
+| `find_in_note` | Read | Regex search within a single note (paginated matches & context, multiline anchors on by default) |
 | `get_links` | Read | Extract links to other notes from a note |
 | **Managing Notes** | | |
 | `create_note` | Write | Create new notes |

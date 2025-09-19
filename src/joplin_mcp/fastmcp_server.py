@@ -4,6 +4,7 @@
 - find_notes(query, limit, offset, task, completed) - Find notes by text OR list all notes with pagination ⭐ MAIN FUNCTION FOR TEXT SEARCHES AND LISTING ALL NOTES!
 - find_notes_with_tag(tag_name, limit, offset, task, completed) - Find all notes with a specific tag with pagination ⭐ MAIN FUNCTION FOR TAG SEARCHES!
 - find_notes_in_notebook(notebook_name, limit, offset, task, completed) - Find all notes in a specific notebook with pagination ⭐ MAIN FUNCTION FOR NOTEBOOK SEARCHES!
+- find_in_note(note_id, pattern, limit, offset, case_sensitive, multiline, dotall) - Run regex searches inside a single note with context and pagination
 - get_all_notes() - Get all notes, most recent first (simple version without pagination)
 
 📋 MANAGING NOTES:
@@ -1554,6 +1555,81 @@ def _build_pagination_summary(total_count: int, limit: int, offset: int) -> List
     return summary
 
 
+def _format_find_in_note_summary(
+    limit: int,
+    offset: int,
+    total_count: int,
+    showing_count: int,
+) -> str:
+    """Compose a compact summary line for find_in_note output without repeating metadata."""
+    if total_count > 0:
+        total_pages = (total_count + limit - 1) // limit
+        current_page = (offset // limit) + 1
+        if showing_count > 0:
+            start_result = offset + 1
+            end_result = offset + showing_count
+            showing_range = f"{start_result}-{end_result}"
+        else:
+            showing_range = "0-0"
+    else:
+        total_pages = 1
+        current_page = 1
+        showing_range = "0-0"
+
+    return (
+        "SUMMARY: "
+        f"showing={showing_count} range={showing_range} "
+        f"total={total_count} page={current_page}/{total_pages} "
+        f"offset={offset} limit={limit}"
+    )
+
+
+def _build_find_in_note_header(
+    note_id: str,
+    note_title: str,
+    pattern: str,
+    flags_str: str,
+    limit: int,
+    offset: int,
+    total_count: int,
+    showing_count: int,
+    parent_id: Optional[str],
+    notebook_path: Optional[str],
+    status: Optional[str] = None,
+) -> List[str]:
+    """Build the standardized header for find_in_note output."""
+    parts = [
+        "ITEM_TYPE: note_match",
+        f"NOTE_ID: {note_id}",
+        f"NOTE_TITLE: {note_title}",
+        f"NOTEBOOK_ID: {parent_id}" if parent_id else "NOTEBOOK_ID: unknown",
+    ]
+    if notebook_path:
+        parts.append(f"NOTEBOOK_PATH: {notebook_path}")
+
+    parts.extend(
+        [
+            f"PATTERN: {pattern}",
+            f"FLAGS: {flags_str}",
+            f"TOTAL_MATCHES: {total_count}",
+        ]
+    )
+
+    if status:
+        parts.append(status)
+
+    parts.extend(
+        [
+            "",
+            _format_find_in_note_summary(
+                limit, offset, total_count, showing_count
+            ),
+        ]
+    )
+
+    return parts
+
+
 def format_search_results_with_pagination(
     query: str,
     results: List[Any],
@@ -2410,6 +2486,240 @@ async def find_notes(
         "search_results",
         original_query=query,
     )
+
+
+@create_tool("find_in_note", "Find in note")
+async def find_in_note(
+    note_id: Annotated[JoplinIdType, Field(description="Note ID to search within")],
+    pattern: Annotated[
+        RequiredStringType, Field(description="Regular expression to search for")
+    ],
+    limit: Annotated[
+        LimitType, Field(description="Max matches per page (1-100, default: 20)")
+    ] = 20,
+    offset: Annotated[
+        OffsetType, Field(description="Skip count for pagination (default: 0)")
+    ] = 0,
+    case_sensitive: Annotated[
+        OptionalBoolType,
+        Field(description="Use case-sensitive matching (default: False)"),
+    ] = False,
+    multiline: Annotated[
+        OptionalBoolType,
+        Field(description="Enable multiline flag (affects ^ and $, default: True)")
+    ] = True,
+    dotall: Annotated[
+        OptionalBoolType,
+        Field(description="Dot matches newlines (re.DOTALL, default: False)"),
+    ] = False,
+) -> str:
+    """Search for a regex pattern inside a specific note and return paginated matches.
+
+    Multiline mode is enabled by default so anchors like ``^``/``$`` operate per line,
+    matching the common expectations for checklist-style searches.
+    """
+
+    import re
+    from bisect import bisect_right
+
+    note_id = validate_joplin_id(note_id)
+    case_sensitive = flexible_bool_converter(case_sensitive)
+    multiline = flexible_bool_converter(multiline)
+    dotall = flexible_bool_converter(dotall)
+
+    # Apply defaults if values were provided as None
+    case_sensitive = bool(case_sensitive) if case_sensitive is not None else False
+    multiline = bool(multiline) if multiline is not None else False
+    dotall = bool(dotall) if dotall is not None else False
+
+    flags = 0
+    applied_flags = []
+
+    if not case_sensitive:
+        flags |= re.IGNORECASE
+        applied_flags.append("IGNORECASE")
+    if multiline:
+        flags |= re.MULTILINE
+        applied_flags.append("MULTILINE")
+    if dotall:
+        flags |= re.DOTALL
+        applied_flags.append("DOTALL")
+
+    try:
+        pattern_obj = re.compile(pattern, flags)
+    except re.error as exc:
+        raise ValueError(f"Invalid regular expression: {exc}")
+
+    client = get_joplin_client()
+    note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
+
+    note_title = getattr(note, "title", "Untitled")
+    body = getattr(note, "body", "") or ""
+
+    flags_str = ", ".join(applied_flags) if applied_flags else "none"
+
+    parent_id = getattr(note, "parent_id", None)
+    notebook_path: Optional[str] = None
+    if parent_id:
+        try:
+            nb_map = get_notebook_map_cached()
+            notebook_path = _compute_notebook_path(parent_id, nb_map)
+        except Exception:
+            notebook_path = None
+
+    if not body:
+        header_parts = _build_find_in_note_header(
+            note_id,
+            note_title,
+            pattern,
+            flags_str,
+            limit,
+            offset,
+            0,
+            0,
+            parent_id,
+            notebook_path,
+            "STATUS: Note has no content to search",
+        )
+        header_parts.extend(_build_pagination_summary(0, limit, offset))
+        return "\n".join(header_parts)
+
+    # Split once to derive both offsets and display lines
+    lines_with_endings = body.splitlines(True)
+    if not lines_with_endings:
+        lines_with_endings = [body]
+    display_lines = [line.rstrip("\r\n") for line in lines_with_endings]
+
+    line_offsets: List[int] = []
+    cursor = 0
+    for chunk in lines_with_endings:
+        line_offsets.append(cursor)
+        cursor += len(chunk)
+
+    def _pos_to_line_col(pos: int) -> tuple[int, int]:
+        idx = bisect_right(line_offsets, pos) - 1
+        if idx < 0:
+            idx = 0
+        line_start = line_offsets[idx]
+        column = (pos - line_start) + 1
+        return idx, column
+
+    def _build_context(start_pos: int, end_pos: int) -> tuple[str, int]:
+        # Return highlighted multi-line snippet preserving newlines
+        inclusive_end = end_pos - 1 if end_pos > start_pos else end_pos
+
+        start_line_idx, _ = _pos_to_line_col(start_pos)
+        end_line_idx, _ = _pos_to_line_col(inclusive_end)
+
+        snippet_parts: List[str] = []
+        first_display_line_idx: Optional[int] = None
+        for idx in range(start_line_idx, end_line_idx + 1):
+            line_text = display_lines[idx]
+            line_start = line_offsets[idx]
+            line_end = line_start + len(lines_with_endings[idx])
+
+            highlight_start = max(start_pos, line_start)
+            highlight_end = min(end_pos, line_end)
+
+            if start_pos == end_pos:
+                local_idx = max(0, min(len(line_text), start_pos - line_start))
+                highlighted = (
+                    f"{line_text[:local_idx]}<<>>{line_text[local_idx:]}"
+                )
+            elif highlight_start < highlight_end:
+                local_start = highlight_start - line_start
+                local_end = highlight_end - line_start
+                highlighted = (
+                    f"{line_text[:local_start]}<<{line_text[local_start:local_end]}>>"
+                    f"{line_text[local_end:]}"
+                )
+            else:
+                highlighted = line_text
+
+            if highlighted.replace("<<", "").replace(">>", "").strip():
+                if first_display_line_idx is None:
+                    first_display_line_idx = idx
+                snippet_parts.append(highlighted)
+
+        if not snippet_parts:
+            snippet_parts.append("")
+            first_display_line_idx = start_line_idx
+
+        return "\n".join(snippet_parts), first_display_line_idx or start_line_idx
+
+    matches = list(pattern_obj.finditer(body))
+    total_matches = len(matches)
+
+    if total_matches == 0:
+        result_parts = _build_find_in_note_header(
+            note_id,
+            note_title,
+            pattern,
+            flags_str,
+            limit,
+            offset,
+            0,
+            0,
+            parent_id,
+            notebook_path,
+            "STATUS: No matches found",
+        )
+        result_parts.extend(_build_pagination_summary(0, limit, offset))
+        return "\n".join(result_parts)
+
+    match_entries: List[Dict[str, Any]] = []
+
+    for index, match in enumerate(matches, 1):
+        start_pos = match.start()
+        end_pos = match.end()
+
+        start_line_idx, start_col = _pos_to_line_col(start_pos)
+        snippet, first_display_idx = _build_context(start_pos, end_pos)
+
+        match_entries.append(
+            {
+                "global_index": index,
+                "start_line": (first_display_idx or start_line_idx) + 1,
+                "snippet": snippet,
+            }
+        )
+
+    paginated_matches, total_count = apply_pagination(match_entries, limit, offset)
+
+    result_parts = _build_find_in_note_header(
+        note_id,
+        note_title,
+        pattern,
+        flags_str,
+        limit,
+        offset,
+        total_count,
+        len(paginated_matches),
+        parent_id,
+        notebook_path,
+    )
+
+    if not paginated_matches:
+        result_parts.append(
+            f"STATUS: No matches available for offset {offset} with limit {limit}"
+        )
+        result_parts.extend(_build_pagination_summary(total_count, limit, offset))
+        return "\n".join(result_parts)
+
+    for page_index, match_info in enumerate(paginated_matches, start=1):
+        start_line_label = f"L{match_info['start_line']}:"
+        snippet = match_info["snippet"]
+        if "\n" in snippet:
+            indented_snippet = "\n".join(f"  {line}" for line in snippet.split("\n"))
+            result_parts.append(f"{start_line_label}\n{indented_snippet}")
+        else:
+            result_parts.append(f"{start_line_label} {snippet}")
+
+        result_parts.append("")
+
+    result_parts.extend(_build_pagination_summary(total_count, limit, offset))
+
+    return "\n".join(result_parts)
 
 
 @create_tool("get_all_notes", "Get all notes")
