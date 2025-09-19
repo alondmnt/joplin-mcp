@@ -3497,6 +3497,61 @@ async def import_from_file(
 # === MAIN RUNNER ===
 
 
+from starlette.types import ASGIApp, Scope, Receive, Send
+from fastmcp.server.http import create_streamable_http_app, create_sse_app
+import uvicorn
+
+class SlashCompatMiddleware:
+    """Rewrite selected no-slash paths to their trailing-slash canonical form."""
+    def __init__(self, app: ASGIApp, slash_map: dict[str, str]) -> None:
+        self.app = app
+        self.slash_map = slash_map
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] == "http":
+            path = scope.get("path", "")
+            if path in self.slash_map:
+                scope = dict(scope)
+                scope["path"] = self.slash_map[path]
+        return await self.app(scope, receive, send)
+
+def run_compat_server(
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    path: str = "/mcp",
+    log_level: str = "info",
+    *,
+    force_json_post: bool = True,
+):
+    # Canonicalize modern endpoint to trailing slash (matches helpers’ behavior)
+    canon_path = (path or "/mcp").rstrip("/") + "/"
+
+    # Base app: modern Streamable HTTP (JSON on POST)
+    app = create_streamable_http_app(
+        server=mcp,
+        streamable_http_path=canon_path,
+        json_response=force_json_post,
+    )
+
+    # Single legacy SSE app (canonical with trailing slash)
+    legacy = create_sse_app(
+        server=mcp,
+        sse_path="/sse/",
+        message_path="/messages/",
+    )
+    # Merge routes from legacy into the base app (one app, one registry)
+    app.router.routes.extend(legacy.routes)
+
+    # Accept no-slash without redirect (avoid 307s) — single **app** handles both
+    app = SlashCompatMiddleware(app, {
+        canon_path.rstrip("/"): canon_path,   # /mcp  -> /mcp/
+        "/sse": "/sse/",                      # /sse  -> /sse/
+        "/messages": "/messages/",            # /messages -> /messages/
+    })
+
+    uvicorn.run(app, host=host, port=port, log_level=log_level)
+
+
 def main(
     config_file: Optional[str] = None,
     transport: str = "stdio",
@@ -3511,58 +3566,57 @@ def main(
     try:
         logger.info("🚀 Starting FastMCP Joplin server...")
 
-        # Set the runtime config (tools are already filtered at import time)
+        # Config loading as before...
         if config_file:
             _config = JoplinMCPConfig.from_file(config_file)
             logger.info(f"Runtime configuration loaded from {config_file}")
         else:
-            # Use the same config that was used for tool filtering
             _config = _module_config
             logger.info("Using module-level configuration for runtime")
 
-        # Log final tool registration status
         registered_tools = list(mcp._tool_manager._tools.keys())
         logger.info(f"FastMCP server has {len(registered_tools)} tools registered")
         logger.info(f"Registered tools: {sorted(registered_tools)}")
 
-        # Verify we can connect to Joplin
         logger.info("Initializing Joplin client...")
         client = get_joplin_client()
         logger.info("Joplin client initialized successfully")
 
+        # ---- Non-breaking compat toggle via env ----
+        compat_env = os.getenv("MCP_HTTP_COMPAT", "").strip().lower() in {"1","true","yes","on"}
+
         # Run the FastMCP server with specified transport
-        if transport.lower() == "http":
-            logger.info(
-                f"Starting FastMCP server with HTTP transport on {host}:{port}{path}"
-            )
-            mcp.run(
-                transport="http", host=host, port=port, path=path, log_level=log_level
-            )
-        elif transport.lower() == "streamable-http":
-            logger.info(
-                f"Starting FastMCP server with Streamable HTTP transport on {host}:{port}{path}"
-            )
-            mcp.run(
-                transport="streamable-http",
+        t = transport.lower()
+
+        if t == "http-compat" or (t in {"http", "streamable-http"} and compat_env):
+            # Opt-in compatibility mode (modern + legacy)
+            run_compat_server(
                 host=host,
                 port=port,
-                path=path,
+                path=path,          # we normalize inside run_compat_server only
                 log_level=log_level,
+                force_json_post=True,
             )
-        elif transport.lower() == "sse":
-            logger.info(
-                f"Starting FastMCP server with SSE transport on {host}:{port}{path}"
-            )
-            mcp.run(
-                transport="sse", host=host, port=port, path=path, log_level=log_level
-            )
-        else:
+
+        elif t in {"http", "http-streamable"}:
+            logger.info(f"Starting FastMCP server with HTTP (Streamable HTTP) on {host}:{port}{path}")
+            mcp.run(transport="http", host=host, port=port, path=path, log_level=log_level)
+
+        elif t == "sse":
+            logger.info(f"Starting FastMCP server with SSE transport on {host}:{port}{path}")
+            mcp.run(transport="sse", host=host, port=port, path=path, log_level=log_level)
+
+        elif t == "stdio":
             logger.info("Starting FastMCP server with STDIO transport")
             mcp.run(transport="stdio")
+
+        else:
+            logger.warning(f"Unknown transport {transport!r}; falling back to STDIO")
+            mcp.run(transport="stdio")
+
     except Exception as e:
         logger.error(f"Failed to start FastMCP Joplin server: {e}")
         import traceback
-
         traceback.print_exc()
         raise
 

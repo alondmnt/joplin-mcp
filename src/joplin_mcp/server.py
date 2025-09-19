@@ -25,9 +25,9 @@ def main():
     parser.add_argument(
         "--transport",
         "-t",
-        choices=["stdio", "http", "streamable-http", "sse"],
+        choices=["stdio", "http", "http-compat", "streamable-http", "sse"],
         default="stdio",
-        help="Transport protocol",
+        help="Transport protocol. Use 'http-compat' for compatibility with older clients.",
     )
     parser.add_argument(
         "--host", default="127.0.0.1", help="Host for HTTP/Streamable HTTP transport"

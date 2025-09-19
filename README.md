@@ -277,6 +277,7 @@ This file includes configurations for:
 - **HTTP transport** (basic HTTP server mode)
 - **SSE transport** (recommended for gemini-cli and OpenAI clients)
 - **Streamable HTTP transport** (advanced web clients)
+- **HTTP-compat transport** (bridges modern `/mcp` JSON-RPC with legacy `/sse`/`/messages` clients)
 
 ### Tool Permission Configuration
 
@@ -322,6 +323,10 @@ joplin-mcp-server --config ~/.joplin-mcp.json
 
 # HTTP transport (development, from repo)
 PYTHONPATH=src python -m joplin_mcp.server --transport http --port 8000 --config ./joplin-mcp.json
+
+# Opt-in HTTP compatibility bundle (modern + legacy SSE endpoints)
+PYTHONPATH=src python -m joplin_mcp.server --transport http-compat --port 8000 --config ./joplin-mcp.json
+# or keep --transport http and export MCP_HTTP_COMPAT=1/true to toggle the same behavior.
 ```
 
 # HTTP client config
