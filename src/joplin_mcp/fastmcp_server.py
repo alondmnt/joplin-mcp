@@ -2822,43 +2822,6 @@ async def find_in_note(
     return "\n".join(result_parts)
 
 
-@create_tool("get_all_notes", "Get all notes")
-async def get_all_notes(
-    limit: Annotated[
-        LimitType, Field(description="Max results (1-100, default: 20)")
-    ] = 20,
-) -> str:
-    """Get all notes in your Joplin instance.
-
-    Simple function to retrieve all notes without any filtering or searching.
-    Most recent notes are shown first.
-
-    Returns:
-        str: Formatted list of all notes with title, ID, content preview, and dates.
-
-    Examples:
-        - get_all_notes() - Get the 20 most recent notes
-        - get_all_notes(50) - Get the 50 most recent notes
-    """
-
-    client = get_joplin_client()
-    results = client.get_all_notes(fields=COMMON_NOTE_FIELDS)
-    notes = process_search_results(results)
-
-    # Sort by updated time, newest first
-    notes = sorted(notes, key=lambda x: getattr(x, "updated_time", 0), reverse=True)
-
-    # Apply limit (using consistent pattern but keeping simple offset=0)
-    notes = notes[:limit]
-
-    if not notes:
-        return format_no_results_message("note")
-
-    return format_search_results_with_pagination(
-        "all notes", notes, len(notes), limit, 0, "search_results"
-    )
-
-
 @create_tool("find_notes_with_tag", "Find notes with tag")
 async def find_notes_with_tag(
     tag_name: Annotated[
@@ -2984,6 +2947,43 @@ async def find_notes_in_notebook(
         offset,
         "search_results",
         original_query=notebook_name,
+    )
+
+
+@create_tool("get_all_notes", "Get all notes")
+async def get_all_notes(
+    limit: Annotated[
+        LimitType, Field(description="Max results (1-100, default: 20)")
+    ] = 20,
+) -> str:
+    """Get all notes in your Joplin instance.
+
+    Simple function to retrieve all notes without any filtering or searching.
+    Most recent notes are shown first.
+
+    Returns:
+        str: Formatted list of all notes with title, ID, content preview, and dates.
+
+    Examples:
+        - get_all_notes() - Get the 20 most recent notes
+        - get_all_notes(50) - Get the 50 most recent notes
+    """
+
+    client = get_joplin_client()
+    results = client.get_all_notes(fields=COMMON_NOTE_FIELDS)
+    notes = process_search_results(results)
+
+    # Sort by updated time, newest first
+    notes = sorted(notes, key=lambda x: getattr(x, "updated_time", 0), reverse=True)
+
+    # Apply limit (using consistent pattern but keeping simple offset=0)
+    notes = notes[:limit]
+
+    if not notes:
+        return format_no_results_message("note")
+
+    return format_search_results_with_pagination(
+        "all notes", notes, len(notes), limit, 0, "search_results"
     )
 
 
