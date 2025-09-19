@@ -1524,35 +1524,6 @@ def _format_find_in_note_summary(
     )
 
 
-def _format_find_in_note_summary(
-    limit: int,
-    offset: int,
-    total_count: int,
-    showing_count: int,
-) -> str:
-    """Compose a compact summary line for find_in_note output without repeating metadata."""
-    if total_count > 0:
-        total_pages = (total_count + limit - 1) // limit
-        current_page = (offset // limit) + 1
-        if showing_count > 0:
-            start_result = offset + 1
-            end_result = offset + showing_count
-            showing_range = f"{start_result}-{end_result}"
-        else:
-            showing_range = "0-0"
-    else:
-        total_pages = 1
-        current_page = 1
-        showing_range = "0-0"
-
-    return (
-        "SUMMARY: "
-        f"showing={showing_count} range={showing_range} "
-        f"total={total_count} page={current_page}/{total_pages} "
-        f"offset={offset} limit={limit}"
-    )
-
-
 def _collect_note_metadata(
     note: Any,
     *,
