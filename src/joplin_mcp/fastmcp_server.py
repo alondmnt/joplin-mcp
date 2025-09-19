@@ -1324,62 +1324,20 @@ def format_note_details(
     original_body: Optional[str] = None,
 ) -> str:
     """Format a note for detailed display optimized for LLM comprehension."""
-    title = getattr(note, "title", "Untitled")
-    note_id = getattr(note, "id", "unknown")
-
     # Check content exposure settings
     config = _module_config
     should_show_content = config.should_show_content(context)
     should_show_full_content = config.should_show_full_content(context)
 
-    # Structured note details - metadata first
-    result_parts = [
-        f"NOTE_ID: {note_id}",
-        f"TITLE: {title}",
-    ]
-
-    # Add structured metadata first
-    created_time = getattr(note, "created_time", None)
-    if created_time:
-        created_date = format_timestamp(created_time)
-        if created_date:
-            result_parts.append(f"CREATED: {created_date}")
-
-    updated_time = getattr(note, "updated_time", None)
-    if updated_time:
-        updated_date = format_timestamp(updated_time)
-        if updated_date:
-            result_parts.append(f"UPDATED: {updated_date}")
-
-    # Notebook reference and path
-    parent_id = getattr(note, "parent_id", None)
-    if parent_id:
-        result_parts.append(f"NOTEBOOK_ID: {parent_id}")
-        try:
-            nb_map = get_notebook_map_cached()
-            nb_path = _compute_notebook_path(parent_id, nb_map)
-            if nb_path:
-                result_parts.append(f"NOTEBOOK_PATH: {nb_path}")
-        except Exception:
-            # Path resolution is best-effort; ignore failures
-            pass
-
-    # Todo status
-    is_todo = getattr(note, "is_todo", 0)
-    if is_todo:
-        result_parts.append("IS_TODO: true")
-        todo_completed = getattr(note, "todo_completed", 0)
-        result_parts.append(f"TODO_COMPLETED: {'true' if todo_completed else 'false'}")
-    else:
-        result_parts.append("IS_TODO: false")
-
-    # Add content size statistics (use original_body for stats if provided)
-    body = getattr(note, "body", "")
-    stats_body = original_body if original_body is not None else body
-    content_stats = calculate_content_stats(stats_body)
-    result_parts.append(f"CONTENT_SIZE_CHARS: {content_stats['characters']}")
-    result_parts.append(f"CONTENT_SIZE_WORDS: {content_stats['words']}")
-    result_parts.append(f"CONTENT_SIZE_LINES: {content_stats['lines']}")
+    stats_body = original_body if original_body is not None else getattr(note, "body", "")
+    metadata = _collect_note_metadata(
+        note,
+        include_timestamps=True,
+        include_todo=True,
+        include_content_stats=True,
+        content_stats_body=stats_body,
+    )
+    result_parts = _format_note_metadata_lines(metadata, style="upper")
 
     # Add content last to avoid breaking metadata flow
     if include_body:
@@ -1447,62 +1405,21 @@ def _format_note_entry(
     notebooks_map: Optional[Dict[str, Dict[str, Optional[str]]]] = None,
 ) -> List[str]:
     """Format a single note entry for search results."""
-    title = getattr(note, "title", "Untitled")
-    note_id = getattr(note, "id", "unknown")
     body = getattr(note, "body", "")
 
-    # Start with basic info
-    entry = [
-        f"RESULT_{index}:",
-        f"  note_id: {note_id}",
-        f"  title: {title}",
-    ]
+    entry = [f"RESULT_{index}:"]
 
-    # Add timestamps
-    for time_field, label in [("created_time", "created"), ("updated_time", "updated")]:
-        timestamp = getattr(note, time_field, None)
-        if timestamp:
-            formatted_date = format_timestamp(timestamp, "%Y-%m-%d %H:%M")
-            if formatted_date:
-                entry.append(f"  {label}: {formatted_date}")
-
-    # Add notebook reference
-    parent_id = getattr(note, "parent_id", None)
-    if parent_id:
-        entry.append(f"  notebook_id: {parent_id}")
-        try:
-            nb_path: Optional[str] = None
-            if notebooks_map is None:
-                temp_map = get_notebook_map_cached()
-                nb_path = _compute_notebook_path(parent_id, temp_map)
-            else:
-                nb_path = _compute_notebook_path(parent_id, notebooks_map)
-            if nb_path:
-                entry.append(f"  notebook_path: {nb_path}")
-        except Exception:
-            pass
-
-    # Add todo status
-    is_todo = getattr(note, "is_todo", 0)
-    if is_todo:
-        todo_completed = getattr(note, "todo_completed", 0)
-        entry.extend(
-            [
-                "  is_todo: true",
-                f"  todo_completed: {'true' if todo_completed else 'false'}",
-            ]
-        )
-    else:
-        entry.append("  is_todo: false")
-
-    # Add content statistics
-    content_stats = calculate_content_stats(body)
+    metadata = _collect_note_metadata(
+        note,
+        include_timestamps=True,
+        include_todo=True,
+        include_content_stats=True,
+        content_stats_body=body,
+        notebooks_map=notebooks_map,
+        timestamp_format="%Y-%m-%d %H:%M",
+    )
     entry.extend(
-        [
-            f"  content_size_chars: {content_stats['characters']}",
-            f"  content_size_words: {content_stats['words']}",
-            f"  content_size_lines: {content_stats['lines']}",
-        ]
+        _format_note_metadata_lines(metadata, style="lower", indent="  ")
     )
 
     # Add content based on privacy settings
@@ -1584,28 +1501,218 @@ def _format_find_in_note_summary(
     )
 
 
+def _format_find_in_note_summary(
+    limit: int,
+    offset: int,
+    total_count: int,
+    showing_count: int,
+) -> str:
+    """Compose a compact summary line for find_in_note output without repeating metadata."""
+    if total_count > 0:
+        total_pages = (total_count + limit - 1) // limit
+        current_page = (offset // limit) + 1
+        if showing_count > 0:
+            start_result = offset + 1
+            end_result = offset + showing_count
+            showing_range = f"{start_result}-{end_result}"
+        else:
+            showing_range = "0-0"
+    else:
+        total_pages = 1
+        current_page = 1
+        showing_range = "0-0"
+
+    return (
+        "SUMMARY: "
+        f"showing={showing_count} range={showing_range} "
+        f"total={total_count} page={current_page}/{total_pages} "
+        f"offset={offset} limit={limit}"
+    )
+
+
+def _collect_note_metadata(
+    note: Any,
+    *,
+    include_timestamps: bool = True,
+    include_todo: bool = True,
+    include_content_stats: bool = True,
+    content_stats_body: Optional[str] = None,
+    notebooks_map: Optional[Dict[str, Dict[str, Optional[str]]]] = None,
+    notebook_path_override: Optional[str] = None,
+    timestamp_format: Optional[str] = None,
+    default_notebook_id_if_missing: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Collect note metadata fields with configurable sections."""
+
+    metadata: Dict[str, Any] = {}
+    metadata["note_id"] = getattr(note, "id", "unknown")
+    metadata["title"] = getattr(note, "title", "Untitled")
+
+    if include_timestamps:
+        created_time = getattr(note, "created_time", None)
+        if created_time:
+            created_date = (
+                format_timestamp(created_time, timestamp_format)
+                if timestamp_format
+                else format_timestamp(created_time)
+            )
+            if created_date:
+                metadata["created"] = created_date
+
+        updated_time = getattr(note, "updated_time", None)
+        if updated_time:
+            updated_date = (
+                format_timestamp(updated_time, timestamp_format)
+                if timestamp_format
+                else format_timestamp(updated_time)
+            )
+            if updated_date:
+                metadata["updated"] = updated_date
+
+    parent_id = getattr(note, "parent_id", None)
+    if parent_id:
+        metadata["notebook_id"] = parent_id
+        notebook_path = notebook_path_override
+        if notebook_path is None:
+            map_to_use = notebooks_map
+            if map_to_use is None:
+                try:
+                    map_to_use = get_notebook_map_cached()
+                except Exception:
+                    map_to_use = None
+            if map_to_use is not None:
+                try:
+                    notebook_path = _compute_notebook_path(parent_id, map_to_use)
+                except Exception:
+                    notebook_path = None
+        if notebook_path:
+            metadata["notebook_path"] = notebook_path
+    elif default_notebook_id_if_missing is not None:
+        metadata["notebook_id"] = default_notebook_id_if_missing
+
+    if include_todo:
+        is_todo = bool(getattr(note, "is_todo", 0))
+        metadata["is_todo"] = is_todo
+        if is_todo:
+            todo_completed = bool(getattr(note, "todo_completed", 0))
+            metadata["todo_completed"] = todo_completed
+
+    if include_content_stats:
+        stats_source = (
+            content_stats_body
+            if content_stats_body is not None
+            else getattr(note, "body", "")
+        )
+        metadata["content_stats"] = calculate_content_stats(stats_source or "")
+
+    return metadata
+
+
+def _format_note_metadata_lines(
+    metadata: Dict[str, Any],
+    *,
+    style: str = "upper",
+    indent: str = "",
+) -> List[str]:
+    """Format collected note metadata into lines with a given style."""
+
+    key_order = [
+        "note_id",
+        "title",
+        "created",
+        "updated",
+        "notebook_id",
+        "notebook_path",
+        "is_todo",
+        "todo_completed",
+    ]
+
+    label_map = {
+        "upper": {
+            "note_id": "NOTE_ID",
+            "title": "TITLE",
+            "created": "CREATED",
+            "updated": "UPDATED",
+            "notebook_id": "NOTEBOOK_ID",
+            "notebook_path": "NOTEBOOK_PATH",
+            "is_todo": "IS_TODO",
+            "todo_completed": "TODO_COMPLETED",
+        },
+        "lower": {
+            "note_id": "note_id",
+            "title": "title",
+            "created": "created",
+            "updated": "updated",
+            "notebook_id": "notebook_id",
+            "notebook_path": "notebook_path",
+            "is_todo": "is_todo",
+            "todo_completed": "todo_completed",
+        },
+    }
+
+    stats_label_map = {
+        "upper": {
+            "characters": "CONTENT_SIZE_CHARS",
+            "words": "CONTENT_SIZE_WORDS",
+            "lines": "CONTENT_SIZE_LINES",
+        },
+        "lower": {
+            "characters": "content_size_chars",
+            "words": "content_size_words",
+            "lines": "content_size_lines",
+        },
+    }
+
+    lines: List[str] = []
+    labels = label_map[style]
+
+    for key in key_order:
+        if key not in metadata:
+            continue
+        value = metadata[key]
+        if isinstance(value, bool):
+            value_str = "true" if value else "false"
+        else:
+            value_str = value
+        lines.append(f"{indent}{labels[key]}: {value_str}")
+
+    stats = metadata.get("content_stats")
+    if stats:
+        stats_labels = stats_label_map[style]
+        for stat_key in ["characters", "words", "lines"]:
+            if stat_key in stats:
+                lines.append(
+                    f"{indent}{stats_labels[stat_key]}: {stats[stat_key]}"
+                )
+
+    return lines
+
+
 def _build_find_in_note_header(
-    note_id: str,
-    note_title: str,
+    note: Any,
     pattern: str,
     flags_str: str,
     limit: int,
     offset: int,
     total_count: int,
     showing_count: int,
-    parent_id: Optional[str],
-    notebook_path: Optional[str],
+    *,
+    notebook_path_override: Optional[str] = None,
     status: Optional[str] = None,
 ) -> List[str]:
     """Build the standardized header for find_in_note output."""
-    parts = [
-        "ITEM_TYPE: note_match",
-        f"NOTE_ID: {note_id}",
-        f"NOTE_TITLE: {note_title}",
-        f"NOTEBOOK_ID: {parent_id}" if parent_id else "NOTEBOOK_ID: unknown",
-    ]
-    if notebook_path:
-        parts.append(f"NOTEBOOK_PATH: {notebook_path}")
+
+    metadata = _collect_note_metadata(
+        note,
+        include_timestamps=False,
+        include_todo=False,
+        include_content_stats=False,
+        notebook_path_override=notebook_path_override,
+        default_notebook_id_if_missing="unknown",
+    )
+
+    parts = ["ITEM_TYPE: note_match"]
+    parts.extend(_format_note_metadata_lines(metadata, style="upper"))
 
     parts.extend(
         [
@@ -2553,7 +2660,6 @@ async def find_in_note(
     client = get_joplin_client()
     note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
 
-    note_title = getattr(note, "title", "Untitled")
     body = getattr(note, "body", "") or ""
 
     flags_str = ", ".join(applied_flags) if applied_flags else "none"
@@ -2569,17 +2675,15 @@ async def find_in_note(
 
     if not body:
         header_parts = _build_find_in_note_header(
-            note_id,
-            note_title,
+            note,
             pattern,
             flags_str,
             limit,
             offset,
             0,
             0,
-            parent_id,
-            notebook_path,
-            "STATUS: Note has no content to search",
+            notebook_path_override=notebook_path,
+            status="STATUS: Note has no content to search",
         )
         header_parts.extend(_build_pagination_summary(0, limit, offset))
         return "\n".join(header_parts)
@@ -2652,17 +2756,15 @@ async def find_in_note(
 
     if total_matches == 0:
         result_parts = _build_find_in_note_header(
-            note_id,
-            note_title,
+            note,
             pattern,
             flags_str,
             limit,
             offset,
             0,
             0,
-            parent_id,
-            notebook_path,
-            "STATUS: No matches found",
+            notebook_path_override=notebook_path,
+            status="STATUS: No matches found",
         )
         result_parts.extend(_build_pagination_summary(0, limit, offset))
         return "\n".join(result_parts)
@@ -2687,16 +2789,14 @@ async def find_in_note(
     paginated_matches, total_count = apply_pagination(match_entries, limit, offset)
 
     result_parts = _build_find_in_note_header(
-        note_id,
-        note_title,
+        note,
         pattern,
         flags_str,
         limit,
         offset,
         total_count,
         len(paginated_matches),
-        parent_id,
-        notebook_path,
+        notebook_path_override=notebook_path,
     )
 
     if not paginated_matches:
