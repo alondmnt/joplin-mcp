@@ -184,6 +184,29 @@ def flexible_bool_converter(value: Union[bool, str, None]) -> Optional[bool]:
     return bool(value)
 
 
+def optional_int_converter(
+    value: Optional[Union[int, str]], field_name: str
+) -> Optional[int]:
+    """Convert optional string inputs to integers while validating."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be an integer, not a boolean")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError(f"{field_name} must be a valid integer string")
+        try:
+            return int(stripped)
+        except ValueError as exc:
+            raise ValueError(
+                f"{field_name} must be an integer or string representation of an integer"
+            ) from exc
+    raise ValueError(f"{field_name} must be an integer or string representation of an integer")
+
+
 def validate_joplin_id(note_id: str) -> str:
     """Validate that a string is a proper Joplin note ID (32 hex characters)."""
     import re
@@ -2085,10 +2108,11 @@ async def get_note(
         Field(description="Extract specific section (heading text, slug, or number)"),
     ] = None,
     start_line: Annotated[
-        Optional[int], Field(description="Start line for sequential reading (1-based)")
+        Optional[Union[int, str]],
+        Field(description="Start line for sequential reading (1-based)"),
     ] = None,
     line_count: Annotated[
-        Optional[int],
+        Optional[Union[int, str]],
         Field(description="Number of lines to extract from start_line (default: 50)"),
     ] = None,
     toc_only: Annotated[
@@ -2132,6 +2156,9 @@ async def get_note(
     toc_only = flexible_bool_converter(toc_only)
     force_full = flexible_bool_converter(force_full)
     metadata_only = flexible_bool_converter(metadata_only)
+
+    start_line = optional_int_converter(start_line, "start_line")
+    line_count = optional_int_converter(line_count, "line_count")
 
     include_body = not metadata_only
 
