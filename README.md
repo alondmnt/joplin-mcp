@@ -2,6 +2,8 @@
 
 A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://joplinapp.org/) note-taking application via its Python API [joppy](https://github.com/marph91/joppy), enabling AI assistants to interact with your Joplin notes, notebooks, and tags through a standardized interface.
 
+<!-- mcp-name: io.github.alondmnt/joplin-mcp -->
+
 ## Table of Contents
 
 - [What You Can Do](#what-you-can-do)
