@@ -62,7 +62,7 @@ joplin-mcp-install
 uvx joplin-mcp-install
 
 # Optional: pin a specific version/range for stability
-uvx joplin-mcp==0.4.0
+uvx joplin-mcp==0.4.1
 uvx 'joplin-mcp>=0.4,<0.5'
 ```
 
@@ -199,7 +199,7 @@ If you prefer manual setup or the script doesn't work:
 
 > Note on `uvx`: `uvx` runs Python applications without permanently installing them (requires `uv`: `pip install uv`). It can read and write user configuration files (e.g., Claude/Jan configs), so `uvx joplin-mcp-install` works for setup just like a pip install.
 
-> Version pinning (optional): For long‑lived client configs or CI, you can pin or range-constrain the version for reproducibility, e.g. `uvx joplin-mcp==0.4.0` or `uvx 'joplin-mcp>=0.4,<0.5'`.
+> Version pinning (optional): For long‑lived client configs or CI, you can pin or range-constrain the version for reproducibility, e.g. `uvx joplin-mcp==0.4.1` or `uvx 'joplin-mcp>=0.4,<0.5'`.
 
 #### 1. Create Configuration File
 

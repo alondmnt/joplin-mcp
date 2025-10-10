@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "joplin-mcp"
-version = "0.4.0"
+version = "0.4.1"
 description = "Model Context Protocol (MCP) server for Joplin note-taking application"
 readme = "README.md"
 license = {file = "LICENSE"}

@@ -22,10 +22,10 @@ from typing import Optional
 # Import configuration
 from .config import JoplinMCPConfig
 
-__version__ = "0.4.0"
-__author__ = "Joplin MCP Contributors"
+__version__ = "0.4.1"
+__author__ = "Alon Diament"
 __license__ = "MIT"
-__description__ = "Model Context Protocol server for Joplin note-taking application"
+__description__ = "Model Context Protocol server for the Joplin note-taking application"
 
 # Public API exports - these will be available when importing the package
 __all__ = [
