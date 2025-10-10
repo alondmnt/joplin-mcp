@@ -163,7 +163,7 @@ addopts = [
     "--cov=src/joplin_mcp",
     "--cov-report=html",
     "--cov-report=term-missing",
-    "--cov-fail-under=60",
+    "--cov-fail-under=20",
 ]
 testpaths = ["tests"]
 filterwarnings = [

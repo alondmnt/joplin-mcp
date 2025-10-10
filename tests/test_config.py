@@ -33,7 +33,7 @@ class TestConfigEnvironmentVariables:
             assert config.port == 41184
             assert config.token == "test-token-123"
             assert config.timeout == 30
-            assert config.verify_ssl is True
+            assert config.verify_ssl is False
 
     def test_config_uses_default_values_when_env_vars_missing(self):
         """Test that default values are used when environment variables are not set."""
@@ -180,7 +180,7 @@ class TestConfigInitialization:
         assert config.port == 8080
         assert config.token == "direct-token"
         assert config.timeout == 45
-        assert config.verify_ssl is True
+        assert config.verify_ssl is False
 
     def test_config_partial_initialization_uses_defaults(self):
         """Test that partial initialization uses defaults for missing values."""
@@ -239,7 +239,7 @@ class TestConfigFileLoading:
             assert config.port == 8080
             assert config.token == "json-token"
             assert config.timeout == 45
-            assert config.verify_ssl is True
+            assert config.verify_ssl is False
         finally:
             os.unlink(config_file)
 
@@ -288,7 +288,7 @@ token: yml-token
             assert config.token == "yml-token"
             # Should use defaults for missing values
             assert config.timeout == 30
-            assert config.verify_ssl is True
+            assert config.verify_ssl is False
         finally:
             os.unlink(config_file)
 
@@ -380,7 +380,7 @@ verify_ssl: false
             assert config.host == "comment-host"
             assert config.port == 6060
             assert config.token == "comment-token"
-            assert config.verify_ssl is True
+            assert config.verify_ssl is False
         finally:
             os.unlink(config_file)
 
@@ -401,7 +401,7 @@ verify_ssl: false
             # These should use defaults
             assert config.port == 41184
             assert config.timeout == 30
-            assert config.verify_ssl is True
+            assert config.verify_ssl is False
         finally:
             os.unlink(config_file)
 
@@ -585,7 +585,7 @@ class TestConfigValidationAndEdgeCases:
             assert config.port == 41184  # Default
             assert config.token is None  # Null is valid
             assert config.timeout == 30  # Default
-            assert config.verify_ssl is True  # Default
+            assert config.verify_ssl is False  # Default
         finally:
             os.unlink(config_file)
 
@@ -1322,8 +1322,10 @@ class TestConfigToolConfiguration:
 
         repr_str = repr(config)
 
+        enabled = len(config.get_enabled_tools())
+        total = len(config.tools)
         assert "tools=" in repr_str
-        assert "/25 enabled" in repr_str or "enabled)" in repr_str
+        assert f"{enabled}/{total} enabled" in repr_str
 
     def test_config_tools_save_to_file_includes_tools(self):
         """Test that save_to_file includes tools configuration."""

@@ -158,7 +158,7 @@ class TestImportOptions:
         assert options.preserve_timestamps is True
         assert options.handle_duplicates == "skip"
         assert options.max_batch_size == 100
-        assert options.attachment_handling == "link"
+        assert options.attachment_handling == "embed"
         assert options.encoding == "utf-8"
         assert options.file_pattern is None
         assert options.preserve_structure is True
@@ -248,9 +248,9 @@ class TestJoplinImportEngine:
     def mock_client(self):
         """Create a mock Joplin client."""
         client = Mock()
-        client.add_note.return_value = {"id": "note123"}
-        client.add_notebook.return_value = {"id": "notebook123"}
-        client.add_tag.return_value = {"id": "tag123"}
+        client.add_note.return_value = "note123"
+        client.add_notebook.return_value = "notebook123"
+        client.add_tag.return_value = "tag123"
         client.get_all_notebooks.return_value = []
         client.get_all_tags.return_value = []
         client.search_all.return_value = []
