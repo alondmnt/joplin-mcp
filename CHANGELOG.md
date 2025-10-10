@@ -1,11 +1,20 @@
+# [v0.4.1](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.4.1)
+*Released on 2025-10-10T00:20:02Z*
+
+- added: GitHub Actions workflow that runs tests, builds, publishes to PyPI, and uploads to the MCP registry via OIDC
+
+**Full Changelog**: https://github.com/alondmnt/joplin-mcp/compare/v0.4.0...v0.4.1
+
+---
+
 # [v0.4.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.4.0)
 *Released on 2025-09-16T14:10:31Z*
 
-- add: tool `import_from_file` supporting Markdown, HTML, CSV, TXT, JEX, directories and attachments (#6 by @casistack)
-- add: Dockerfile (#3)
-- add: notebook path to output (#5)
-- fix: Claude setup to follow the tool permissions in the config JSON
-- refactor: single entry point `joplin_mcp.server`
+- added: tool `import_from_file` supporting Markdown, HTML, CSV, TXT, JEX, directories and attachments (#6 by @casistack)
+- added: Dockerfile (#3)
+- added: notebook path to output (#5)
+- fixed: Claude setup to follow the tool permissions in the config JSON
+- refactored: single entry point `joplin_mcp.server`
 
 **Full Changelog**: https://github.com/alondmnt/joplin-mcp/compare/v0.3.1...v0.4.0
 
