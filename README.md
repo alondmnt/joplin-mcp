@@ -59,11 +59,11 @@ pip install joplin-mcp
 joplin-mcp-install
 
 # Or use zero-install with uvx (recommended if you have uv)
-uvx joplin-mcp-install
+uvx --from joplin-mcp joplin-mcp-install
 
 # Optional: pin a specific version/range for stability
-uvx joplin-mcp==0.4.1
-uvx 'joplin-mcp>=0.4,<0.5'
+uvx --from joplin-mcp==0.4.1 joplin-mcp-install
+uvx --from 'joplin-mcp>=0.4,<0.5' joplin-mcp-install
 ```
 
 This script will:
@@ -88,7 +88,7 @@ After setup, restart Claude Desktop and you're ready to go!
    - Click **Add MCP Server**
    - Configure:
      - **Name**: `joplin`
-     - **Command**: `uvx joplin-mcp` *(requires `uv` installed)*
+     - **Command**: `uvx --from joplin-mcp joplin-mcp-server` *(requires `uv` installed)*
      - **Environment Variables**:
        - `JOPLIN_TOKEN`: `your_joplin_api_token_here`
    - Enable the server
@@ -131,7 +131,7 @@ pip install ollmcp
 export JOPLIN_TOKEN="your_joplin_api_token_here"
 
 # Run with manual server configuration (requires uv installed)
-ollmcp --server "joplin:uvx joplin-mcp" --model qwen3:4b
+ollmcp --server "joplin:uvx --from joplin-mcp joplin-mcp-server" --model qwen3:4b
 ```
 
 ## Example Usage
@@ -197,9 +197,9 @@ install.bat
 
 If you prefer manual setup or the script doesn't work:
 
-> Note on `uvx`: `uvx` runs Python applications without permanently installing them (requires `uv`: `pip install uv`). It can read and write user configuration files (e.g., Claude/Jan configs), so `uvx joplin-mcp-install` works for setup just like a pip install.
+> Note on `uvx`: `uvx` runs Python applications without permanently installing them (requires `uv`: `pip install uv`). It can read and write user configuration files (e.g., Claude/Jan configs), so `uvx --from joplin-mcp joplin-mcp-install` works for setup just like a pip install.
 
-> Version pinning (optional): For long‑lived client configs or CI, you can pin or range-constrain the version for reproducibility, e.g. `uvx joplin-mcp==0.4.1` or `uvx 'joplin-mcp>=0.4,<0.5'`.
+> Version pinning (optional): For long‑lived client configs or CI, you can pin or range-constrain the version for reproducibility, e.g. `uvx --from joplin-mcp==0.4.1 joplin-mcp-install` or `uvx --from 'joplin-mcp>=0.4,<0.5' joplin-mcp-install`.
 
 #### 1. Create Configuration File
 
@@ -225,7 +225,7 @@ Add to your `claude_desktop_config.json`:
   "mcpServers": {
     "joplin": {
       "command": "uvx",
-      "args": ["joplin-mcp"],
+      "args": ["--from", "joplin-mcp", "joplin-mcp-server"],
       "env": {
         "JOPLIN_TOKEN": "your_token_here"
       }
@@ -257,7 +257,7 @@ Add to your `claude_desktop_config.json`:
 export JOPLIN_TOKEN="your_token_here"
 
 # Run with manual server configuration
-ollmcp --server "joplin:uvx joplin-mcp" --model qwen3:4b
+ollmcp --server "joplin:uvx --from joplin-mcp joplin-mcp-server" --model qwen3:4b
 ```
 *Requires `uv` installed: `pip install uv`*
 
