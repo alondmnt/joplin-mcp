@@ -220,6 +220,30 @@ def validate_joplin_id(note_id: str) -> str:
     return note_id
 
 
+def timestamp_converter(value: Optional[Union[int, str]], field_name: str) -> Optional[int]:
+    """Convert timestamp to milliseconds since epoch.
+
+    Accepts: int (ms), ISO 8601 string, or None.
+    """
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            from datetime import datetime
+            dt = datetime.fromisoformat(stripped.replace('Z', '+00:00'))
+            return int(dt.timestamp() * 1000)
+        except ValueError as exc:
+            raise ValueError(
+                f"{field_name} must be Unix timestamp (ms) or ISO 8601 string"
+            ) from exc
+    raise ValueError(f"{field_name} must be int or ISO 8601 string")
+
+
 # Validation types - simplified for MCP client compatibility but with runtime validation
 LimitType = Annotated[
     int, Field(ge=1, le=100)
@@ -430,7 +454,7 @@ def format_no_results_with_pagination(
 
 # Common fields list for note operations
 COMMON_NOTE_FIELDS = (
-    "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed"
+    "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed,todo_due"
 )
 
 
@@ -2390,6 +2414,10 @@ async def create_note(
     todo_completed: Annotated[
         OptionalBoolType, Field(description="Mark todo as completed (default: False)")
     ] = False,
+    todo_due: Annotated[
+        Optional[Union[int, str]],
+        Field(description="Due date: Unix timestamp (ms) or ISO 8601 string (e.g., '2024-12-31T17:00:00'). Only for todos.")
+    ] = None,
 ) -> str:
     """Create a new note in a specified notebook in Joplin.
 
@@ -2402,23 +2430,29 @@ async def create_note(
     Examples:
         - create_note("Shopping List", "Personal Notes", "- Milk\n- Eggs", True, False) - Create uncompleted todo
         - create_note("Meeting Notes", "Work Projects", "# Meeting with Client") - Create regular note
+        - create_note("Task", "Work", "", True, False, "2024-12-31T17:00:00") - Create todo with due date
     """
 
     # Runtime validation for Jan AI compatibility while preserving functionality
     is_todo = flexible_bool_converter(is_todo)
     todo_completed = flexible_bool_converter(todo_completed)
+    todo_due_ms = timestamp_converter(todo_due, "todo_due")
 
     # Use helper function to get notebook ID
     parent_id = get_notebook_id_by_name(notebook_name)
 
     client = get_joplin_client()
-    note = client.add_note(
-        title=title,
-        body=body,
-        parent_id=parent_id,
-        is_todo=1 if is_todo else 0,
-        todo_completed=1 if todo_completed else 0,
-    )
+    note_kwargs = {
+        "title": title,
+        "body": body,
+        "parent_id": parent_id,
+        "is_todo": 1 if is_todo else 0,
+        "todo_completed": 1 if todo_completed else 0,
+    }
+    if todo_due_ms is not None:
+        note_kwargs["todo_due"] = todo_due_ms
+
+    note = client.add_note(**note_kwargs)
     return format_creation_success(ItemType.note, title, str(note))
 
 
@@ -2433,6 +2467,10 @@ async def update_note(
     todo_completed: Annotated[
         OptionalBoolType, Field(description="Mark todo completed (optional)")
     ] = None,
+    todo_due: Annotated[
+        Optional[Union[int, str]],
+        Field(description="Due date: Unix timestamp (ms), ISO 8601 string, or 0 to clear. Only for todos.")
+    ] = None,
 ) -> str:
     """Update an existing note in Joplin.
 
@@ -2444,6 +2482,8 @@ async def update_note(
     Examples:
         - update_note("note123", title="New Title") - Update only the title
         - update_note("note123", body="New content", is_todo=True) - Update content and convert to todo
+        - update_note("note123", todo_due="2024-12-31T17:00:00") - Set due date
+        - update_note("note123", todo_due=0) - Clear due date
     """
 
     # Runtime validation for Jan AI compatibility while preserving functionality
@@ -2460,6 +2500,8 @@ async def update_note(
         update_data["is_todo"] = 1 if is_todo else 0
     if todo_completed is not None:
         update_data["todo_completed"] = 1 if todo_completed else 0
+    if todo_due is not None:
+        update_data["todo_due"] = timestamp_converter(todo_due, "todo_due") or 0
 
     if not update_data:
         raise ValueError("At least one field must be provided for update")

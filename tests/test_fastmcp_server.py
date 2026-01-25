@@ -115,6 +115,115 @@ async def test_tool_schemas():
                 break
 
 
+# === Tests for timestamp_converter ===
+
+
+def test_timestamp_converter_with_none():
+    """Test timestamp_converter returns None for None input."""
+    from joplin_mcp.fastmcp_server import timestamp_converter
+
+    result = timestamp_converter(None, "todo_due")
+    assert result is None
+
+
+def test_timestamp_converter_with_int():
+    """Test timestamp_converter returns int unchanged."""
+    from joplin_mcp.fastmcp_server import timestamp_converter
+
+    result = timestamp_converter(1735660800000, "todo_due")
+    assert result == 1735660800000
+
+
+def test_timestamp_converter_with_zero():
+    """Test timestamp_converter handles zero (used to clear due date)."""
+    from joplin_mcp.fastmcp_server import timestamp_converter
+
+    result = timestamp_converter(0, "todo_due")
+    assert result == 0
+
+
+def test_timestamp_converter_with_iso_string():
+    """Test timestamp_converter parses ISO 8601 string."""
+    from joplin_mcp.fastmcp_server import timestamp_converter
+
+    # Test with timezone-naive string
+    result = timestamp_converter("2024-12-31T17:00:00", "todo_due")
+    assert isinstance(result, int)
+    assert result > 0
+
+
+def test_timestamp_converter_with_iso_string_utc():
+    """Test timestamp_converter parses ISO 8601 string with Z suffix."""
+    from joplin_mcp.fastmcp_server import timestamp_converter
+
+    result = timestamp_converter("2024-12-31T17:00:00Z", "todo_due")
+    assert isinstance(result, int)
+    assert result > 0
+
+
+def test_timestamp_converter_with_empty_string():
+    """Test timestamp_converter returns None for empty string."""
+    from joplin_mcp.fastmcp_server import timestamp_converter
+
+    result = timestamp_converter("", "todo_due")
+    assert result is None
+    result = timestamp_converter("   ", "todo_due")
+    assert result is None
+
+
+def test_timestamp_converter_with_invalid_string():
+    """Test timestamp_converter raises ValueError for invalid string."""
+    from joplin_mcp.fastmcp_server import timestamp_converter
+
+    with pytest.raises(ValueError) as exc_info:
+        timestamp_converter("not-a-date", "todo_due")
+    assert "todo_due" in str(exc_info.value)
+    assert "ISO 8601" in str(exc_info.value)
+
+
+def test_timestamp_converter_with_invalid_type():
+    """Test timestamp_converter raises ValueError for invalid type."""
+    from joplin_mcp.fastmcp_server import timestamp_converter
+
+    with pytest.raises(ValueError) as exc_info:
+        timestamp_converter(3.14, "todo_due")  # type: ignore
+    assert "todo_due" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_create_note_has_todo_due_param():
+    """Test that create_note tool schema includes todo_due parameter."""
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
+        for tool in tools:
+            if tool.name == "create_note":
+                schema = tool.inputSchema
+                assert schema and "properties" in schema
+                properties = schema["properties"]
+                assert "todo_due" in properties, "create_note should have todo_due parameter"
+                assert "description" in properties["todo_due"]
+                break
+        else:
+            pytest.fail("create_note tool not found")
+
+
+@pytest.mark.asyncio
+async def test_update_note_has_todo_due_param():
+    """Test that update_note tool schema includes todo_due parameter."""
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
+        for tool in tools:
+            if tool.name == "update_note":
+                schema = tool.inputSchema
+                assert schema and "properties" in schema
+                properties = schema["properties"]
+                assert "todo_due" in properties, "update_note should have todo_due parameter"
+                assert "description" in properties["todo_due"]
+                break
+        else:
+            pytest.fail("update_note tool not found")
+
+
 def main():
     """Main test runner."""
     print("FastMCP Joplin Server Test Suite")
