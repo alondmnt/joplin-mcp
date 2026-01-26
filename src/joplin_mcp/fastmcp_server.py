@@ -1115,6 +1115,58 @@ def conditional_tool(tool_name: str):
     return decorator
 
 
+def _get_item_id_by_name(
+    name: str,
+    item_type: str,
+    fetch_fn: Callable[..., List[Any]],
+    fields: str,
+    not_found_hint: str = "",
+) -> str:
+    """Generic helper to find notebook/tag ID by name with helpful error messages.
+
+    Args:
+        name: The item name to search for
+        item_type: Type of item for error messages (e.g., "notebook", "tag")
+        fetch_fn: Function to fetch all items (e.g., client.get_all_notebooks)
+        fields: Fields to request from the API
+        not_found_hint: Optional hint to append to "not found" error message
+
+    Returns:
+        str: The item ID
+
+    Raises:
+        ValueError: If item not found or multiple matches
+    """
+    all_items = fetch_fn(fields=fields)
+    matching_items = [
+        item for item in all_items if getattr(item, "title", "").lower() == name.lower()
+    ]
+
+    if not matching_items:
+        available_items = [getattr(item, "title", "Untitled") for item in all_items]
+        hint_suffix = f" {not_found_hint}" if not_found_hint else ""
+        raise ValueError(
+            f"{item_type.capitalize()} '{name}' not found. "
+            f"Available {item_type}s: {', '.join(available_items)}.{hint_suffix}"
+        )
+
+    if len(matching_items) > 1:
+        item_details = [
+            f"'{getattr(item, 'title', 'Untitled')}' (ID: {getattr(item, 'id', 'unknown')})"
+            for item in matching_items
+        ]
+        raise ValueError(
+            f"Multiple {item_type}s found with name '{name}': {', '.join(item_details)}. "
+            "Please be more specific."
+        )
+
+    item_id = getattr(matching_items[0], "id", None)
+    if not item_id:
+        raise ValueError(f"Could not get ID for {item_type} '{name}'")
+
+    return item_id
+
+
 def get_notebook_id_by_name(name: str) -> str:
     """Get notebook ID by name with helpful error messages.
 
@@ -1128,34 +1180,12 @@ def get_notebook_id_by_name(name: str) -> str:
         ValueError: If notebook not found or multiple matches
     """
     client = get_joplin_client()
-
-    # Find notebook by name
-    fields_list = "id,title,created_time,updated_time,parent_id"
-    all_notebooks = client.get_all_notebooks(fields=fields_list)
-    matching_notebooks = [
-        nb for nb in all_notebooks if getattr(nb, "title", "").lower() == name.lower()
-    ]
-
-    if not matching_notebooks:
-        available_notebooks = [getattr(nb, "title", "Untitled") for nb in all_notebooks]
-        raise ValueError(
-            f"Notebook '{name}' not found. Available notebooks: {', '.join(available_notebooks)}"
-        )
-
-    if len(matching_notebooks) > 1:
-        notebook_details = [
-            f"'{getattr(nb, 'title', 'Untitled')}' (ID: {getattr(nb, 'id', 'unknown')})"
-            for nb in matching_notebooks
-        ]
-        raise ValueError(
-            f"Multiple notebooks found with name '{name}': {', '.join(notebook_details)}. Please be more specific."
-        )
-
-    notebook_id = getattr(matching_notebooks[0], "id", None)
-    if not notebook_id:
-        raise ValueError(f"Could not get ID for notebook '{name}'")
-
-    return notebook_id
+    return _get_item_id_by_name(
+        name=name,
+        item_type="notebook",
+        fetch_fn=client.get_all_notebooks,
+        fields="id,title,created_time,updated_time,parent_id",
+    )
 
 
 def get_tag_id_by_name(name: str) -> str:
@@ -1171,34 +1201,13 @@ def get_tag_id_by_name(name: str) -> str:
         ValueError: If tag not found or multiple matches
     """
     client = get_joplin_client()
-
-    # Find tag by name
-    tag_fields_list = "id,title,created_time,updated_time"
-    all_tags = client.get_all_tags(fields=tag_fields_list)
-    matching_tags = [
-        tag for tag in all_tags if getattr(tag, "title", "").lower() == name.lower()
-    ]
-
-    if not matching_tags:
-        available_tags = [getattr(tag, "title", "Untitled") for tag in all_tags]
-        raise ValueError(
-            f"Tag '{name}' not found. Available tags: {', '.join(available_tags)}. Use create_tag to create a new tag."
-        )
-
-    if len(matching_tags) > 1:
-        tag_details = [
-            f"'{getattr(tag, 'title', 'Untitled')}' (ID: {getattr(tag, 'id', 'unknown')})"
-            for tag in matching_tags
-        ]
-        raise ValueError(
-            f"Multiple tags found with name '{name}': {', '.join(tag_details)}. Please be more specific."
-        )
-
-    tag_id = getattr(matching_tags[0], "id", None)
-    if not tag_id:
-        raise ValueError(f"Could not get ID for tag '{name}'")
-
-    return tag_id
+    return _get_item_id_by_name(
+        name=name,
+        item_type="tag",
+        fetch_fn=client.get_all_tags,
+        fields="id,title,created_time,updated_time",
+        not_found_hint="Use create_tag to create a new tag.",
+    )
 
 
 # === FORMATTING UTILITIES ===
