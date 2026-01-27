@@ -5,9 +5,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from joplin_mcp.import_engine import JoplinImportEngine
-from joplin_mcp.importers.base import BaseImporter, ImportValidationError
-from joplin_mcp.types.import_types import ImportedNote, ImportOptions, ImportResult
+from joplin_mcp.imports import JoplinImportEngine
+from joplin_mcp.imports.importers.base import BaseImporter, ImportValidationError
+from joplin_mcp.imports import ImportedNote, ImportOptions, ImportResult
 
 
 class TestImportedNote:

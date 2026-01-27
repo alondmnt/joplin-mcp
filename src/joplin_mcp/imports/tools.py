@@ -1,14 +1,16 @@
-"""MCP import tools for Joplin MCP server."""
-
+"""Import tools for Joplin MCP server."""
+import ast
+import json
 import logging
-import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Annotated, Any, Dict, Optional, Union
 
-from .config import JoplinMCPConfig
+from pydantic import Field
 
-# Local imports
-from .import_engine import JoplinImportEngine, get_joplin_client
+from joplin_mcp.config import JoplinMCPConfig
+from joplin_mcp.fastmcp_server import create_tool, get_joplin_client
+
+from .engine import JoplinImportEngine
 from .importers import (
     CSVImporter,
     GenericImporter,
@@ -17,10 +19,14 @@ from .importers import (
     MarkdownImporter,
     RAWImporter,
 )
-from .types.import_types import ImportOptions
+from .importers.base import ImportProcessingError, ImportValidationError
 from .importers.utils import looks_like_raw_export
+from .types import ImportOptions
 
 logger = logging.getLogger(__name__)
+
+
+# === UTILITY FUNCTIONS ===
 
 
 def format_import_result(result, operation_name: str = "IMPORT_BATCH") -> str:
@@ -135,7 +141,6 @@ def detect_file_format(file_path: str) -> str:
         "html": "html",
         "htm": "html",
         "csv": "csv",
-        
     }
 
     detected_format = extension_map.get(extension)
@@ -217,8 +222,6 @@ async def import_source(
     Returns:
         Formatted import result
     """
-    from pathlib import Path
-
     # Create import options
     options = ImportOptions(
         handle_duplicates=(
@@ -269,9 +272,170 @@ async def import_source(
 
     # Get Joplin client and import
     config = JoplinMCPConfig()
-    client = get_joplin_client(config)
+    client = get_joplin_client()
     engine = JoplinImportEngine(client, config)
 
     result = await engine.import_batch(notes, options)
 
     return format_import_result(result)
+
+
+# === IMPORT TOOL ===
+
+
+@create_tool("import_from_file", "Import from file")
+async def import_from_file(
+    file_path: Annotated[str, Field(description="Path to the file to import")],
+    format: Annotated[
+        Optional[str],
+        Field(description="File format (md, html, csv, jex, generic) - auto-detected if not specified"),
+    ] = None,
+    target_notebook: Annotated[
+        Optional[str], Field(description="Target notebook name (optional, defaults to 'Imported')")
+    ] = 'Imported',
+    import_options: Annotated[
+        Optional[Union[Dict[str, Any], str]],
+        Field(description="Additional import options (object/dict; string is auto-parsed)")
+    ] = None,
+) -> str:
+    """Import notes from a file or directory.
+
+    - Formats: md, html, csv, jex, generic (auto-detected if omitted).
+    - Directories: recursive; RAW exports auto-detected; mixed dirs supported.
+    - import_options (dict, not JSON string). Common: csv_import_mode (table|rows),
+      csv_delimiter (e.g., ";"), extract_hashtags (bool).
+      In csv row mode, each note body is YAML frontmatter built from the row.
+
+    Returns a compact result summary with counts and errors/warnings.
+
+    Examples:
+      import_from_file("/path/note.md")
+      import_from_file("/path/data.csv", format="csv", target_notebook="CSV Rows",
+                       import_options={"csv_import_mode": "rows"})
+    """
+    try:
+        # Load configuration
+        config = JoplinMCPConfig.load()
+
+        # Validate file path (support both files and directories)
+        path = Path(file_path)
+        if not path.exists():
+            return format_import_result(type('Result', (), {
+                'is_complete_success': False,
+                'is_partial_success': False,
+                'total_processed': 0,
+                'successful_imports': 0,
+                'failed_imports': 0,
+                'skipped_items': 0,
+                'processing_time': 0.0,
+                'created_notebooks': [],
+                'created_tags': [],
+                'errors': [f"Path does not exist: {file_path}"],
+                'warnings': []
+            })(), "IMPORT_FROM_FILE")
+        if not (path.is_file() or path.is_dir()):
+            return format_import_result(type('Result', (), {
+                'is_complete_success': False,
+                'is_partial_success': False,
+                'total_processed': 0,
+                'successful_imports': 0,
+                'failed_imports': 0,
+                'skipped_items': 0,
+                'processing_time': 0.0,
+                'created_notebooks': [],
+                'created_tags': [],
+                'errors': [f"Path is neither a file nor directory: {file_path}"],
+                'warnings': []
+            })(), "IMPORT_FROM_FILE")
+
+        # Detect format if not specified
+        if not format:
+            if path.is_file():
+                try:
+                    format = detect_file_format(file_path)
+                except ValueError:
+                    format = "generic"
+            else:
+                # For directories, detect format (raw, md, html, csv) with fallback to generic
+                try:
+                    format = detect_directory_format(file_path)
+                except Exception:
+                    format = "generic"
+
+        # Create import options
+        base_options = ImportOptions(
+            target_notebook=target_notebook,
+            create_missing_notebooks=config.import_settings.get(
+                "create_missing_notebooks", True
+            ),
+            create_missing_tags=config.import_settings.get("create_missing_tags", True),
+            preserve_timestamps=config.import_settings.get("preserve_timestamps", True),
+            handle_duplicates=config.import_settings.get("handle_duplicates", "skip"),
+            max_batch_size=config.import_settings.get("max_batch_size", 100),
+            attachment_handling=config.import_settings.get(
+                "attachment_handling", "embed"
+            ),
+            max_file_size_mb=config.import_settings.get("max_file_size_mb", 100),
+        )
+
+        # Apply additional options (accept dict or JSON/Python-dict string)
+        if import_options:
+            if isinstance(import_options, str):
+                try:
+                    try:
+                        parsed = json.loads(import_options)
+                    except json.JSONDecodeError:
+                        parsed = ast.literal_eval(import_options)
+                    if isinstance(parsed, dict):
+                        import_options = parsed
+                    else:
+                        return "VALIDATION_ERROR: import_options string did not parse to an object"
+                except Exception:
+                    return "VALIDATION_ERROR: import_options must be an object or JSON/dict string"
+            # Merge structured options
+            for key, value in import_options.items():
+                if hasattr(base_options, key):
+                    setattr(base_options, key, value)
+                else:
+                    base_options.import_options[key] = value
+
+        # Get appropriate importer
+        importer = get_importer_for_format(format, base_options)
+
+        # If importing a directory with an importer that doesn't support directories,
+        # fall back to GenericImporter which can delegate per-file.
+        if path.is_dir() and hasattr(importer, "supports_directory"):
+            try:
+                if not importer.supports_directory():
+                    importer = GenericImporter(base_options)
+            except Exception:
+                pass
+
+        # Validate and parse file
+        try:
+            await importer.validate(file_path)
+            notes = await importer.parse(file_path)
+        except ImportValidationError as e:
+            return f"VALIDATION_ERROR: {str(e)}"
+        except ImportProcessingError as e:
+            return f"PROCESSING_ERROR: {str(e)}"
+        except Exception as e:
+            return f"ERROR: Unexpected error during parsing: {str(e)}"
+
+        if not notes:
+            return "WARNING: No notes were extracted from the file"
+
+        # Import notes using the import engine
+        try:
+            client = get_joplin_client()
+            engine = JoplinImportEngine(client, config)
+            result = await engine.import_batch(notes, base_options)
+        except Exception as e:
+            return f"ERROR: Import engine failed: {str(e)}"
+
+        # Format and return result
+        return format_import_result(result, "IMPORT_FROM_FILE")
+
+    except Exception as e:
+        logger.error(f"import_from_file failed: {e}")
+        return f"ERROR: Tool execution failed: {str(e)}"

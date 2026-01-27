@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from ..types.import_types import ImportedNote
+from ..types import ImportedNote
 from .base import BaseImporter
 from .utils import html_to_markdown, extract_hashtags, extract_html_title
 

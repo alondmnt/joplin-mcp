@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any
 
-from ..types.import_types import ImportedNote
+from ..types import ImportedNote
 from .base import BaseImporter
 from .utils import csv_to_markdown_table, extract_hashtags, extract_frontmatter_tags
 

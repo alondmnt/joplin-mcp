@@ -8,8 +8,8 @@ from typing import Dict, List, Optional, Tuple
 
 from joppy.client_api import ClientApi
 
-from .config import JoplinMCPConfig
-from .types.import_types import ImportedNote, ImportOptions, ImportResult
+from joplin_mcp.config import JoplinMCPConfig
+from .types import ImportedNote, ImportOptions, ImportResult
 
 logger = logging.getLogger(__name__)
 

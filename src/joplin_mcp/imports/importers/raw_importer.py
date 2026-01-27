@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..types.import_types import ImportedNote
+from ..types import ImportedNote
 from .base import BaseImporter, ImportProcessingError, ImportValidationError
 
 

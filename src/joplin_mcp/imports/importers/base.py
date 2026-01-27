@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from ..types.import_types import ImportedNote, ImportOptions
+from ..types import ImportedNote, ImportOptions
 from .utils import (
     read_file_with_encoding,
     validate_file_basic,

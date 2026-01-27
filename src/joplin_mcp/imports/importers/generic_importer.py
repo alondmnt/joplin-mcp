@@ -10,7 +10,7 @@ import mimetypes
 from pathlib import Path
 from typing import List, Optional
 
-from ..types.import_types import ImportedNote
+from ..types import ImportedNote
 from .base import BaseImporter, ImportProcessingError, ImportValidationError
 from .utils import csv_to_markdown_table, looks_like_raw_export
 

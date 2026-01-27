@@ -1,9 +1,20 @@
-"""Type definitions for Joplin MCP server."""
+"""Type definitions for Joplin MCP server.
 
-from .import_types import ImportedNote, ImportOptions, ImportResult
+Note: Import types have been moved to joplin_mcp.imports.types.
+This module re-exports them for backward compatibility.
+"""
+from joplin_mcp.imports.types import (
+    ImportedNote,
+    ImportOptions,
+    ImportProcessingError,
+    ImportResult,
+    ImportValidationError,
+)
 
 __all__ = [
     "ImportedNote",
-    "ImportResult",
     "ImportOptions",
+    "ImportProcessingError",
+    "ImportResult",
+    "ImportValidationError",
 ]

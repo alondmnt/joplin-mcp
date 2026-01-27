@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from ..types.import_types import ImportedNote
+from ..types import ImportedNote
 from .base import BaseImporter
 from .utils import (
     extract_all_tags,

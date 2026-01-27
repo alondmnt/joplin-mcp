@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from typing import List
 
-from ..types.import_types import ImportedNote
+from ..types import ImportedNote
 from .base import BaseImporter, ImportProcessingError, ImportValidationError
 
 
