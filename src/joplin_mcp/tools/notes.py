@@ -1113,7 +1113,7 @@ async def find_notes_with_tag(
     """
 
     # Build search query with tag and filters
-    search_parts = [f"tag:{tag_name}"]
+    search_parts = [f'tag:"{tag_name}"']
     search_parts.extend(build_search_filters(task, completed))
     search_query = " ".join(search_parts)
 
@@ -1177,7 +1177,7 @@ async def find_notes_in_notebook(
     """
 
     # Build search query with notebook and filters
-    search_parts = [f"notebook:{notebook_name}"]
+    search_parts = [f'notebook:"{notebook_name}"']
     search_parts.extend(build_search_filters(task, completed))
     search_query = " ".join(search_parts)
 
