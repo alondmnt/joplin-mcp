@@ -80,7 +80,7 @@ class TestUntagNoteImpl:
 
         result = await _untag_note_impl("note_id_111", "old-tag")
 
-        mock_client.remove_tag_from_note.assert_called_once_with("tag_id_789", "note_id_111")
+        mock_client.delete.assert_called_once_with("/tags/tag_id_789/notes/note_id_111")
         assert "removed tag" in result.lower()
         assert "SUCCESS" in result
 

@@ -68,7 +68,7 @@ async def _untag_note_impl(note_id: str, tag_name: str) -> str:
     # Use helper function to get tag ID
     tag_id = get_tag_id_by_name(tag_name)
 
-    client.remove_tag_from_note(tag_id, note_id)
+    client.delete(f"/tags/{tag_id}/notes/{note_id}")
     return format_relation_success(
         "removed tag from note",
         ItemType.note,
