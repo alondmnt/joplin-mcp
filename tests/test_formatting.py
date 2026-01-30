@@ -363,6 +363,15 @@ class TestFormatFindInNoteSummary:
         assert "range=21-25" in result
         assert "page=3/3" in result
 
+    def test_offset_beyond_results(self):
+        """Should handle offset beyond total results (empty page)."""
+        result = format_find_in_note_summary(
+            limit=10, offset=100, total_count=50, showing_count=0
+        )
+        assert "showing=0" in result
+        assert "range=0-0" in result
+        assert "total=50" in result
+
 
 # === Tests for format_note_metadata_lines ===
 

@@ -370,6 +370,23 @@ Content"""
         # Should still include some content even with long frontmatter
         assert result  # Non-empty
 
+    def test_no_frontmatter_short_content(self):
+        """Content without frontmatter but shorter than limit."""
+        body = "Just plain text without any frontmatter"
+        result = create_content_preview(body, 100)
+        assert "Just plain text" in result
+
+    def test_fallback_when_no_meaningful_content(self):
+        """Should fall back to basic truncation when no meaningful content after frontmatter."""
+        # Content that has frontmatter but very short remaining content
+        body = """---
+title: Test
+---
+x"""
+        result = create_content_preview(body, 50)
+        # Should still return something
+        assert result
+
 
 # === Tests for create_toc_only ===
 
@@ -620,6 +637,30 @@ class TestCreateContentPreviewWithSearch:
         assert "Content without" in result
         assert "MATCHING_LINES" not in result
 
+    def test_and_matches_quality_info(self):
+        """Should show quality info for AND matches (all terms match)."""
+        body = "Line with word1 and word2 together"
+        result = create_content_preview_with_search(body, 300, "word1 word2")
+        assert "MATCHING_LINES:" in result
+        # Should have quality info about matching all terms
+        assert "match" in result.lower()
+
+    def test_or_matches_only_quality_info(self):
+        """Should show quality info when only OR matches found."""
+        body = "First line has word1\nSecond line has word2"
+        result = create_content_preview_with_search(body, 300, "word1 word2")
+        assert "MATCHING_LINES:" in result
+
+    def test_with_frontmatter_preserved(self):
+        """Should preserve frontmatter in search preview."""
+        body = """---
+title: Test Note
+---
+Content with searchterm here"""
+        result = create_content_preview_with_search(body, 300, "searchterm")
+        assert "title: Test Note" in result
+        assert "MATCHING_LINES:" in result
+
 
 # === Tests for format_timestamp ===
 
@@ -659,6 +700,11 @@ class TestFormatTimestamp:
         """Invalid type should return None."""
         assert format_timestamp("not a timestamp") is None
         assert format_timestamp([123]) is None
+
+    def test_overflow_timestamp_returns_none(self):
+        """Overflow timestamp should be caught and return None."""
+        # Very large timestamp that causes overflow
+        assert format_timestamp(99999999999999999) is None
 
 
 # === Tests for calculate_content_stats ===
