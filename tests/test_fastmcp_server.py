@@ -356,6 +356,86 @@ def test_get_notebook_id_by_name_uses_path_for_slash():
         assert result == "child"
 
 
+# === Tests for notebook suggestions ===
+
+
+def test_find_notebook_suggestions_basic():
+    """Test _find_notebook_suggestions returns matching notebooks."""
+    from joplin_mcp.notebook_utils import _find_notebook_suggestions
+
+    mock_map = {
+        "nb1": {"title": "Personal", "parent_id": None},
+        "nb2": {"title": "Work", "parent_id": None},
+        "nb3": {"title": "personal-notes", "parent_id": None},
+    }
+
+    suggestions = _find_notebook_suggestions("personal", mock_map)
+    assert len(suggestions) == 2
+    assert "Personal" in suggestions
+    assert "personal-notes" in suggestions
+
+
+def test_find_notebook_suggestions_returns_full_paths():
+    """Test _find_notebook_suggestions returns full paths for nested notebooks."""
+    from joplin_mcp.notebook_utils import _find_notebook_suggestions
+
+    mock_map = {
+        "gtd": {"title": "GTD", "parent_id": None},
+        "projects": {"title": "projects", "parent_id": "gtd"},
+        "refs": {"title": "references", "parent_id": "gtd"},
+        "personal1": {"title": "personal", "parent_id": "projects"},
+        "personal2": {"title": "personal", "parent_id": "refs"},
+    }
+
+    suggestions = _find_notebook_suggestions("personal", mock_map)
+    assert len(suggestions) == 2
+    assert "GTD/projects/personal" in suggestions
+    assert "GTD/references/personal" in suggestions
+
+
+def test_find_notebook_suggestions_limits_results():
+    """Test _find_notebook_suggestions respects limit parameter."""
+    from joplin_mcp.notebook_utils import _find_notebook_suggestions
+
+    mock_map = {f"nb{i}": {"title": f"test{i}", "parent_id": None} for i in range(10)}
+
+    suggestions = _find_notebook_suggestions("test", mock_map, limit=3)
+    assert len(suggestions) == 3
+
+
+def test_find_notebook_suggestions_exact_match_first():
+    """Test _find_notebook_suggestions puts exact matches first."""
+    from joplin_mcp.notebook_utils import _find_notebook_suggestions
+
+    mock_map = {
+        "nb1": {"title": "personal-notes", "parent_id": None},
+        "nb2": {"title": "personal", "parent_id": None},
+        "nb3": {"title": "my-personal-stuff", "parent_id": None},
+    }
+
+    suggestions = _find_notebook_suggestions("personal", mock_map)
+    assert suggestions[0] == "personal"  # Exact match first
+
+
+def test_resolve_notebook_by_path_suggests_on_not_found():
+    """Test _resolve_notebook_by_path provides suggestions when path component not found."""
+    from unittest.mock import patch
+    from joplin_mcp.notebook_utils import _resolve_notebook_by_path
+
+    mock_map = {
+        "gtd": {"title": "GTD", "parent_id": None},
+        "projects": {"title": "projects", "parent_id": "gtd"},
+    }
+
+    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
+        with pytest.raises(ValueError) as exc_info:
+            _resolve_notebook_by_path("projects/personal")
+        error_msg = str(exc_info.value)
+        assert "not found" in error_msg
+        assert "Did you mean" in error_msg
+        assert "GTD/projects" in error_msg
+
+
 def main():
     """Main test runner."""
     print("FastMCP Joplin Server Test Suite")

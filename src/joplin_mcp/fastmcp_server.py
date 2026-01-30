@@ -497,14 +497,28 @@ def _get_item_id_by_name(
         )
 
     if len(matching_items) > 1:
-        item_details = [
-            f"'{getattr(item, 'title', 'Untitled')}' (ID: {getattr(item, 'id', 'unknown')})"
-            for item in matching_items
-        ]
-        raise ValueError(
-            f"Multiple {item_type}s found with name '{name}': {', '.join(item_details)}. "
-            "Use a path like 'Parent/Child' to specify the exact notebook."
-        )
+        if item_type == "notebook":
+            # Show full paths for notebooks to help disambiguation
+            notebooks_map = get_notebook_map_cached()
+            item_paths = [
+                _compute_notebook_path(getattr(item, 'id', ''), notebooks_map, sep="/")
+                or getattr(item, 'title', 'Untitled')
+                for item in matching_items
+            ]
+            paths_str = ", ".join(f"'{p}'" for p in item_paths)
+            raise ValueError(
+                f"Multiple notebooks found with name '{name}'. "
+                f"Use full path to specify: {paths_str}"
+            )
+        else:
+            item_details = [
+                f"'{getattr(item, 'title', 'Untitled')}' (ID: {getattr(item, 'id', 'unknown')})"
+                for item in matching_items
+            ]
+            raise ValueError(
+                f"Multiple {item_type}s found with name '{name}': {', '.join(item_details)}. "
+                "Please be more specific."
+            )
 
     item_id = getattr(matching_items[0], "id", None)
     if not item_id:

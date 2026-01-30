@@ -116,6 +116,38 @@ def invalidate_notebook_map_cache() -> None:
 # === NOTEBOOK PATH RESOLUTION ===
 
 
+def _find_notebook_suggestions(
+    search_term: str,
+    notebooks_map: Dict[str, Dict[str, Optional[str]]],
+    limit: int = 5,
+) -> List[str]:
+    """Find notebook paths containing search_term (case-insensitive).
+
+    Args:
+        search_term: Term to search for in notebook titles
+        notebooks_map: Map of notebook_id -> {title, parent_id}
+        limit: Maximum number of suggestions to return
+
+    Returns:
+        List of full notebook paths containing the search term
+    """
+    search_lower = search_term.lower()
+    matching_paths = []
+
+    for nb_id, info in notebooks_map.items():
+        title = info.get("title", "")
+        if search_lower in title.lower():
+            full_path = _compute_notebook_path(nb_id, notebooks_map, sep="/")
+            if full_path:
+                # Sort key: exact match first, then by path length (shorter = more relevant)
+                is_exact = title.lower() == search_lower
+                matching_paths.append((not is_exact, len(full_path), full_path))
+
+    # Sort by (not_exact, length) and return just the paths
+    matching_paths.sort()
+    return [path for _, _, path in matching_paths[:limit]]
+
+
 def _resolve_notebook_by_path(path: str) -> str:
     """Resolve notebook ID from path like 'Parent/Child/Notebook'.
 
@@ -142,6 +174,14 @@ def _resolve_notebook_by_path(path: str) -> str:
             and (info.get("parent_id") or None) == current_parent
         ]
         if not matches:
+            # Provide suggestions for the missing component
+            suggestions = _find_notebook_suggestions(part, notebooks_map)
+            if suggestions:
+                suggestion_str = ", ".join(f"'{s}'" for s in suggestions)
+                raise ValueError(
+                    f"Notebook '{part}' not found in path '{path}'. "
+                    f"Did you mean: {suggestion_str}?"
+                )
             raise ValueError(f"Notebook '{part}' not found in path '{path}'")
         if len(matches) > 1:
             raise ValueError(f"Multiple notebooks named '{part}' in path '{path}'")
