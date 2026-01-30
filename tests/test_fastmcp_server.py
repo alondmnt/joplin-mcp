@@ -230,14 +230,14 @@ async def test_update_note_has_todo_due_param():
 def test_resolve_notebook_by_path_simple():
     """Test _resolve_notebook_by_path with a simple single-level path."""
     from unittest.mock import patch
-    from joplin_mcp.fastmcp_server import _resolve_notebook_by_path
+    from joplin_mcp.notebook_utils import _resolve_notebook_by_path
 
     mock_map = {
         "nb1": {"title": "Work", "parent_id": None},
         "nb2": {"title": "Personal", "parent_id": None},
     }
 
-    with patch("joplin_mcp.fastmcp_server.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
         result = _resolve_notebook_by_path("Work")
         assert result == "nb1"
 
@@ -245,7 +245,7 @@ def test_resolve_notebook_by_path_simple():
 def test_resolve_notebook_by_path_nested():
     """Test _resolve_notebook_by_path with nested path like 'Parent/Child'."""
     from unittest.mock import patch
-    from joplin_mcp.fastmcp_server import _resolve_notebook_by_path
+    from joplin_mcp.notebook_utils import _resolve_notebook_by_path
 
     mock_map = {
         "parent1": {"title": "Project A", "parent_id": None},
@@ -254,7 +254,7 @@ def test_resolve_notebook_by_path_nested():
         "child2": {"title": "tasks", "parent_id": "parent2"},
     }
 
-    with patch("joplin_mcp.fastmcp_server.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
         # Should find the correct 'tasks' notebook under 'Project A'
         result = _resolve_notebook_by_path("Project A/tasks")
         assert result == "child1"
@@ -267,7 +267,7 @@ def test_resolve_notebook_by_path_nested():
 def test_resolve_notebook_by_path_deeply_nested():
     """Test _resolve_notebook_by_path with deeply nested path."""
     from unittest.mock import patch
-    from joplin_mcp.fastmcp_server import _resolve_notebook_by_path
+    from joplin_mcp.notebook_utils import _resolve_notebook_by_path
 
     mock_map = {
         "root": {"title": "Projects", "parent_id": None},
@@ -275,7 +275,7 @@ def test_resolve_notebook_by_path_deeply_nested():
         "leaf": {"title": "Tasks", "parent_id": "mid"},
     }
 
-    with patch("joplin_mcp.fastmcp_server.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
         result = _resolve_notebook_by_path("Projects/Work/Tasks")
         assert result == "leaf"
 
@@ -283,13 +283,13 @@ def test_resolve_notebook_by_path_deeply_nested():
 def test_resolve_notebook_by_path_case_insensitive():
     """Test _resolve_notebook_by_path is case-insensitive."""
     from unittest.mock import patch
-    from joplin_mcp.fastmcp_server import _resolve_notebook_by_path
+    from joplin_mcp.notebook_utils import _resolve_notebook_by_path
 
     mock_map = {
         "nb1": {"title": "Work Projects", "parent_id": None},
     }
 
-    with patch("joplin_mcp.fastmcp_server.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
         result = _resolve_notebook_by_path("work projects")
         assert result == "nb1"
         result = _resolve_notebook_by_path("WORK PROJECTS")
@@ -299,13 +299,13 @@ def test_resolve_notebook_by_path_case_insensitive():
 def test_resolve_notebook_by_path_not_found():
     """Test _resolve_notebook_by_path raises ValueError when notebook not found."""
     from unittest.mock import patch
-    from joplin_mcp.fastmcp_server import _resolve_notebook_by_path
+    from joplin_mcp.notebook_utils import _resolve_notebook_by_path
 
     mock_map = {
         "nb1": {"title": "Work", "parent_id": None},
     }
 
-    with patch("joplin_mcp.fastmcp_server.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
         with pytest.raises(ValueError) as exc_info:
             _resolve_notebook_by_path("NonExistent/tasks")
         assert "NonExistent" in str(exc_info.value)
@@ -314,7 +314,7 @@ def test_resolve_notebook_by_path_not_found():
 
 def test_resolve_notebook_by_path_empty():
     """Test _resolve_notebook_by_path raises ValueError for empty path."""
-    from joplin_mcp.fastmcp_server import _resolve_notebook_by_path
+    from joplin_mcp.notebook_utils import _resolve_notebook_by_path
 
     with pytest.raises(ValueError) as exc_info:
         _resolve_notebook_by_path("")
@@ -328,14 +328,14 @@ def test_resolve_notebook_by_path_empty():
 def test_resolve_notebook_by_path_handles_whitespace():
     """Test _resolve_notebook_by_path handles whitespace in path components."""
     from unittest.mock import patch
-    from joplin_mcp.fastmcp_server import _resolve_notebook_by_path
+    from joplin_mcp.notebook_utils import _resolve_notebook_by_path
 
     mock_map = {
         "nb1": {"title": "Work", "parent_id": None},
         "nb2": {"title": "Tasks", "parent_id": "nb1"},
     }
 
-    with patch("joplin_mcp.fastmcp_server.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
         # Extra whitespace around components should be handled
         result = _resolve_notebook_by_path("  Work  /  Tasks  ")
         assert result == "nb2"
@@ -344,14 +344,14 @@ def test_resolve_notebook_by_path_handles_whitespace():
 def test_get_notebook_id_by_name_uses_path_for_slash():
     """Test get_notebook_id_by_name uses path resolution when '/' is present."""
     from unittest.mock import patch
-    from joplin_mcp.fastmcp_server import get_notebook_id_by_name
+    from joplin_mcp.notebook_utils import get_notebook_id_by_name
 
     mock_map = {
         "parent": {"title": "Projects", "parent_id": None},
         "child": {"title": "Work", "parent_id": "parent"},
     }
 
-    with patch("joplin_mcp.fastmcp_server.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
         result = get_notebook_id_by_name("Projects/Work")
         assert result == "child"
 
