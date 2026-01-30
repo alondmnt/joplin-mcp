@@ -436,6 +436,91 @@ def test_resolve_notebook_by_path_suggests_on_not_found():
         assert "GTD/projects" in error_msg
 
 
+# === Tests for notebook_utils edge cases ===
+
+
+def test_build_notebook_map_skips_notebooks_without_id():
+    """Test _build_notebook_map skips notebooks without id."""
+    from joplin_mcp.notebook_utils import _build_notebook_map
+    from unittest.mock import MagicMock
+
+    # Notebook with no id attribute
+    nb_no_id = MagicMock(spec=[])  # No attributes
+    nb_with_id = MagicMock()
+    nb_with_id.id = "nb1"
+    nb_with_id.title = "Test"
+    nb_with_id.parent_id = None
+
+    result = _build_notebook_map([nb_no_id, nb_with_id])
+    assert "nb1" in result
+    assert len(result) == 1
+
+
+def test_build_notebook_map_handles_exception():
+    """Test _build_notebook_map handles exceptions gracefully."""
+    from joplin_mcp.notebook_utils import _build_notebook_map
+
+    # Object that raises exception when accessed
+    class BadNotebook:
+        @property
+        def id(self):
+            raise RuntimeError("Bad notebook")
+
+    good_nb = type("Notebook", (), {"id": "nb1", "title": "Good", "parent_id": None})()
+    result = _build_notebook_map([BadNotebook(), good_nb])
+    assert "nb1" in result
+
+
+def test_compute_notebook_path_returns_none_for_empty():
+    """Test _compute_notebook_path returns None for empty notebook_id."""
+    from joplin_mcp.notebook_utils import _compute_notebook_path
+
+    assert _compute_notebook_path(None, {}) is None
+    assert _compute_notebook_path("", {}) is None
+
+
+def test_invalidate_notebook_map_cache():
+    """Test invalidate_notebook_map_cache resets cache."""
+    from joplin_mcp.notebook_utils import (
+        invalidate_notebook_map_cache,
+        _NOTEBOOK_MAP_CACHE,
+    )
+
+    # Set some cache values
+    _NOTEBOOK_MAP_CACHE["built_at"] = 999.0
+    _NOTEBOOK_MAP_CACHE["map"] = {"test": "value"}
+
+    invalidate_notebook_map_cache()
+
+    assert _NOTEBOOK_MAP_CACHE["built_at"] == 0.0
+    assert _NOTEBOOK_MAP_CACHE["map"] is None
+
+
+def test_get_notebook_cache_ttl_from_env():
+    """Test _get_notebook_cache_ttl reads from environment."""
+    import os
+    from joplin_mcp.notebook_utils import _get_notebook_cache_ttl
+
+    # Test with valid env value
+    os.environ["JOPLIN_MCP_NOTEBOOK_CACHE_TTL"] = "120"
+    assert _get_notebook_cache_ttl() == 120
+
+    # Test clamping to max
+    os.environ["JOPLIN_MCP_NOTEBOOK_CACHE_TTL"] = "9999"
+    assert _get_notebook_cache_ttl() == 3600
+
+    # Test clamping to min
+    os.environ["JOPLIN_MCP_NOTEBOOK_CACHE_TTL"] = "1"
+    assert _get_notebook_cache_ttl() == 5
+
+    # Test invalid value falls back to default
+    os.environ["JOPLIN_MCP_NOTEBOOK_CACHE_TTL"] = "invalid"
+    assert _get_notebook_cache_ttl() == 90
+
+    # Cleanup
+    del os.environ["JOPLIN_MCP_NOTEBOOK_CACHE_TTL"]
+
+
 def main():
     """Main test runner."""
     print("FastMCP Joplin Server Test Suite")
