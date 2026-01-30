@@ -1,3 +1,22 @@
+# [v0.5.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.5.0)
+*Released on 2026-01-31*
+
+- added: path-based notebook resolution (e.g., `Parent/Child/Notebook`)
+- added: notebook suggestions on path resolution errors
+- added: `todo_due` parameter to `create_note` and `update_note`
+- added: `--version` CLI flag
+- added: single-note cache for improved sequential reading performance
+- added: security hardening and healthcheck to Dockerfile
+- added: docker-compose.yml example for local testing
+- fixed: `untag_note` tool using incorrect joppy API method
+- fixed: quote notebook/tag names in search queries
+- refactored: split fastmcp_server.py into modular tool packages
+- refactored: extract formatting, content, and notebook utilities
+
+**Full Changelog**: https://github.com/alondmnt/joplin-mcp/compare/v0.4.1...v0.5.0
+
+---
+
 # [v0.4.1](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.4.1)
 *Released on 2025-10-10T00:20:02Z*
 
