@@ -1,0 +1,23 @@
+# Example docker-compose configuration for local testing
+# Usage: docker compose up
+#
+# Make sure JOPLIN_TOKEN is set in your environment or in a .env file
+
+services:
+  joplin-mcp:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - JOPLIN_TOKEN=${JOPLIN_TOKEN}
+      # For macOS/Windows Docker Desktop, use host.docker.internal
+      # For Linux, use 172.17.0.1 or configure network_mode: host
+      - JOPLIN_HOST=${JOPLIN_HOST:-host.docker.internal}
+      - JOPLIN_PORT=${JOPLIN_PORT:-41184}
+      - MCP_TRANSPORT=http
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8000
+      - MCP_LOG_LEVEL=${MCP_LOG_LEVEL:-info}
+    # Uncomment to mount config directory for persistent settings
+    # volumes:
+    #   - ./config:/config:ro
