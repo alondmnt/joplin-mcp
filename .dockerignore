@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# Python
+.venv
+.env
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+dist
+build
+
+# Testing
+tests
+test_files
+htmlcov
+.coverage
+.pytest_cache
+
+# Linting/Type checking
+.mypy_cache
+.ruff_cache
+.pre-commit-config.yaml
+
+# Documentation (keep README for pip install)
+docs
+*.md
+!README.md
+
+# IDE
+.vscode
+.idea
+
+# Docker (avoid recursive context)
+docker-compose*.yml
+Dockerfile
+
+# Misc
+Makefile
