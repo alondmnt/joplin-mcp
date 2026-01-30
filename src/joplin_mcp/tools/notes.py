@@ -621,7 +621,10 @@ async def get_links(
 @create_tool("create_note", "Create note")
 async def create_note(
     title: Annotated[RequiredStringType, Field(description="Note title")],
-    notebook_name: Annotated[RequiredStringType, Field(description="Notebook name")],
+    notebook_name: Annotated[
+        RequiredStringType,
+        Field(description="Notebook name or path (e.g., 'Work' or 'Projects/Work/Tasks')")
+    ],
     body: Annotated[str, Field(description="Note content")] = "",
     is_todo: Annotated[
         OptionalBoolType, Field(description="Create as todo (default: False)")
@@ -639,6 +642,10 @@ async def create_note(
     Creates a new note with the specified title, content, and properties. Uses notebook name
     for easier identification instead of requiring notebook IDs.
 
+    Notebook can be specified by name or path:
+    - "Work" - matches notebook named "Work" (must be unique)
+    - "Projects/Work" - matches "Work" notebook inside "Projects"
+
     Returns:
         str: Success message with the created note's title and unique ID.
 
@@ -646,6 +653,7 @@ async def create_note(
         - create_note("Shopping List", "Personal Notes", "- Milk\n- Eggs", True, False) - Create uncompleted todo
         - create_note("Meeting Notes", "Work Projects", "# Meeting with Client") - Create regular note
         - create_note("Task", "Work", "", True, False, "2024-12-31T17:00:00") - Create todo with due date
+        - create_note("Task", "Project A/tasks", "body") - Create note in "tasks" sub-notebook under "Project A"
     """
 
     # Runtime validation for Jan AI compatibility while preserving functionality
@@ -1144,7 +1152,8 @@ async def find_notes_with_tag(
 @create_tool("find_notes_in_notebook", "Find notes in notebook")
 async def find_notes_in_notebook(
     notebook_name: Annotated[
-        RequiredStringType, Field(description="Notebook name to search in")
+        RequiredStringType,
+        Field(description="Notebook name or path (e.g., 'Work' or 'Projects/Work/Tasks')")
     ],
     limit: Annotated[
         LimitType, Field(description="Max results (1-100, default: 20)")
@@ -1166,6 +1175,10 @@ async def find_notes_in_notebook(
 
     Use this when you want to find all notes in a specific notebook.
 
+    Notebook can be specified by name or path:
+    - "Work" - matches notebook named "Work" (must be unique)
+    - "Projects/Work" - matches "Work" notebook inside "Projects"
+
     Returns:
         str: List of all notes in the specified notebook, with pagination information.
 
@@ -1174,17 +1187,31 @@ async def find_notes_in_notebook(
         - find_notes_in_notebook("Personal Notes", limit=10, offset=10) - Find notes in "Personal Notes" (page 2)
         - find_notes_in_notebook("Personal Notes", task=True) - Find only tasks in "Personal Notes"
         - find_notes_in_notebook("Projects", task=True, completed=False) - Find only uncompleted tasks in "Projects"
+        - find_notes_in_notebook("Project A/tasks") - Find notes in "tasks" sub-notebook under "Project A"
     """
 
-    # Build search query with notebook and filters
-    search_parts = [f'notebook:"{notebook_name}"']
-    search_parts.extend(build_search_filters(task, completed))
-    search_query = " ".join(search_parts)
+    # Runtime validation
+    task = flexible_bool_converter(task)
+    completed = flexible_bool_converter(completed)
 
-    # Use search_all API with notebook constraint for full pagination support
+    # Resolve notebook name/path to ID (ensures exact match)
+    notebook_id = get_notebook_id_by_name(notebook_name)
+
+    # Fetch notes by notebook_id for precision (search API can't distinguish same-named notebooks)
     client = get_joplin_client()
-    results = client.search_all(query=search_query, fields=COMMON_NOTE_FIELDS)
+    results = client.get_all_notes(notebook_id=notebook_id, fields=COMMON_NOTE_FIELDS)
     notes = process_search_results(results)
+
+    # Apply filters client-side
+    if task is not None:
+        notes = [n for n in notes if bool(getattr(n, "is_todo", 0)) == task]
+
+    if completed is not None and task:
+        notes = [n for n in notes if bool(getattr(n, "todo_completed", 0)) == completed]
+
+    # Sort by updated time, newest first
+    notes = sorted(notes, key=lambda x: getattr(x, "updated_time", 0), reverse=True)
+    search_query = f'notebook:"{notebook_name}"'
 
     # Apply pagination
     paginated_notes, total_count = apply_pagination(notes, limit, offset)

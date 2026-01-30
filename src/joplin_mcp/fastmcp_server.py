@@ -583,7 +583,7 @@ def _get_item_id_by_name(
         ]
         raise ValueError(
             f"Multiple {item_type}s found with name '{name}': {', '.join(item_details)}. "
-            "Please be more specific."
+            "Use a path like 'Parent/Child' to specify the exact notebook."
         )
 
     item_id = getattr(matching_items[0], "id", None)
@@ -593,11 +593,45 @@ def _get_item_id_by_name(
     return item_id
 
 
-def get_notebook_id_by_name(name: str) -> str:
-    """Get notebook ID by name with helpful error messages.
+def _resolve_notebook_by_path(path: str) -> str:
+    """Resolve notebook ID from path like 'Parent/Child/Notebook'.
 
     Args:
-        name: The notebook name to search for
+        path: Notebook path with '/' separators (e.g., 'Projects/Work/Tasks')
+
+    Returns:
+        str: The notebook ID of the final path component
+
+    Raises:
+        ValueError: If path is empty or any component not found/ambiguous
+    """
+    parts = [p.strip() for p in path.split("/") if p.strip()]
+    if not parts:
+        raise ValueError("Empty notebook path")
+
+    notebooks_map = get_notebook_map_cached(force_refresh=True)
+
+    current_parent: Optional[str] = None
+    for part in parts:
+        matches = [
+            nb_id for nb_id, info in notebooks_map.items()
+            if info["title"].lower() == part.lower()
+            and (info.get("parent_id") or None) == current_parent
+        ]
+        if not matches:
+            raise ValueError(f"Notebook '{part}' not found in path '{path}'")
+        if len(matches) > 1:
+            raise ValueError(f"Multiple notebooks named '{part}' in path '{path}'")
+        current_parent = matches[0]
+
+    return current_parent
+
+
+def get_notebook_id_by_name(name: str) -> str:
+    """Get notebook ID by name or path with helpful error messages.
+
+    Args:
+        name: Notebook name or path (e.g., 'Work' or 'Projects/Work/Tasks')
 
     Returns:
         str: The notebook ID
@@ -605,6 +639,11 @@ def get_notebook_id_by_name(name: str) -> str:
     Raises:
         ValueError: If notebook not found or multiple matches
     """
+    # If path contains '/', resolve by path
+    if "/" in name:
+        return _resolve_notebook_by_path(name)
+
+    # Otherwise, use flat name matching
     client = get_joplin_client()
     return _get_item_id_by_name(
         name=name,
