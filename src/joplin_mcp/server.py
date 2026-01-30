@@ -9,6 +9,8 @@ import sys
 import logging
 from pathlib import Path
 
+from joplin_mcp import __version__
+
 
 def main():
     """Main entry point for the FastMCP server."""
@@ -16,6 +18,12 @@ def main():
 
     # Parse command line arguments for transport options
     parser = argparse.ArgumentParser(description="Joplin MCP Server")
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="version",
+        version=f"joplin-mcp {__version__}",
+    )
     parser.add_argument(
         "--config",
         "-c",

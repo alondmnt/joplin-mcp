@@ -772,25 +772,17 @@ async def find_notes(
         Field(description="Filter by completion status (default: None)"),
     ] = None,
 ) -> str:
-    """Find notes by searching their titles and content, with support for listing all notes and pagination.
+    """Find notes by searching titles and content. Use "*" to list all notes.
 
-    MAIN FUNCTION FOR TEXT SEARCHES AND LISTING ALL NOTES!
-
-    Versatile search function that can find specific text in notes OR list all notes with filtering and pagination.
-    Use query="*" to list all notes without text filtering. Use specific text to find notes containing those words.
-
-    Returns:
-        str: List of notes matching criteria, with title, ID, content preview, and dates.
-             Includes pagination info (total results, current page range).
+    Query syntax: "exact phrase", title:word, body:word, -exclude, word1 OR word2
 
     Examples:
-        - find_notes("*") - List first 20 notes (all notes)
-        - find_notes("meeting") - Find all notes containing "meeting"
+        - find_notes("*") - List all notes
+        - find_notes("meeting") - Find notes containing "meeting"
         - find_notes("*", task=True) - List all tasks
-        - find_notes("*", limit=20, offset=20) - List notes 21-40 (page 2)
+        - find_notes("*", limit=20, offset=20) - Page 2
 
-        TIP: For tag-specific searches, use find_notes_with_tag("tag_name") instead.
-        TIP: For notebook-specific searches, use find_notes_in_notebook("notebook_name") instead.
+    TIP: Use find_notes_with_tag() or find_notes_in_notebook() for filtered searches.
     """
 
     # Runtime validation for Jan AI compatibility while preserving functionality
