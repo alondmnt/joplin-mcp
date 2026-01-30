@@ -1,7 +1,39 @@
 """Note tools for Joplin MCP."""
+import time
 from typing import Annotated, Any, Dict, List, Optional, Union
 
 from pydantic import Field
+
+
+# === NOTE CACHE FOR SEQUENTIAL READING ===
+# Caches one note to avoid re-fetching when reading in chunks.
+
+_cached_note: Any = None
+_cached_note_id: Optional[str] = None
+_cached_at: float = 0.0
+
+
+def _get_cached_note(note_id: str) -> Any:
+    """Return cached note if it matches and is fresh (30s), else None."""
+    if _cached_note_id == note_id and (time.monotonic() - _cached_at) < 30:
+        return _cached_note
+    return None
+
+
+def _set_cached_note(note_id: str, note: Any) -> None:
+    """Cache a note (replaces any previous)."""
+    global _cached_note, _cached_note_id, _cached_at
+    _cached_note = note
+    _cached_note_id = note_id
+    _cached_at = time.monotonic()
+
+
+def _clear_note_cache() -> None:
+    """Clear the note cache."""
+    global _cached_note, _cached_note_id, _cached_at
+    _cached_note = None
+    _cached_note_id = None
+    _cached_at = 0.0
 
 from joplin_mcp.content_utils import (
     create_content_preview,
@@ -381,7 +413,15 @@ async def get_note(
         )
 
     client = get_joplin_client()
-    note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
+
+    # For sequential reading, use cache to avoid re-fetching
+    if start_line is not None and include_body:
+        note = _get_cached_note(note_id)
+        if note is None:
+            note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
+            _set_cached_note(note_id, note)
+    else:
+        note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
 
     # Handle line extraction first (for sequential reading)
     if start_line is not None:
@@ -731,6 +771,8 @@ async def update_note(
 
     client = get_joplin_client()
     client.modify_note(note_id, **update_data)
+    _clear_note_cache()
+
     return format_update_success(ItemType.note, note_id)
 
 
@@ -752,6 +794,10 @@ async def delete_note(
 
     client = get_joplin_client()
     client.delete_note(note_id)
+
+    # Invalidate cache for deleted note
+    _clear_note_cache()
+
     return format_delete_success(ItemType.note, note_id)
 
 

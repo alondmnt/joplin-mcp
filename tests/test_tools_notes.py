@@ -1,8 +1,59 @@
 """Tests for tools/notes.py - Note tool helpers and tool functions."""
 
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+# === Tests for note body cache ===
+
+
+class TestNoteCache:
+    """Tests for the single-note cache used in sequential reading."""
+
+    def test_cache_and_retrieve(self):
+        """Should cache and retrieve note."""
+        from joplin_mcp.tools.notes import _set_cached_note, _get_cached_note, _clear_note_cache
+
+        _clear_note_cache()
+        mock_note = MagicMock()
+        mock_note.body = "Test content"
+
+        _set_cached_note("note123", mock_note)
+        result = _get_cached_note("note123")
+
+        assert result is mock_note
+
+    def test_cache_miss_returns_none(self):
+        """Should return None for cache miss."""
+        from joplin_mcp.tools.notes import _get_cached_note, _clear_note_cache
+
+        _clear_note_cache()
+        assert _get_cached_note("nonexistent") is None
+
+    def test_caching_new_note_replaces_old(self):
+        """Should replace old cached note when caching a new one."""
+        from joplin_mcp.tools.notes import _set_cached_note, _get_cached_note, _clear_note_cache
+
+        _clear_note_cache()
+        note1, note2 = MagicMock(), MagicMock()
+
+        _set_cached_note("note1", note1)
+        _set_cached_note("note2", note2)
+
+        assert _get_cached_note("note1") is None
+        assert _get_cached_note("note2") is note2
+
+    def test_clear_cache(self):
+        """Should clear the cached note."""
+        from joplin_mcp.tools.notes import _set_cached_note, _get_cached_note, _clear_note_cache
+
+        _clear_note_cache()
+        _set_cached_note("note1", MagicMock())
+
+        _clear_note_cache()
+        assert _get_cached_note("note1") is None
 
 
 # === Tests for _create_note_object ===
