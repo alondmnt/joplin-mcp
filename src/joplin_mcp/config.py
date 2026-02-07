@@ -429,7 +429,7 @@ class JoplinMCPConfig:
         timeout = ConfigParser.parse_int(timeout_str, "timeout") if timeout_str else 60
 
         verify_ssl_str = ConfigParser.get_env_var("VERIFY_SSL", prefix)
-        verify_ssl = ConfigParser.parse_bool(verify_ssl_str) if verify_ssl_str else True
+        verify_ssl = ConfigParser.parse_bool(verify_ssl_str) if verify_ssl_str else None
 
         # Load tools configuration from environment
         tools = {}
@@ -1043,7 +1043,7 @@ class JoplinMCPConfig:
         verify_ssl = (
             ConfigParser.parse_bool(verify_ssl_str, strict=True)
             if verify_ssl_str
-            else True
+            else None
         )
 
         return cls(

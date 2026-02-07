@@ -44,7 +44,7 @@ class TestConfigEnvironmentVariables:
             assert config.port == 41184
             assert config.token is None
             assert config.timeout == 60
-            assert config.verify_ssl is True
+            assert config.verify_ssl is False
 
     def test_config_validates_required_fields(self):
         """Test that configuration validation fails when required fields are missing."""
