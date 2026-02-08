@@ -309,11 +309,41 @@ Fine-tune which operations the AI can perform by editing your config:
 Alternative to JSON configuration:
 
 ```bash
+# Connection settings
 export JOPLIN_TOKEN="your_api_token_here"
 export JOPLIN_HOST="localhost"
 export JOPLIN_PORT="41184"
 export JOPLIN_TIMEOUT="30"
 ```
+
+#### Per-Tool Env Vars
+
+Every tool can be toggled individually via `JOPLIN_TOOL_<NAME>=true|false`. These take precedence over config file settings.
+
+| Env var | Default |
+|---------|---------|
+| `JOPLIN_TOOL_FIND_NOTES` | `true` |
+| `JOPLIN_TOOL_FIND_NOTES_WITH_TAG` | `true` |
+| `JOPLIN_TOOL_FIND_NOTES_IN_NOTEBOOK` | `true` |
+| `JOPLIN_TOOL_GET_ALL_NOTES` | `false` |
+| `JOPLIN_TOOL_GET_NOTE` | `true` |
+| `JOPLIN_TOOL_GET_LINKS` | `true` |
+| `JOPLIN_TOOL_CREATE_NOTE` | `true` |
+| `JOPLIN_TOOL_UPDATE_NOTE` | `true` |
+| `JOPLIN_TOOL_DELETE_NOTE` | `false` |
+| `JOPLIN_TOOL_LIST_NOTEBOOKS` | `true` |
+| `JOPLIN_TOOL_CREATE_NOTEBOOK` | `true` |
+| `JOPLIN_TOOL_UPDATE_NOTEBOOK` | `false` |
+| `JOPLIN_TOOL_DELETE_NOTEBOOK` | `false` |
+| `JOPLIN_TOOL_LIST_TAGS` | `true` |
+| `JOPLIN_TOOL_CREATE_TAG` | `true` |
+| `JOPLIN_TOOL_UPDATE_TAG` | `false` |
+| `JOPLIN_TOOL_DELETE_TAG` | `false` |
+| `JOPLIN_TOOL_GET_TAGS_BY_NOTE` | `true` |
+| `JOPLIN_TOOL_TAG_NOTE` | `true` |
+| `JOPLIN_TOOL_UNTAG_NOTE` | `true` |
+| `JOPLIN_TOOL_PING_JOPLIN` | `true` |
+| `JOPLIN_TOOL_IMPORT_FROM_FILE` | `false` |
 
 ### HTTP Transport Support
 
@@ -360,13 +390,13 @@ Note: Claude Desktop currently uses STDIO transport and does not consume HTTP/SS
 |--------|---------|-------------|
 | `tools.create_note` | `true` | Allow creating new notes |
 | `tools.update_note` | `true` | Allow modifying existing notes |
-| `tools.delete_note` | `true` | Allow deleting notes |
+| `tools.delete_note` | `false` | Allow deleting notes *(disabled by default — destructive)* |
 | `tools.create_notebook` | `true` | Allow creating new notebooks |
 | `tools.update_notebook` | `false` | Allow modifying notebook titles |
-| `tools.delete_notebook` | `true` | Allow deleting notebooks |
+| `tools.delete_notebook` | `false` | Allow deleting notebooks *(disabled by default — destructive)* |
 | `tools.create_tag` | `true` | Allow creating new tags |
 | `tools.update_tag` | `false` | Allow modifying tag titles |
-| `tools.delete_tag` | `true` | Allow deleting tags |
+| `tools.delete_tag` | `false` | Allow deleting tags *(disabled by default — destructive)* |
 | `tools.tag_note` | `true` | Allow adding tags to notes |
 | `tools.untag_note` | `true` | Allow removing tags from notes |
 | `tools.find_notes` | `true` | Allow text search across notes (with task filtering) |
@@ -374,6 +404,7 @@ Note: Claude Desktop currently uses STDIO transport and does not consume HTTP/SS
 | `tools.find_notes_in_notebook` | `true` | Allow finding notes by notebook (with task filtering) |
 | `tools.get_all_notes` | `false` | Allow getting all notes (disabled by default - can fill context window) |
 | `tools.get_note` | `true` | Allow getting specific notes |
+| `tools.get_links` | `true` | Allow extracting links to other notes |
 | `tools.list_notebooks` | `true` | Allow listing all notebooks |
 | `tools.list_tags` | `true` | Allow listing all tags |
 | `tools.get_tags_by_note` | `true` | Allow getting tags for specific notes |
