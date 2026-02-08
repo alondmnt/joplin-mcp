@@ -973,12 +973,18 @@ class TestConfigToolConfiguration:
         enabled_tools = config.get_enabled_tools()
         disabled_tools = config.get_disabled_tools()
         assert len(enabled_tools) + len(disabled_tools) == len(config.DEFAULT_TOOLS)
+        assert len(enabled_tools) == 15
+        assert len(disabled_tools) == 7
 
         # Check specific tools
         assert config.is_tool_enabled("find_notes")
         assert config.is_tool_enabled("create_note")
-        assert config.is_tool_enabled("delete_note")
         assert config.is_tool_enabled("ping_joplin")
+
+        # Deletion tools disabled by default (destructive)
+        assert not config.is_tool_enabled("delete_note")
+        assert not config.is_tool_enabled("delete_notebook")
+        assert not config.is_tool_enabled("delete_tag")
 
     def test_config_tools_from_dict_initialization(self):
         """Test tool configuration via direct initialization."""
@@ -1138,24 +1144,23 @@ class TestConfigToolConfiguration:
         """Test getting lists of enabled/disabled tools."""
         config = JoplinMCPConfig(token="test-token")
 
-        # Initially all tools should be enabled
         enabled = config.get_enabled_tools()
         disabled = config.get_disabled_tools()
 
         initial_enabled_count = len(enabled)
         initial_disabled_count = len(disabled)
 
-        # Disable some tools
-        config.disable_tool("delete_note")
-        config.disable_tool("delete_notebook")
+        # Disable some tools that are enabled by default
+        config.disable_tool("create_note")
+        config.disable_tool("update_note")
 
         enabled = config.get_enabled_tools()
         disabled = config.get_disabled_tools()
 
         assert len(enabled) == initial_enabled_count - 2
         assert len(disabled) == initial_disabled_count + 2
-        assert "delete_note" in disabled
-        assert "delete_notebook" in disabled
+        assert "create_note" in disabled
+        assert "update_note" in disabled
 
     def test_config_tools_validation_invalid_tool_name(self):
         """Test validation of invalid tool names in configuration."""
@@ -1284,11 +1289,11 @@ class TestConfigToolConfiguration:
     def test_config_tools_copy_includes_tools(self):
         """Test that configuration copy includes tools configuration."""
         config = JoplinMCPConfig(token="test-token")
-        config.disable_tool("delete_note")
+        config.disable_tool("create_note")
 
         copied_config = config.copy()
 
-        assert not copied_config.is_tool_enabled("delete_note")
+        assert not copied_config.is_tool_enabled("create_note")
         assert copied_config.is_tool_enabled("find_notes")
 
     def test_config_tools_copy_with_tools_override(self):
@@ -1304,21 +1309,21 @@ class TestConfigToolConfiguration:
         """Test that to_dict includes tools configuration."""
         config = JoplinMCPConfig(token="test-token")
         initial_disabled_count = len(config.get_disabled_tools())
-        config.disable_tool("delete_note")
+        config.disable_tool("create_note")
 
         config_dict = config.to_dict()
 
         assert "tools" in config_dict
         assert "enabled_tools_count" in config_dict
         assert "disabled_tools_count" in config_dict
-        assert not config_dict["tools"]["delete_note"]
+        assert not config_dict["tools"]["create_note"]
         assert config_dict["disabled_tools_count"] == initial_disabled_count + 1
 
     def test_config_tools_repr_includes_tools_summary(self):
         """Test that __repr__ includes tools summary."""
         config = JoplinMCPConfig(token="test-token")
-        config.disable_tool("delete_note")
-        config.disable_tool("delete_notebook")
+        config.disable_tool("create_note")
+        config.disable_tool("update_note")
 
         repr_str = repr(config)
 
@@ -1330,7 +1335,7 @@ class TestConfigToolConfiguration:
     def test_config_tools_save_to_file_includes_tools(self):
         """Test that save_to_file includes tools configuration."""
         config = JoplinMCPConfig(token="test-token")
-        config.disable_tool("delete_note")
+        config.disable_tool("create_note")
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             temp_path = f.name
@@ -1342,7 +1347,7 @@ class TestConfigToolConfiguration:
                 saved_data = json.load(f)
 
             assert "tools" in saved_data
-            assert not saved_data["tools"]["delete_note"]
+            assert not saved_data["tools"]["create_note"]
             assert saved_data["tools"]["find_notes"]
 
         finally:
@@ -1351,7 +1356,7 @@ class TestConfigToolConfiguration:
     def test_config_tools_connection_info_includes_tools_summary(self):
         """Test that connection_info includes tools summary."""
         config = JoplinMCPConfig(token="test-token")
-        config.disable_tool("delete_note")
+        config.disable_tool("create_note")
 
         conn_info = config.connection_info
 

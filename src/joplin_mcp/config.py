@@ -196,7 +196,7 @@ class JoplinMCPConfig:
         "JOPLIN_SSL_VERIFY": "JOPLIN_VERIFY_SSL",
     }
 
-    # Default tool configurations - optimized for LLMs (19 tools total)
+    # Default tool configurations - optimised for LLMs (22 tools total)
     DEFAULT_TOOLS = {
         # Finding notes (5 tools enabled by default, 1 disabled)
         "find_notes": True,  # Find notes by text content
@@ -208,17 +208,17 @@ class JoplinMCPConfig:
         # Managing notes (3 tools)
         "create_note": True,  # Create new note
         "update_note": True,  # Update existing note
-        "delete_note": True,  # Delete note
+        "delete_note": False,  # Delete note - disabled by default (destructive)
         # Managing notebooks (4 tools)
         "list_notebooks": True,  # List all notebooks
         "create_notebook": True,  # Create new notebook
         "update_notebook": False,  # Update notebook (disabled by default)
-        "delete_notebook": True,  # Delete notebook
+        "delete_notebook": False,  # Delete notebook - disabled by default (destructive)
         # Managing tags (5 tools)
         "list_tags": True,  # List all tags
         "create_tag": True,  # Create new tag
         "update_tag": False,  # Update tag (disabled by default)
-        "delete_tag": True,  # Delete tag
+        "delete_tag": False,  # Delete tag - disabled by default (destructive)
         "get_tags_by_note": True,  # Get tags for a note
         # Tag-note relationships (2 tools)
         "tag_note": True,  # Add tag to note
