@@ -17,7 +17,6 @@ Example usage:
 """
 
 import logging
-from typing import Optional
 
 # Import configuration
 from .config import JoplinMCPConfig
@@ -37,25 +36,6 @@ __all__ = [
     "__license__",
     "__description__",
 ]
-
-
-def get_version() -> str:
-    """Get the current version of joplin-mcp."""
-    return __version__
-
-
-def get_server_info() -> dict:
-    """Get server information including version, supported tools, etc."""
-    return {
-        "name": "joplin-mcp",
-        "version": __version__,
-        "description": "FastMCP-based " + __description__,
-        "author": __author__,
-        "license": __license__,
-        "implementation": "FastMCP",
-        "supported_tools": list(JoplinMCPConfig.DEFAULT_TOOLS.keys()),
-        "mcp_version": "1.0.0",
-    }
 
 
 # Package-level logging configuration
