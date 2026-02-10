@@ -18,7 +18,7 @@ A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://jop
 
 ## What You Can Do
 
-This MCP server provides **23 optimized tools** for comprehensive Joplin integration:
+This MCP server provides **24 optimized tools** for comprehensive Joplin integration:
 
 ### **Note Management**
 - **Find & Search**: `find_notes`, `find_notes_with_tag`, `find_notes_in_notebook`, `get_all_notes`
@@ -325,6 +325,7 @@ Every tool can be toggled individually via `JOPLIN_TOOL_<NAME>=true|false`. Thes
 | `JOPLIN_TOOL_FIND_NOTES` | `true` |
 | `JOPLIN_TOOL_FIND_NOTES_WITH_TAG` | `true` |
 | `JOPLIN_TOOL_FIND_NOTES_IN_NOTEBOOK` | `true` |
+| `JOPLIN_TOOL_FIND_IN_NOTE` | `true` |
 | `JOPLIN_TOOL_GET_ALL_NOTES` | `false` |
 | `JOPLIN_TOOL_GET_NOTE` | `true` |
 | `JOPLIN_TOOL_GET_LINKS` | `true` |

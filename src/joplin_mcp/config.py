@@ -196,12 +196,13 @@ class JoplinMCPConfig:
         "JOPLIN_SSL_VERIFY": "JOPLIN_VERIFY_SSL",
     }
 
-    # Default tool configurations - optimised for LLMs (23 tools total)
+    # Default tool configurations - optimised for LLMs (24 tools total)
     DEFAULT_TOOLS = {
-        # Finding notes (5 tools enabled by default, 1 disabled)
+        # Finding notes (7 tools enabled by default, 1 disabled)
         "find_notes": True,  # Find notes by text content
         "find_notes_with_tag": True,  # Find notes by tag
         "find_notes_in_notebook": True,  # Find notes by notebook
+        "find_in_note": True,  # Regex search within a single note
         "get_all_notes": False,  # Get all notes - disabled by default (can fill context window)
         "get_note": True,  # Get formatted note details
         "get_links": True,  # Extract links to other notes from a note
@@ -236,6 +237,7 @@ class JoplinMCPConfig:
             "find_notes",
             "find_notes_with_tag",
             "find_notes_in_notebook",
+            "find_in_note",
             "get_all_notes",
             "get_note",
             "get_links",
