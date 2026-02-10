@@ -22,7 +22,7 @@ from typing import Optional
 # Import configuration
 from .config import JoplinMCPConfig
 
-__version__ = "0.4.1"
+__version__ = "0.6.0"
 __author__ = "Alon Diament"
 __license__ = "MIT"
 __description__ = "Model Context Protocol server for the Joplin note-taking application"
@@ -53,29 +53,7 @@ def get_server_info() -> dict:
         "author": __author__,
         "license": __license__,
         "implementation": "FastMCP",
-        "supported_tools": [
-            "find_notes",
-            "find_notes_with_tag",
-            "find_notes_in_notebook",
-            "get_all_notes",
-            "get_note",
-            "create_note",
-            "update_note",
-            "delete_note",
-            "list_notebooks",
-            "create_notebook",
-            "update_notebook",
-            "delete_notebook",
-            "list_tags",
-            "create_tag",
-            "update_tag",
-            "delete_tag",
-            "get_tags_by_note",
-            "tag_note",
-            "untag_note",
-            "ping_joplin",
-            "import_from_file",
-        ],
+        "supported_tools": list(JoplinMCPConfig.DEFAULT_TOOLS.keys()),
         "mcp_version": "1.0.0",
     }
 

@@ -1,3 +1,19 @@
+# [v0.6.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.6.0)
+*Released on 2026-02-10*
+
+- added: `edit_note` tool for precision text editing (find/replace, append, prepend) without full-body replacement
+- added: per-tool env var documentation (`JOPLIN_TOOL_<NAME>`)
+- improved: `update_note` and `edit_note` docstrings cross-reference each other for clearer tool selection
+- changed: deletion tools (`delete_note`, `delete_notebook`, `delete_tag`) disabled by default
+- fixed: `verify_ssl` defaulting to `None` instead of `False` in `from_environment()`
+- fixed: `find_in_note` missing from `DEFAULT_TOOLS` / `TOOL_CATEGORIES` (could not be disabled via config)
+- fixed: `__version__` in `__init__.py` was stale at 0.4.1 since v0.5.0
+- fixed: `supported_tools` list in `__init__.py` now derived from config to stay in sync
+
+**Full Changelog**: https://github.com/alondmnt/joplin-mcp/compare/v0.5.0...v0.6.0
+
+---
+
 # [v0.5.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.5.0)
 *Released on 2026-01-31*
 
