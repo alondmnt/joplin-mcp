@@ -735,9 +735,10 @@ async def update_note(
         Field(description="Due date: Unix timestamp (ms), ISO 8601 string, or 0 to clear. Only for todos.")
     ] = None,
 ) -> str:
-    """Update an existing note in Joplin.
+    """Update note properties (title, body, todo status, due date). Replaces the entire body.
 
-    Updates one or more properties of an existing note. At least one field must be provided.
+    Use this for metadata changes or full body replacement. For targeted text edits
+    (fix a word, append a line) use edit_note instead — it doesn't require reading first.
 
     Returns:
         str: Success message confirming the note was updated.
@@ -793,7 +794,11 @@ async def edit_note(
         Field(description="Insert position: 'beginning' or 'end' (only when old_string is None)"),
     ] = None,
 ) -> str:
-    """Edit a note's content with precision string replacement or positional insertion.
+    """Precision-edit a note's body without reading or replacing the full content.
+
+    Preferred over update_note for targeted text changes — no get_note round-trip needed.
+    Use update_note instead when changing metadata (title, todo status, due date) or
+    replacing the entire body.
 
     Modes:
     - Replace: provide old_string and new_string to replace text in the note body.
