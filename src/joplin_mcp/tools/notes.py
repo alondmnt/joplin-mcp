@@ -776,6 +776,123 @@ async def update_note(
     return format_update_success(ItemType.note, note_id)
 
 
+@create_tool("edit_note", "Edit note")
+async def edit_note(
+    note_id: Annotated[JoplinIdType, Field(description="Note ID to edit")],
+    new_string: Annotated[str, Field(description="Replacement text (use '' to delete)")],
+    old_string: Annotated[
+        Optional[str],
+        Field(description="Text to find and replace (None for positional insert)"),
+    ] = None,
+    replace_all: Annotated[
+        OptionalBoolType,
+        Field(description="Replace all occurrences (default: False)"),
+    ] = False,
+    position: Annotated[
+        Optional[str],
+        Field(description="Insert position: 'beginning' or 'end' (only when old_string is None)"),
+    ] = None,
+) -> str:
+    """Edit a note's content with precision string replacement or positional insertion.
+
+    Modes:
+    - Replace: provide old_string and new_string to replace text in the note body.
+    - Delete: provide old_string and set new_string to '' to remove text.
+    - Append: set position='end' (old_string must be None) to append new_string.
+    - Prepend: set position='beginning' (old_string must be None) to prepend new_string.
+
+    Args:
+        note_id: Note identifier
+        new_string: Replacement or insertion text (use '' to delete matches)
+        old_string: Text to find (None for positional insert)
+        replace_all: Replace all occurrences when True (default: first unique match)
+        position: 'beginning' or 'end' (only when old_string is None)
+
+    Examples:
+        edit_note("id", new_string="colour", old_string="color") - Replace unique match
+        edit_note("id", new_string="colour", old_string="color", replace_all=True) - Replace all
+        edit_note("id", new_string="", old_string="delete me") - Delete text
+        edit_note("id", new_string="appended text", position="end") - Append
+        edit_note("id", new_string="prepended text", position="beginning") - Prepend
+    """
+    note_id = validate_joplin_id(note_id)
+    replace_all = flexible_bool_converter(replace_all) or False
+
+    # Validate mutually exclusive parameters
+    if old_string is not None and position is not None:
+        raise ValueError(
+            "Cannot specify both old_string and position. "
+            "Use old_string for replacement, or position for insertion."
+        )
+
+    if old_string is None and position is None:
+        raise ValueError(
+            "Must specify either old_string (for replacement/deletion) "
+            "or position (for insertion at 'beginning' or 'end')."
+        )
+
+    if old_string is not None and old_string == new_string:
+        raise ValueError(
+            "old_string and new_string are identical — no change would be made."
+        )
+
+    if position is not None and position not in ("beginning", "end"):
+        raise ValueError(
+            f"position must be 'beginning' or 'end', got '{position}'."
+        )
+
+    client = get_joplin_client()
+    note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
+    body = getattr(note, "body", "") or ""
+
+    if old_string is not None:
+        # Replacement / deletion mode
+        count = body.count(old_string)
+
+        if count == 0:
+            # Show a snippet of the body for context
+            preview = body[:200] + ("..." if len(body) > 200 else "")
+            raise ValueError(
+                f"old_string not found in note body. "
+                f"Note content preview: {preview}"
+            )
+
+        if count > 1 and not replace_all:
+            raise ValueError(
+                f"old_string matches {count} times in note body. "
+                f"Use replace_all=True to replace all occurrences, "
+                f"or provide more context in old_string to make it unique."
+            )
+
+        if replace_all:
+            new_body = body.replace(old_string, new_string)
+            replacements = count
+        else:
+            new_body = body.replace(old_string, new_string, 1)
+            replacements = 1
+
+        client.modify_note(note_id, body=new_body)
+        _clear_note_cache()
+
+        if new_string == "":
+            return f"EDIT_NOTE: Deleted {replacements} occurrence(s) of the specified text."
+        return f"EDIT_NOTE: Replaced {replacements} occurrence(s)."
+
+    else:
+        # Positional insertion mode
+        if position == "end":
+            new_body = body + new_string
+            action = "Appended"
+        else:
+            new_body = new_string + body
+            action = "Prepended"
+
+        client.modify_note(note_id, body=new_body)
+        _clear_note_cache()
+
+        return f"EDIT_NOTE: {action} {len(new_string)} characters."
+
+
 @create_tool("delete_note", "Delete note")
 async def delete_note(
     note_id: Annotated[JoplinIdType, Field(description="Note ID to delete")],

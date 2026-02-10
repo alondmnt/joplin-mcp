@@ -18,11 +18,11 @@ A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://jop
 
 ## What You Can Do
 
-This MCP server provides **22 optimized tools** for comprehensive Joplin integration:
+This MCP server provides **23 optimized tools** for comprehensive Joplin integration:
 
 ### **Note Management**
 - **Find & Search**: `find_notes`, `find_notes_with_tag`, `find_notes_in_notebook`, `get_all_notes`
-- **CRUD Operations**: `get_note`, `get_links`, `create_note`, `update_note`, `delete_note`
+- **CRUD Operations**: `get_note`, `get_links`, `create_note`, `update_note`, `edit_note`, `delete_note`
 
 ### **Notebook Management** 
 - **Organize**: `list_notebooks`, `create_notebook`, `update_notebook`, `delete_notebook`
@@ -330,6 +330,7 @@ Every tool can be toggled individually via `JOPLIN_TOOL_<NAME>=true|false`. Thes
 | `JOPLIN_TOOL_GET_LINKS` | `true` |
 | `JOPLIN_TOOL_CREATE_NOTE` | `true` |
 | `JOPLIN_TOOL_UPDATE_NOTE` | `true` |
+| `JOPLIN_TOOL_EDIT_NOTE` | `true` |
 | `JOPLIN_TOOL_DELETE_NOTE` | `false` |
 | `JOPLIN_TOOL_LIST_NOTEBOOKS` | `true` |
 | `JOPLIN_TOOL_CREATE_NOTEBOOK` | `true` |
@@ -507,6 +508,7 @@ Available tools: 22 tools ready
 | **Managing Notes** | | |
 | `create_note` | Write | Create new notes |
 | `update_note` | Update | Modify existing notes |
+| `edit_note` | Update | Precision edit note content (find/replace, append, prepend) |
 | `delete_note` | Delete | Remove notes |
 | **Managing Notebooks** | | |
 | `list_notebooks` | Read | Browse all notebooks |

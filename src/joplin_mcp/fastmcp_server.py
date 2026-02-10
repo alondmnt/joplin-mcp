@@ -12,6 +12,7 @@
 - get_note(note_id) - Get a specific note by ID with smart display (sections, line ranges, TOC)
 - get_links(note_id) - Extract all links to other notes from a note
 - update_note(note_id, title, body) - Update an existing note
+- edit_note(note_id, new_string, old_string, replace_all, position) - Precision edit note content
 - delete_note(note_id) - Delete a note
 
 📖 SEQUENTIAL READING (for long notes):

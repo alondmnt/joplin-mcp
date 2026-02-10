@@ -942,3 +942,257 @@ class TestFindInNoteTool:
 
         assert "TOTAL_MATCHES: 0" in result
         assert "No matches found" in result
+
+
+# === Tests for edit_note tool ===
+
+
+class TestEditNoteTool:
+    """Tests for edit_note tool."""
+
+    def _make_note(self, body="Hello world, hello again."):
+        """Create a mock note with the given body."""
+        note = MagicMock()
+        note.id = "12345678901234567890123456789012"
+        note.title = "Test Note"
+        note.body = body
+        note.parent_id = "abcdef12345678901234567890123456"
+        note.created_time = 1609459200000
+        note.updated_time = 1609545600000
+        note.is_todo = 0
+        note.todo_completed = 0
+        return note
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_replace_unique_match(self, mock_get_client):
+        """Should replace a unique substring in the note body."""
+        from joplin_mcp.tools.notes import edit_note
+
+        note = self._make_note("Fix the color in this line.")
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        fn = _get_tool_fn(edit_note)
+        result = await fn(
+            "12345678901234567890123456789012",
+            new_string="colour",
+            old_string="color",
+        )
+
+        mock_client.modify_note.assert_called_once()
+        call_kwargs = mock_client.modify_note.call_args[1]
+        assert call_kwargs["body"] == "Fix the colour in this line."
+        assert "Replaced 1 occurrence" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_replace_all_occurrences(self, mock_get_client):
+        """Should replace all occurrences when replace_all=True."""
+        from joplin_mcp.tools.notes import edit_note
+
+        note = self._make_note("color here and color there")
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        fn = _get_tool_fn(edit_note)
+        result = await fn(
+            "12345678901234567890123456789012",
+            new_string="colour",
+            old_string="color",
+            replace_all=True,
+        )
+
+        call_kwargs = mock_client.modify_note.call_args[1]
+        assert call_kwargs["body"] == "colour here and colour there"
+        assert "Replaced 2 occurrence" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_delete_text(self, mock_get_client):
+        """Should delete text when new_string is empty."""
+        from joplin_mcp.tools.notes import edit_note
+
+        note = self._make_note("Remove this part please.")
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        fn = _get_tool_fn(edit_note)
+        result = await fn(
+            "12345678901234567890123456789012",
+            new_string="",
+            old_string="this part ",
+        )
+
+        call_kwargs = mock_client.modify_note.call_args[1]
+        assert call_kwargs["body"] == "Remove please."
+        assert "Deleted 1 occurrence" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_append_to_note(self, mock_get_client):
+        """Should append text to end of note body."""
+        from joplin_mcp.tools.notes import edit_note
+
+        note = self._make_note("Existing content.")
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        fn = _get_tool_fn(edit_note)
+        result = await fn(
+            "12345678901234567890123456789012",
+            new_string="\nNew line at end.",
+            position="end",
+        )
+
+        call_kwargs = mock_client.modify_note.call_args[1]
+        assert call_kwargs["body"] == "Existing content.\nNew line at end."
+        assert "Appended" in result
+        assert "17 characters" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_prepend_to_note(self, mock_get_client):
+        """Should prepend text to beginning of note body."""
+        from joplin_mcp.tools.notes import edit_note
+
+        note = self._make_note("Existing content.")
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        fn = _get_tool_fn(edit_note)
+        result = await fn(
+            "12345678901234567890123456789012",
+            new_string="Header\n",
+            position="beginning",
+        )
+
+        call_kwargs = mock_client.modify_note.call_args[1]
+        assert call_kwargs["body"] == "Header\nExisting content."
+        assert "Prepended" in result
+        assert "7 characters" in result
+
+    @pytest.mark.asyncio
+    async def test_error_old_string_not_found(self):
+        """Should raise ValueError when old_string is not found in note body."""
+        from joplin_mcp.tools.notes import edit_note
+
+        note = self._make_note("Some content here.")
+
+        with patch("joplin_mcp.tools.notes.get_joplin_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.get_note.return_value = note
+            mock_get_client.return_value = mock_client
+
+            fn = _get_tool_fn(edit_note)
+            with pytest.raises(ValueError) as exc_info:
+                await fn(
+                    "12345678901234567890123456789012",
+                    new_string="replacement",
+                    old_string="nonexistent text",
+                )
+            assert "old_string not found" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_error_ambiguous_match(self):
+        """Should raise ValueError when old_string matches >1 time without replace_all."""
+        from joplin_mcp.tools.notes import edit_note
+
+        note = self._make_note("foo bar foo baz foo")
+
+        with patch("joplin_mcp.tools.notes.get_joplin_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.get_note.return_value = note
+            mock_get_client.return_value = mock_client
+
+            fn = _get_tool_fn(edit_note)
+            with pytest.raises(ValueError) as exc_info:
+                await fn(
+                    "12345678901234567890123456789012",
+                    new_string="qux",
+                    old_string="foo",
+                )
+            assert "matches 3 times" in str(exc_info.value)
+            assert "replace_all=True" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_error_old_string_and_position_both_set(self):
+        """Should raise ValueError when both old_string and position are set."""
+        from joplin_mcp.tools.notes import edit_note
+
+        fn = _get_tool_fn(edit_note)
+        with pytest.raises(ValueError) as exc_info:
+            await fn(
+                "12345678901234567890123456789012",
+                new_string="text",
+                old_string="old",
+                position="end",
+            )
+        assert "Cannot specify both" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_error_no_old_string_and_no_position(self):
+        """Should raise ValueError when neither old_string nor position is set."""
+        from joplin_mcp.tools.notes import edit_note
+
+        fn = _get_tool_fn(edit_note)
+        with pytest.raises(ValueError) as exc_info:
+            await fn(
+                "12345678901234567890123456789012",
+                new_string="text",
+            )
+        assert "Must specify either" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_error_old_string_equals_new_string(self):
+        """Should raise ValueError when old_string equals new_string."""
+        from joplin_mcp.tools.notes import edit_note
+
+        fn = _get_tool_fn(edit_note)
+        with pytest.raises(ValueError) as exc_info:
+            await fn(
+                "12345678901234567890123456789012",
+                new_string="same",
+                old_string="same",
+            )
+        assert "identical" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_error_invalid_position(self):
+        """Should raise ValueError for invalid position value."""
+        from joplin_mcp.tools.notes import edit_note
+
+        fn = _get_tool_fn(edit_note)
+        with pytest.raises(ValueError) as exc_info:
+            await fn(
+                "12345678901234567890123456789012",
+                new_string="text",
+                position="middle",
+            )
+        assert "must be 'beginning' or 'end'" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes._clear_note_cache")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_cache_invalidation(self, mock_get_client, mock_clear_cache):
+        """Should clear note cache after editing."""
+        from joplin_mcp.tools.notes import edit_note
+
+        note = self._make_note("Unique text here.")
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        fn = _get_tool_fn(edit_note)
+        await fn(
+            "12345678901234567890123456789012",
+            new_string="Modified text here.",
+            old_string="Unique text here.",
+        )
+
+        mock_clear_cache.assert_called_once()
