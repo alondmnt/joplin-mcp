@@ -8,6 +8,30 @@ user-invocable: true
 
 This skill covers non-obvious tool interactions. Tool parameters are already in the tool schemas — don't restate them here.
 
+## Setup
+
+If Joplin MCP tools (e.g., `ping_joplin`) aren't available, the server isn't connected. To set it up:
+
+1. **Get your token** — Joplin Desktop → Tools → Options → Web Clipper → copy the API token.
+
+2. **Add the server** (pick one):
+
+   ```bash
+   # Zero-install via uvx (recommended)
+   claude mcp add joplin-mcp -- uvx --from joplin-mcp joplin-mcp-server
+
+   # If already pip-installed
+   claude mcp add joplin-mcp -- joplin-mcp-server
+   ```
+
+3. **Set the env var** — add `JOPLIN_TOKEN` to your shell profile or pass it inline:
+
+   ```bash
+   claude mcp add joplin-mcp -e JOPLIN_TOKEN=<your_token> -- uvx --from joplin-mcp joplin-mcp-server
+   ```
+
+4. **Verify** — restart Claude Code, then run `/mcp` or call `ping_joplin` to confirm the connection.
+
 ## Critical: edit_note vs update_note
 
 - **`edit_note`** — find/replace, append, prepend. Use this for partial changes.
