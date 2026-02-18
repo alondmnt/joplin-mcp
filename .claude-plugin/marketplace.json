@@ -1,7 +1,9 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "joplin-mcp",
-  "description": "Joplin note-management tools for Claude Code",
+  "metadata": {
+    "description": "Joplin note-management tools for Claude Code"
+  },
   "owner": {
     "name": "Alon Diament"
   },
@@ -13,7 +15,7 @@
       "author": {
         "name": "Alon Diament"
       },
-      "source": ".",
+      "source": "./",
       "category": "productivity"
     }
   ]
