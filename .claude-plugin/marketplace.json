@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "joplin-mcp",
+  "description": "Joplin note-management tools for Claude Code",
+  "owner": {
+    "name": "Alon Diament"
+  },
+  "plugins": [
+    {
+      "name": "joplin-mcp",
+      "description": "Orchestration skill for 24 Joplin note-management tools — smart edit vs update, long-note reading, bulk tagging",
+      "version": "0.6.0",
+      "author": {
+        "name": "Alon Diament"
+      },
+      "source": ".",
+      "category": "productivity"
+    }
+  ]
+}
