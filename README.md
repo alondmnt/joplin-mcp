@@ -14,6 +14,7 @@ A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://jop
 - [Project Structure](#project-structure)
 - [Testing](#testing)
 - [Complete Tool Reference](#complete-tool-reference)
+- [Claude Code Plugin](#claude-code-plugin)
 - [Changelog](CHANGELOG.md)
 
 ## What You Can Do
@@ -133,6 +134,16 @@ export JOPLIN_TOKEN="your_joplin_api_token_here"
 # Run with manual server configuration (requires uv installed)
 ollmcp --server "joplin:uvx --from joplin-mcp joplin-mcp-server" --model qwen3:4b
 ```
+
+### Claude Code Plugin
+
+If you use [Claude Code](https://docs.anthropic.com/en/docs/claude-code), install the orchestration plugin for smarter tool usage (edit vs update, long-note reading, bulk tagging):
+
+```bash
+/plugin install github:alondmnt/joplin-mcp
+```
+
+This loads a skill that Claude invokes automatically when working with Joplin tools. You can also trigger it manually with `/joplin`.
 
 ## Example Usage
 
