@@ -8,13 +8,13 @@ A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://jop
 
 - [What You Can Do](#what-you-can-do)
 - [Quick Start](#quick-start)
+- [Supported Clients](#supported-clients)
 - [Example Usage](#example-usage)
 - [Tool Permissions](#tool-permissions)
 - [Advanced Configuration](#advanced-configuration)
 - [Project Structure](#project-structure)
 - [Testing](#testing)
 - [Complete Tool Reference](#complete-tool-reference)
-- [Claude Code Plugin](#claude-code-plugin)
 - [Changelog](CHANGELOG.md)
 
 ## What You Can Do
@@ -41,16 +41,16 @@ This MCP server provides **24 optimized tools** for comprehensive Joplin integra
 
 ## Quick Start
 
-
-### 1. Configure Joplin
-
 1. Open **Joplin Desktop** → **Tools** → **Options** → **Web Clipper**
 2. **Enable** the Web Clipper service
 3. **Copy** the Authorization token
+4. Set up your preferred client below
 
-### 2. Choose Your AI Client
+## Supported Clients
 
-#### Option A: Claude Desktop (Online, Commercial, Automated Setup)
+> Any MCP-compatible client should work. Below are the ones with documented setup instructions.
+
+### Claude Desktop
 
 Run the automated installer:
 
@@ -68,7 +68,7 @@ uvx --from 'joplin-mcp>=0.4,<0.5' joplin-mcp-install
 ```
 
 This script will:
-- Configure your Joplin API token  
+- Configure your Joplin API token
 - Set tool permissions (Create/Update/Delete)
 - Set up Claude Desktop automatically
 - Test the connection
@@ -79,7 +79,17 @@ After setup, restart Claude Desktop and you're ready to go!
 "List my notebooks" or "Create a note about today's meeting"
 ```
 
-#### Option B: Jan AI (Local AI models)
+### Claude Code
+
+The `/plugin install` command sets up the MCP server **and** installs an orchestration skill for smarter tool usage (edit vs update, long-note reading, bulk tagging):
+
+```bash
+/plugin install github:alondmnt/joplin-mcp
+```
+
+You'll be prompted for your Joplin API token on first use. The skill is invoked automatically when working with Joplin tools, or manually with `/joplin`.
+
+### Jan AI
 
 1. **Install Jan AI** from [https://jan.ai](https://jan.ai)
 
@@ -96,7 +106,7 @@ After setup, restart Claude Desktop and you're ready to go!
 
 3. **Start chatting** with access to your Joplin notes!
 
-**B2: Automated Setup (Alternative)**
+**Automated Setup (Alternative)**
 
 ```bash
 # Install and configure Jan AI automatically (if Jan is already installed)
@@ -110,11 +120,9 @@ This will detect and configure Jan AI automatically, just like Claude Desktop.
 "Show me my recent notes" or "Create a project planning note"
 ```
 
-#### Option C: OllMCP (Local AI Models)
+### OllMCP (Local Ollama Models)
 
-For local Ollama models:
-
-**Option C1: Auto-discovery (if you set up Claude Desktop first)**
+**Auto-discovery (if you set up Claude Desktop first)**
 ```bash
 # Install ollmcp
 pip install ollmcp
@@ -123,7 +131,7 @@ pip install ollmcp
 ollmcp --auto-discovery --model qwen3:4b
 ```
 
-**Option C2: Manual setup (works independently)**
+**Manual setup (works independently)**
 ```bash
 # Install ollmcp
 pip install ollmcp
@@ -134,16 +142,6 @@ export JOPLIN_TOKEN="your_joplin_api_token_here"
 # Run with manual server configuration (requires uv installed)
 ollmcp --server "joplin:uvx --from joplin-mcp joplin-mcp-server" --model qwen3:4b
 ```
-
-### Claude Code Plugin
-
-If you use [Claude Code](https://docs.anthropic.com/en/docs/claude-code), install the orchestration plugin for smarter tool usage (edit vs update, long-note reading, bulk tagging):
-
-```bash
-/plugin install github:alondmnt/joplin-mcp
-```
-
-This loads a skill that Claude invokes automatically when working with Joplin tools. You can also trigger it manually with `/joplin`.
 
 ## Example Usage
 
@@ -157,10 +155,10 @@ Once configured, you can ask your AI assistant:
 
 ## Tool Permissions
 
-The setup script offers **3 security levels**:
+The setup script offers **4 permission levels**:
 
 - **Read** (always enabled): Browse and search your notes safely
-- **Write** (optional): Create new notes, notebooks, and tags  
+- **Write** (optional): Create new notes, notebooks, and tags
 - **Update** (optional): Modify existing content
 - **Delete** (optional): Remove content permanently
 
@@ -477,7 +475,7 @@ The container listens on `0.0.0.0:8000` by default. If exposing publicly, place 
 ## Project Structure
 
 - **`src/joplin_mcp/`** - Main package directory
-  - `fastmcp_server.py` - Server implementation with 22 tools and Pydantic validation types
+  - `fastmcp_server.py` - Server implementation with 24 tools and Pydantic validation types
   - `config.py` - Configuration management
   - `server.py` - Server entrypoint (module and CLI)
   - `ui_integration.py` - UI integration utilities
@@ -502,7 +500,7 @@ Starting Joplin FastMCP Server...
 Successfully connected to Joplin!
 Found X notebooks, Y notes, Z tags
 FastMCP server starting...
-Available tools: 22 tools ready
+Available tools: 24 tools ready
 ```
 
 ## Complete Tool Reference
