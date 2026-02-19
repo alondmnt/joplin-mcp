@@ -81,10 +81,11 @@ After setup, restart Claude Desktop and you're ready to go!
 
 ### Claude Code
 
-The `/plugin install` command sets up the MCP server **and** installs an orchestration skill for smarter tool usage (edit vs update, long-note reading, bulk tagging):
+Install the orchestration plugin for smarter tool usage (edit vs update, long-note reading, bulk tagging):
 
 ```bash
-/plugin install github:alondmnt/joplin-mcp
+/plugin marketplace add alondmnt/joplin-mcp
+/plugin install joplin-mcp
 ```
 
 You'll be prompted for your Joplin API token on first use. The skill is invoked automatically when working with Joplin tools, or manually with `/joplin`.
