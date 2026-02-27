@@ -5,7 +5,7 @@ Functions that need notebook path utilities or config remain in fastmcp_server.p
 """
 
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 class ItemType(str, Enum):
@@ -72,7 +72,13 @@ def format_no_results_message(item_type: str, context: str = "") -> str:
 
 
 def build_pagination_header(
-    query: str, total_count: int, limit: int, offset: int
+    query: str,
+    total_count: int,
+    limit: int,
+    offset: int,
+    *,
+    order_by: Optional[str] = None,
+    order_dir: Optional[str] = None,
 ) -> List[str]:
     """Build pagination header with search and pagination info."""
     count = min(limit, total_count - offset) if total_count > offset else 0
@@ -89,8 +95,13 @@ def build_pagination_header(
         f"TOTAL_PAGES: {total_pages}",
         f"LIMIT: {limit}",
         f"OFFSET: {offset}",
-        "",
     ]
+
+    if order_by is not None:
+        sort_desc = f"{order_by} {order_dir}" if order_dir else order_by
+        header.append(f"SORT_ORDER: {sort_desc}")
+
+    header.append("")
 
     # Add next page guidance
     if total_count > end_result:

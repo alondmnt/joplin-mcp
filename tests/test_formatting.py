@@ -500,3 +500,33 @@ class TestFormatNoteMetadataLines:
         assert not any("CREATED" in line for line in lines)
         assert not any("UPDATED" in line for line in lines)
         assert not any("NOTEBOOK" in line for line in lines)
+
+
+# === Tests for sort order in pagination header ===
+
+
+class TestBuildPaginationHeaderSortOrder:
+    """Tests for SORT_ORDER line in build_pagination_header."""
+
+    def test_no_sort_order_by_default(self):
+        """Should not include SORT_ORDER when order_by is None."""
+        header = build_pagination_header("test", 10, 20, 0)
+        assert not any("SORT_ORDER" in line for line in header)
+
+    def test_includes_sort_order_when_set(self):
+        """Should include SORT_ORDER line when order_by is provided."""
+        header = build_pagination_header(
+            "test", 10, 20, 0, order_by="title", order_dir="ASC"
+        )
+        sort_lines = [line for line in header if "SORT_ORDER" in line]
+        assert len(sort_lines) == 1
+        assert "title ASC" in sort_lines[0]
+
+    def test_sort_order_without_direction(self):
+        """Should show only field name when order_dir is None."""
+        header = build_pagination_header(
+            "test", 10, 20, 0, order_by="updated_time"
+        )
+        sort_lines = [line for line in header if "SORT_ORDER" in line]
+        assert len(sort_lines) == 1
+        assert "SORT_ORDER: updated_time" in sort_lines[0]

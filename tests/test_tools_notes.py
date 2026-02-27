@@ -1196,3 +1196,231 @@ class TestEditNoteTool:
         )
 
         mock_clear_cache.assert_called_once()
+
+
+# === Tests for sorting support ===
+
+
+class TestFlexibleEnumConverter:
+    """Tests for flexible_enum_converter."""
+
+    def test_returns_none_for_none(self):
+        from joplin_mcp.fastmcp_server import SortBy, flexible_enum_converter
+        assert flexible_enum_converter(None, SortBy, "order_by") is None
+
+    def test_passes_through_enum_value(self):
+        from joplin_mcp.fastmcp_server import SortBy, flexible_enum_converter
+        result = flexible_enum_converter(SortBy.title, SortBy, "order_by")
+        assert result is SortBy.title
+
+    def test_converts_string_to_enum(self):
+        from joplin_mcp.fastmcp_server import SortBy, flexible_enum_converter
+        result = flexible_enum_converter("title", SortBy, "order_by")
+        assert result == SortBy.title
+
+    def test_case_insensitive_string(self):
+        from joplin_mcp.fastmcp_server import SortOrder, flexible_enum_converter
+        result = flexible_enum_converter("ASC", SortOrder, "order_dir")
+        assert result == SortOrder.asc
+
+    def test_strips_whitespace(self):
+        from joplin_mcp.fastmcp_server import SortBy, flexible_enum_converter
+        result = flexible_enum_converter(" updated_time ", SortBy, "order_by")
+        assert result == SortBy.updated_time
+
+    def test_raises_for_invalid_string(self):
+        from joplin_mcp.fastmcp_server import SortBy, flexible_enum_converter
+        with pytest.raises(ValueError, match="Invalid order_by"):
+            flexible_enum_converter("invalid", SortBy, "order_by")
+
+    def test_raises_for_invalid_type(self):
+        from joplin_mcp.fastmcp_server import SortBy, flexible_enum_converter
+        with pytest.raises(ValueError, match="Invalid order_by type"):
+            flexible_enum_converter(123, SortBy, "order_by")
+
+
+class TestResolveSortParams:
+    """Tests for resolve_sort_params."""
+
+    def test_defaults_to_updated_time_desc(self):
+        from joplin_mcp.fastmcp_server import resolve_sort_params
+        result = resolve_sort_params(None, None)
+        assert result == {"order_by": "updated_time", "order_dir": "DESC"}
+
+    def test_title_defaults_to_asc(self):
+        from joplin_mcp.fastmcp_server import SortBy, resolve_sort_params
+        result = resolve_sort_params(SortBy.title, None)
+        assert result == {"order_by": "title", "order_dir": "ASC"}
+
+    def test_created_time_defaults_to_desc(self):
+        from joplin_mcp.fastmcp_server import SortBy, resolve_sort_params
+        result = resolve_sort_params(SortBy.created_time, None)
+        assert result == {"order_by": "created_time", "order_dir": "DESC"}
+
+    def test_explicit_direction_overrides_default(self):
+        from joplin_mcp.fastmcp_server import SortBy, SortOrder, resolve_sort_params
+        result = resolve_sort_params(SortBy.title, SortOrder.desc)
+        assert result == {"order_by": "title", "order_dir": "DESC"}
+
+    def test_custom_default_order_by(self):
+        from joplin_mcp.fastmcp_server import SortBy, resolve_sort_params
+        result = resolve_sort_params(None, None, default_order_by=SortBy.created_time)
+        assert result == {"order_by": "created_time", "order_dir": "DESC"}
+
+
+class TestFindNotesSorting:
+    """Tests for sorting in find_notes."""
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.format_search_results_with_pagination")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_wildcard_passes_sort_kwargs_to_get_all_notes(self, mock_get_client, mock_format):
+        """Wildcard query should pass sort kwargs to get_all_notes."""
+        from joplin_mcp.tools.notes import find_notes
+
+        mock_note = MagicMock()
+        mock_note.id = "note123"
+        mock_note.title = "Test"
+        mock_note.updated_time = 1000
+
+        mock_client = MagicMock()
+        mock_client.get_all_notes.return_value = [mock_note]
+        mock_get_client.return_value = mock_client
+        mock_format.return_value = "RESULTS"
+
+        await find_notes.fn("*", order_by="title")
+
+        call_kwargs = mock_client.get_all_notes.call_args[1]
+        assert call_kwargs["order_by"] == "title"
+        assert call_kwargs["order_dir"] == "ASC"
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.format_search_results_with_pagination")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_text_query_preserves_relevance_by_default(self, mock_get_client, mock_format):
+        """Text query without explicit sort should not pass sort kwargs (preserve relevance)."""
+        from joplin_mcp.tools.notes import find_notes
+
+        mock_note = MagicMock()
+        mock_note.id = "note123"
+        mock_note.title = "Test"
+        mock_note.updated_time = 1000
+
+        mock_client = MagicMock()
+        mock_client.search_all.return_value = [mock_note]
+        mock_get_client.return_value = mock_client
+        mock_format.return_value = "RESULTS"
+
+        await find_notes.fn("meeting")
+
+        call_kwargs = mock_client.search_all.call_args[1]
+        assert "order_by" not in call_kwargs
+        assert "order_dir" not in call_kwargs
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.format_search_results_with_pagination")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_text_query_with_explicit_sort(self, mock_get_client, mock_format):
+        """Text query with explicit sort should pass sort kwargs."""
+        from joplin_mcp.tools.notes import find_notes
+
+        mock_note = MagicMock()
+        mock_note.id = "note123"
+        mock_note.title = "Test"
+        mock_note.updated_time = 1000
+
+        mock_client = MagicMock()
+        mock_client.search_all.return_value = [mock_note]
+        mock_get_client.return_value = mock_client
+        mock_format.return_value = "RESULTS"
+
+        await find_notes.fn("meeting", order_by="created_time", order_dir="asc")
+
+        call_kwargs = mock_client.search_all.call_args[1]
+        assert call_kwargs["order_by"] == "created_time"
+        assert call_kwargs["order_dir"] == "ASC"
+
+
+class TestFindNotesWithTagSorting:
+    """Tests for sorting in find_notes_with_tag."""
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.format_search_results_with_pagination")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_passes_sort_kwargs_to_search(self, mock_get_client, mock_format):
+        """Should pass sort kwargs to search_all."""
+        from joplin_mcp.tools.notes import find_notes_with_tag
+
+        mock_note = MagicMock()
+        mock_note.id = "note123"
+        mock_note.title = "Tagged"
+
+        mock_client = MagicMock()
+        mock_client.search_all.return_value = [mock_note]
+        mock_get_client.return_value = mock_client
+        mock_format.return_value = "RESULTS"
+
+        await find_notes_with_tag.fn("work", order_by="title", order_dir="desc")
+
+        call_kwargs = mock_client.search_all.call_args[1]
+        assert call_kwargs["order_by"] == "title"
+        assert call_kwargs["order_dir"] == "DESC"
+
+
+class TestFindNotesInNotebookSorting:
+    """Tests for sorting in find_notes_in_notebook."""
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.format_search_results_with_pagination")
+    @patch("joplin_mcp.tools.notes.get_notebook_id_by_name")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_passes_sort_kwargs_to_get_all_notes(self, mock_get_client, mock_get_nb, mock_format):
+        """Should pass sort kwargs to get_all_notes."""
+        from joplin_mcp.tools.notes import find_notes_in_notebook
+
+        mock_note = MagicMock()
+        mock_note.id = "note123"
+        mock_note.title = "NB Note"
+        mock_note.updated_time = 1000
+        mock_note.is_todo = 0
+        mock_note.todo_completed = 0
+
+        mock_client = MagicMock()
+        mock_client.get_all_notes.return_value = [mock_note]
+        mock_get_client.return_value = mock_client
+        mock_get_nb.return_value = "nb_id"
+        mock_format.return_value = "RESULTS"
+
+        await find_notes_in_notebook.fn("Work", order_by="created_time", order_dir="asc")
+
+        call_kwargs = mock_client.get_all_notes.call_args[1]
+        assert call_kwargs["order_by"] == "created_time"
+        assert call_kwargs["order_dir"] == "ASC"
+
+
+class TestGetAllNotesSorting:
+    """Tests for sorting in get_all_notes."""
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.format_search_results_with_pagination")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_passes_sort_kwargs(self, mock_get_client, mock_format):
+        """Should pass sort kwargs to get_all_notes."""
+        from joplin_mcp.tools.notes import get_all_notes
+
+        mock_note = MagicMock()
+        mock_note.id = "note123"
+        mock_note.title = "Note"
+        mock_note.updated_time = 1000
+
+        mock_client = MagicMock()
+        mock_client.get_all_notes.return_value = [mock_note]
+        mock_get_client.return_value = mock_client
+        mock_format.return_value = "RESULTS"
+
+        fn = _get_tool_fn(get_all_notes)
+        await fn(order_by="title")
+
+        call_kwargs = mock_client.get_all_notes.call_args[1]
+        assert call_kwargs["order_by"] == "title"
+        assert call_kwargs["order_dir"] == "ASC"

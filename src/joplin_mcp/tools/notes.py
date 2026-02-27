@@ -48,7 +48,11 @@ from joplin_mcp.fastmcp_server import (
     LimitType,
     OffsetType,
     OptionalBoolType,
+    OptionalSortByType,
+    OptionalSortOrderType,
     RequiredStringType,
+    SortBy,
+    SortOrder,
     _compute_notebook_path,
     _module_config,
     apply_pagination,
@@ -56,6 +60,7 @@ from joplin_mcp.fastmcp_server import (
     build_search_filters,
     create_tool,
     flexible_bool_converter,
+    flexible_enum_converter,
     format_creation_success,
     format_delete_success,
     format_no_results_message,
@@ -68,6 +73,7 @@ from joplin_mcp.fastmcp_server import (
     get_notebook_map_cached,
     optional_int_converter,
     process_search_results,
+    resolve_sort_params,
     timestamp_converter,
     validate_joplin_id,
 )
@@ -939,6 +945,14 @@ async def find_notes(
         OptionalBoolType,
         Field(description="Filter by completion status (default: None)"),
     ] = None,
+    order_by: Annotated[
+        OptionalSortByType,
+        Field(description='Sort field: "title", "created_time", "updated_time" (default: updated_time for *, relevance for text)'),
+    ] = None,
+    order_dir: Annotated[
+        OptionalSortOrderType,
+        Field(description='Sort direction: "asc", "desc" (default: asc for title, desc for time fields)'),
+    ] = None,
 ) -> str:
     """Find notes by searching titles and content. Use "*" to list all notes.
 
@@ -956,27 +970,31 @@ async def find_notes(
     # Runtime validation for Jan AI compatibility while preserving functionality
     task = flexible_bool_converter(task)
     completed = flexible_bool_converter(completed)
+    order_by = flexible_enum_converter(order_by, SortBy, "order_by")
+    order_dir = flexible_enum_converter(order_dir, SortOrder, "order_dir")
 
     client = get_joplin_client()
 
     # Handle special case for listing all notes
     if query.strip() == "*":
+        sort_kwargs = resolve_sort_params(order_by, order_dir)
+
         # List all notes with filters
         search_filters = build_search_filters(task, completed)
 
         if search_filters:
             # Use search with filters
             search_query = " ".join(search_filters)
-            results = client.search_all(query=search_query, fields=COMMON_NOTE_FIELDS)
+            results = client.search_all(
+                query=search_query, fields=COMMON_NOTE_FIELDS, **sort_kwargs
+            )
             notes = process_search_results(results)
         else:
             # No filters, get all notes
-            results = client.get_all_notes(fields=COMMON_NOTE_FIELDS)
-            notes = process_search_results(results)
-            # Sort by updated time, newest first (consistent with get_all_notes)
-            notes = sorted(
-                notes, key=lambda x: getattr(x, "updated_time", 0), reverse=True
+            results = client.get_all_notes(
+                fields=COMMON_NOTE_FIELDS, **sort_kwargs
             )
+            notes = process_search_results(results)
     else:
         # Build search query with text and filters
         search_parts = [query]
@@ -984,8 +1002,16 @@ async def find_notes(
 
         search_query = " ".join(search_parts)
 
+        # For text queries: only pass sort kwargs if user explicitly requested sorting
+        # (preserve Joplin's relevance ranking by default)
+        text_sort_kwargs = {}
+        if order_by is not None:
+            text_sort_kwargs = resolve_sort_params(order_by, order_dir)
+
         # Use search_all for full pagination support
-        results = client.search_all(query=search_query, fields=COMMON_NOTE_FIELDS)
+        results = client.search_all(
+            query=search_query, fields=COMMON_NOTE_FIELDS, **text_sort_kwargs
+        )
         notes = process_search_results(results)
 
     # Apply pagination
@@ -1004,8 +1030,12 @@ async def find_notes(
     # Format results with pagination info
     if query.strip() == "*":
         search_description = "all notes"
+        sort_kwargs_for_display = resolve_sort_params(order_by, order_dir)
     else:
         search_description = f"text search: {query}"
+        sort_kwargs_for_display = (
+            resolve_sort_params(order_by, order_dir) if order_by is not None else {}
+        )
 
     return format_search_results_with_pagination(
         search_description,
@@ -1015,6 +1045,8 @@ async def find_notes(
         offset,
         "search_results",
         original_query=query,
+        order_by=sort_kwargs_for_display.get("order_by"),
+        order_dir=sort_kwargs_for_display.get("order_dir"),
     )
 
 
@@ -1263,6 +1295,14 @@ async def find_notes_with_tag(
         OptionalBoolType,
         Field(description="Filter by completion status (default: None)"),
     ] = None,
+    order_by: Annotated[
+        OptionalSortByType,
+        Field(description='Sort field: "title", "created_time", "updated_time" (default: updated_time)'),
+    ] = None,
+    order_dir: Annotated[
+        OptionalSortOrderType,
+        Field(description='Sort direction: "asc", "desc" (default: asc for title, desc for time fields)'),
+    ] = None,
 ) -> str:
     """Find all notes that have a specific tag, with pagination support.
 
@@ -1280,6 +1320,10 @@ async def find_notes_with_tag(
         - find_notes_with_tag("important", task=True, completed=False) - Find only uncompleted tasks tagged with "important"
     """
 
+    order_by = flexible_enum_converter(order_by, SortBy, "order_by")
+    order_dir = flexible_enum_converter(order_dir, SortOrder, "order_dir")
+    sort_kwargs = resolve_sort_params(order_by, order_dir)
+
     # Build search query with tag and filters
     search_parts = [f'tag:"{tag_name}"']
     search_parts.extend(build_search_filters(task, completed))
@@ -1287,7 +1331,9 @@ async def find_notes_with_tag(
 
     # Use search_all API with tag constraint for full pagination support
     client = get_joplin_client()
-    results = client.search_all(query=search_query, fields=COMMON_NOTE_FIELDS)
+    results = client.search_all(
+        query=search_query, fields=COMMON_NOTE_FIELDS, **sort_kwargs
+    )
     notes = process_search_results(results)
 
     # Apply pagination
@@ -1306,6 +1352,8 @@ async def find_notes_with_tag(
         offset,
         "search_results",
         original_query=tag_name,
+        order_by=sort_kwargs.get("order_by"),
+        order_dir=sort_kwargs.get("order_dir"),
     )
 
 
@@ -1327,6 +1375,14 @@ async def find_notes_in_notebook(
     completed: Annotated[
         OptionalBoolType,
         Field(description="Filter by completion status (default: None)"),
+    ] = None,
+    order_by: Annotated[
+        OptionalSortByType,
+        Field(description='Sort field: "title", "created_time", "updated_time" (default: updated_time)'),
+    ] = None,
+    order_dir: Annotated[
+        OptionalSortOrderType,
+        Field(description='Sort direction: "asc", "desc" (default: asc for title, desc for time fields)'),
     ] = None,
 ) -> str:
     """Find all notes in a specific notebook, with pagination support.
@@ -1353,24 +1409,27 @@ async def find_notes_in_notebook(
     # Runtime validation
     task = flexible_bool_converter(task)
     completed = flexible_bool_converter(completed)
+    order_by = flexible_enum_converter(order_by, SortBy, "order_by")
+    order_dir = flexible_enum_converter(order_dir, SortOrder, "order_dir")
+    sort_kwargs = resolve_sort_params(order_by, order_dir)
 
     # Resolve notebook name/path to ID (ensures exact match)
     notebook_id = get_notebook_id_by_name(notebook_name)
 
     # Fetch notes by notebook_id for precision (search API can't distinguish same-named notebooks)
     client = get_joplin_client()
-    results = client.get_all_notes(notebook_id=notebook_id, fields=COMMON_NOTE_FIELDS)
+    results = client.get_all_notes(
+        notebook_id=notebook_id, fields=COMMON_NOTE_FIELDS, **sort_kwargs
+    )
     notes = process_search_results(results)
 
-    # Apply filters client-side
+    # Apply filters client-side (server-side sort order is preserved)
     if task is not None:
         notes = [n for n in notes if bool(getattr(n, "is_todo", 0)) == task]
 
     if completed is not None and task:
         notes = [n for n in notes if bool(getattr(n, "todo_completed", 0)) == completed]
 
-    # Sort by updated time, newest first
-    notes = sorted(notes, key=lambda x: getattr(x, "updated_time", 0), reverse=True)
     search_query = f'notebook:"{notebook_name}"'
 
     # Apply pagination
@@ -1389,6 +1448,8 @@ async def find_notes_in_notebook(
         offset,
         "search_results",
         original_query=notebook_name,
+        order_by=sort_kwargs.get("order_by"),
+        order_dir=sort_kwargs.get("order_dir"),
     )
 
 
@@ -1397,6 +1458,14 @@ async def get_all_notes(
     limit: Annotated[
         LimitType, Field(description="Max results (1-100, default: 20)")
     ] = 20,
+    order_by: Annotated[
+        OptionalSortByType,
+        Field(description='Sort field: "title", "created_time", "updated_time" (default: updated_time)'),
+    ] = None,
+    order_dir: Annotated[
+        OptionalSortOrderType,
+        Field(description='Sort direction: "asc", "desc" (default: asc for title, desc for time fields)'),
+    ] = None,
 ) -> str:
     """Get all notes in your Joplin instance.
 
@@ -1411,12 +1480,13 @@ async def get_all_notes(
         - get_all_notes(50) - Get the 50 most recent notes
     """
 
-    client = get_joplin_client()
-    results = client.get_all_notes(fields=COMMON_NOTE_FIELDS)
-    notes = process_search_results(results)
+    order_by = flexible_enum_converter(order_by, SortBy, "order_by")
+    order_dir = flexible_enum_converter(order_dir, SortOrder, "order_dir")
+    sort_kwargs = resolve_sort_params(order_by, order_dir)
 
-    # Sort by updated time, newest first
-    notes = sorted(notes, key=lambda x: getattr(x, "updated_time", 0), reverse=True)
+    client = get_joplin_client()
+    results = client.get_all_notes(fields=COMMON_NOTE_FIELDS, **sort_kwargs)
+    notes = process_search_results(results)
 
     # Apply limit (using consistent pattern but keeping simple offset=0)
     notes = notes[:limit]
@@ -1425,5 +1495,7 @@ async def get_all_notes(
         return format_no_results_message("note")
 
     return format_search_results_with_pagination(
-        "all notes", notes, len(notes), limit, 0, "search_results"
+        "all notes", notes, len(notes), limit, 0, "search_results",
+        order_by=sort_kwargs.get("order_by"),
+        order_dir=sort_kwargs.get("order_dir"),
     )

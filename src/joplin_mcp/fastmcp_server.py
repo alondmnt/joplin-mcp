@@ -177,12 +177,16 @@ class SortBy(str, Enum):
     title = "title"
     created_time = "created_time"
     updated_time = "updated_time"
-    relevance = "relevance"
 
 
 class SortOrder(str, Enum):
     asc = "asc"
     desc = "desc"
+
+
+# Type aliases for sort params (accept both enum and string for MCP client compat)
+OptionalSortByType = Optional[Union[str, SortBy]]
+OptionalSortOrderType = Optional[Union[str, SortOrder]]
 
 
 def flexible_bool_converter(value: Union[bool, str, None]) -> Optional[bool]:
@@ -203,6 +207,43 @@ def flexible_bool_converter(value: Union[bool, str, None]) -> Optional[bool]:
             )
     # Handle other truthy/falsy values
     return bool(value)
+
+
+def flexible_enum_converter(
+    value: Optional[Union[str, Enum]], enum_cls: type[Enum], field_name: str
+) -> Optional[Enum]:
+    """Convert string to enum value for MCP client compatibility."""
+    if value is None:
+        return None
+    if isinstance(value, enum_cls):
+        return value
+    if isinstance(value, str):
+        value_lower = value.lower().strip()
+        try:
+            return enum_cls(value_lower)
+        except ValueError:
+            valid = ", ".join(e.value for e in enum_cls)
+            raise ValueError(f"Invalid {field_name}: '{value}'. Must be one of: {valid}")
+    raise ValueError(f"Invalid {field_name} type: {type(value)}")
+
+
+def resolve_sort_params(
+    order_by: Optional[SortBy],
+    order_dir: Optional[SortOrder],
+    default_order_by: SortBy = SortBy.updated_time,
+) -> dict:
+    """Resolve sort params into joppy/Joplin API kwargs.
+
+    Returns dict with order_by/order_dir keys, ready to unpack into joppy calls.
+    """
+    sort_field = order_by if order_by is not None else default_order_by
+
+    if order_dir is None:
+        direction = "ASC" if sort_field == SortBy.title else "DESC"
+    else:
+        direction = order_dir.value.upper()  # Joplin API expects uppercase
+
+    return {"order_by": sort_field.value, "order_dir": direction}
 
 
 def optional_int_converter(
@@ -901,6 +942,8 @@ def format_search_results_with_pagination(
     offset: int,
     context: str = "search_results",
     original_query: Optional[str] = None,
+    order_by: Optional[str] = None,
+    order_dir: Optional[str] = None,
 ) -> str:
     """Format search results with pagination information for display optimized for LLM comprehension."""
     config = _module_config
@@ -913,7 +956,10 @@ def format_search_results_with_pagination(
         notebooks_map = None  # Best-effort only
 
     # Build all parts
-    result_parts = build_pagination_header(query, total_count, limit, offset)
+    result_parts = build_pagination_header(
+        query, total_count, limit, offset,
+        order_by=order_by, order_dir=order_dir,
+    )
 
     # Add note entries
     for i, note in enumerate(results, 1):
