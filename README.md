@@ -34,7 +34,6 @@ This MCP server provides **24 optimized tools** for comprehensive Joplin integra
 
 ### **Import**
 - **File Import**: `import_from_file` - Import Markdown, HTML, CSV, TXT, JEX files and directories
-  > **Note**: Import tools are disabled by default for security. Enable with `"import_from_file": true` in your config.
 
 ### **System**
 - **Health**: `ping_joplin`

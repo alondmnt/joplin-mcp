@@ -106,10 +106,11 @@ def get_permission_settings() -> Dict[str, bool]:
     print()
 
     # Define tool categories
-    write_tools = ["create_note", "create_notebook", "create_tag"]
+    write_tools = ["create_note", "create_notebook", "create_tag", "import_from_file"]
 
     update_tools = [
         "update_note",
+        "edit_note",
         "update_notebook",
         "update_tag",
         "tag_note",
