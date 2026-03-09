@@ -1,23 +1,86 @@
-# Example docker-compose configuration for local testing
+# Full Joplin stack with MCP server for headless AI access
 # Usage: docker compose up
 #
-# Make sure JOPLIN_TOKEN is set in your environment or in a .env file
+# Prerequisites:
+#   1. Copy .env.example to .env and fill in values
+#   2. On first run, get the Joplin API token from the joplin-data-api container:
+#      docker exec joplin-data-api cat /root/joplin/profile/settings.json | grep token
+#      Then set JOPLIN_TOKEN in your .env file and restart joplin-mcp.
+#
+# AI clients (Ollama, Claude, etc.) connect to the MCP server at:
+#   http://localhost:8000/mcp
 
 services:
+  db:
+    image: postgres:16
+    restart: always
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-joplin-user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-randomString4711}
+      - POSTGRES_DB=${POSTGRES_DB:-joplindb}
+
+  joplin-server:
+    image: joplin/server:latest
+    container_name: joplin-server
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "8082:8082"
+    networks:
+      default:
+        aliases:
+          - jwan
+    environment:
+      - APP_PORT=8082
+      - APP_BASE_URL=http://jwan:8082
+      - DB_CLIENT=pg
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DATABASE=${POSTGRES_DB:-joplindb}
+      - POSTGRES_USER=${POSTGRES_USER:-joplin-user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-randomString4711}
+      - MAILER_ENABLED=0
+
+  # https://github.com/RickoNoNo3/joplin-terminal-data-api
+  # Runs the Joplin CLI headlessly, syncs with joplin-server, and exposes
+  # the Data API on port 41185 with automatic token injection.
+  joplin-data-api:
+    image: rickonono3/joplin-terminal-data-api:latest
+    container_name: joplin-data-api
+    restart: unless-stopped
+    depends_on:
+      - joplin-server
+    ports:
+      - "41185:41185"
+    volumes:
+      - ./joplin_config:/root/joplin
+    environment:
+      - JOPLIN_PORT=41184
+
+  # MCP server — bridges AI clients to the Joplin Data API
+  # Connects internally to joplin-data-api:41185 (no public port needed for the data api)
   joplin-mcp:
     build: .
+    container_name: joplin-mcp
+    restart: unless-stopped
+    depends_on:
+      - joplin-data-api
     ports:
-      - "8000:8000"
+      - "8000:8000"    # AI clients connect here via HTTP/SSE
     environment:
+      # Token from the Joplin CLI profile inside joplin-data-api.
+      # Retrieve with: docker exec joplin-data-api cat /root/joplin/profile/settings.json | grep token
       - JOPLIN_TOKEN=${JOPLIN_TOKEN}
-      # For macOS/Windows Docker Desktop, use host.docker.internal
-      # For Linux, use 172.17.0.1 or configure network_mode: host
-      - JOPLIN_HOST=${JOPLIN_HOST:-host.docker.internal}
-      - JOPLIN_PORT=${JOPLIN_PORT:-41184}
+      # Use the service name to reach joplin-data-api within the Docker network
+      - JOPLIN_HOST=joplin-data-api
+      - JOPLIN_PORT=41185
       - MCP_TRANSPORT=http
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8000
       - MCP_LOG_LEVEL=${MCP_LOG_LEVEL:-info}
-    # Uncomment to mount config directory for persistent settings
+    # Uncomment to mount a config file for fine-grained tool control
     # volumes:
-    #   - ./config:/config:ro
+    #   - ./joplin-mcp.json:/config/joplin-mcp.json:ro
