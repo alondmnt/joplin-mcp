@@ -471,6 +471,32 @@ docker run --rm \
 
 The container listens on `0.0.0.0:8000` by default. If exposing publicly, place behind a reverse proxy and terminate TLS there. For SSE, ensure proxy keep-alives and buffering are configured appropriately.
 
+### Headless deployment with Docker Compose
+
+For server or NAS environments where Joplin runs headlessly via
+[joplin-terminal-data-api](https://github.com/RickoNoNo3/joplin-terminal-data-api)
+rather than the desktop app, a `docker-compose.yml` is provided.
+
+**Step 1 — configure**:
+```bash
+cp .env.example .env
+# No token needed — joplin-terminal-data-api injects auth automatically.
+# Edit .env only if you need to override JOPLIN_HOST, JOPLIN_PORT, or MCP_PORT.
+```
+
+**Step 2 — start**:
+```bash
+docker compose up -d
+```
+
+`joplin-terminal-data-api` handles Joplin authentication transparently on port
+41185, so no API token is required from the client side. The MCP server connects
+to it via the Docker host bridge (`172.17.0.1` on Linux; set
+`JOPLIN_HOST=host.docker.internal` on macOS/Windows). Change `MCP_PORT` in
+`.env` if port 8000 is already in use.
+
+AI clients then connect to `http://localhost:${MCP_PORT}/mcp`.
+
 
 ## Project Structure
 

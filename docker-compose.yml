@@ -1,23 +1,37 @@
-# Example docker-compose configuration for local testing
-# Usage: docker compose up
+# Docker Compose for joplin-mcp — headless / server deployment
 #
-# Make sure JOPLIN_TOKEN is set in your environment or in a .env file
+# Use this when Joplin runs headlessly via joplin-terminal-data-api
+# (https://github.com/RickoNoNo3/joplin-terminal-data-api) rather than
+# the desktop app. The MCP server connects to the Data API over the
+# Docker host bridge instead of localhost.
+#
+# Usage:
+#   cp .env.example .env   # then fill in JOPLIN_TOKEN
+#   docker compose up -d
+#
+# AI clients connect to http://localhost:${MCP_PORT:-8000}/mcp
 
 services:
   joplin-mcp:
     build: .
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${MCP_PORT:-8000}:8000"
     environment:
-      - JOPLIN_TOKEN=${JOPLIN_TOKEN}
-      # For macOS/Windows Docker Desktop, use host.docker.internal
-      # For Linux, use 172.17.0.1 or configure network_mode: host
-      - JOPLIN_HOST=${JOPLIN_HOST:-host.docker.internal}
-      - JOPLIN_PORT=${JOPLIN_PORT:-41184}
+      # joplin-terminal-data-api injects the real auth token automatically.
+      # A non-empty placeholder is required here only to satisfy joplin-mcp's
+      # startup validation; it is not used for actual Joplin authentication.
+      - JOPLIN_TOKEN=${JOPLIN_TOKEN:-auto_injected}
+      # Linux: use the Docker bridge gateway to reach host-exposed ports.
+      # macOS / Windows Docker Desktop: use host.docker.internal instead.
+      - JOPLIN_HOST=${JOPLIN_HOST:-172.17.0.1}
+      # Default matches joplin-terminal-data-api's exposed port (41185).
+      # Change to 41184 if connecting to a Joplin Desktop instance on the host.
+      - JOPLIN_PORT=${JOPLIN_PORT:-41185}
       - MCP_TRANSPORT=http
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8000
       - MCP_LOG_LEVEL=${MCP_LOG_LEVEL:-info}
-    # Uncomment to mount config directory for persistent settings
+    # Uncomment to mount a config file for fine-grained tool control:
     # volumes:
-    #   - ./config:/config:ro
+    #   - ./joplin-mcp.json:/config/joplin-mcp.json:ro

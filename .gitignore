@@ -1,6 +1,8 @@
 .*
 !.dockerignore
 !.claude-plugin/
+!.env.example
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
