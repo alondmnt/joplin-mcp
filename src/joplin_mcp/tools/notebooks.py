@@ -7,12 +7,15 @@ from joplin_mcp.fastmcp_server import (
     ItemType,
     JoplinIdType,
     RequiredStringType,
+    _compute_notebook_path,
     create_tool,
     format_creation_success,
     format_delete_success,
     format_item_list,
     format_update_success,
     get_joplin_client,
+    get_notebook_id_by_name,
+    get_notebook_map_cached,
     invalidate_notebook_map_cache,
 )
 
@@ -103,3 +106,48 @@ async def delete_notebook(
     # Invalidate cache since structure changed
     invalidate_notebook_map_cache()
     return format_delete_success(ItemType.notebook, notebook_id)
+
+
+@create_tool("get_folder_id", "Get folder ID")
+async def get_folder_id(
+    name: Annotated[
+        RequiredStringType,
+        Field(
+            description=(
+                "Notebook name or hierarchical path to look up. "
+                "Use a plain name for an exact title match (e.g. 'Work'), "
+                "or a '/'-separated path for nested notebooks "
+                "(e.g. 'Professional & Knowledge/Claude Code')."
+            )
+        ),
+    ],
+) -> str:
+    """Look up a Joplin notebook's ID by name or hierarchical path.
+
+    Resolves a notebook name or '/'-separated path to its unique Joplin ID and
+    returns the ID together with the notebook's title and full path for
+    confirmation.
+
+    Supports:
+    - Exact title match: ``get_folder_id("Work")``
+    - Hierarchical path match: ``get_folder_id("Projects/Work/Tasks")``
+
+    Returns:
+        str: Formatted block containing the resolved notebook ID, title, and
+        full path, or an error message if the notebook was not found.
+
+    Examples:
+        - get_folder_id("Work") - Find a top-level notebook by title
+        - get_folder_id("Professional & Knowledge/Claude Code") - Find by path
+    """
+    notebook_id = get_notebook_id_by_name(name)
+    nb_map = get_notebook_map_cached()
+    full_path = _compute_notebook_path(notebook_id, nb_map)
+    title = (nb_map.get(notebook_id) or {}).get("title") or name
+
+    return (
+        f"Notebook found:\n"
+        f"  ID:    {notebook_id}\n"
+        f"  Title: {title}\n"
+        f"  Path:  {full_path}"
+    )

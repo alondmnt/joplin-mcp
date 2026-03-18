@@ -218,6 +218,77 @@ class TestDeleteNotebookTool:
         mock_invalidate.assert_called_once()
 
 
+# === Tests for get_folder_id tool ===
+
+
+class TestGetFolderIdTool:
+    """Tests for get_folder_id tool."""
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks._compute_notebook_path")
+    @patch("joplin_mcp.tools.notebooks.get_notebook_map_cached")
+    @patch("joplin_mcp.tools.notebooks.get_notebook_id_by_name")
+    async def test_returns_id_title_and_path(
+        self, mock_get_id, mock_get_map, mock_compute_path
+    ):
+        """Should return notebook ID, title and full path."""
+        from joplin_mcp.tools.notebooks import get_folder_id
+
+        mock_get_id.return_value = "abc123def456"
+        mock_get_map.return_value = {
+            "abc123def456": {"title": "Work", "parent_id": None}
+        }
+        mock_compute_path.return_value = "Work"
+
+        fn = _get_tool_fn(get_folder_id)
+        result = await fn(name="Work")
+
+        mock_get_id.assert_called_once_with("Work")
+        mock_compute_path.assert_called_once()
+        assert "abc123def456" in result
+        assert "Work" in result
+        assert "ID:" in result
+        assert "Title:" in result
+        assert "Path:" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks._compute_notebook_path")
+    @patch("joplin_mcp.tools.notebooks.get_notebook_map_cached")
+    @patch("joplin_mcp.tools.notebooks.get_notebook_id_by_name")
+    async def test_hierarchical_path_resolution(
+        self, mock_get_id, mock_get_map, mock_compute_path
+    ):
+        """Should resolve nested notebook path."""
+        from joplin_mcp.tools.notebooks import get_folder_id
+
+        mock_get_id.return_value = "nested_nb_id"
+        mock_get_map.return_value = {
+            "parent_id": {"title": "Professional & Knowledge", "parent_id": None},
+            "nested_nb_id": {"title": "Claude Code", "parent_id": "parent_id"},
+        }
+        mock_compute_path.return_value = "Professional & Knowledge/Claude Code"
+
+        fn = _get_tool_fn(get_folder_id)
+        result = await fn(name="Professional & Knowledge/Claude Code")
+
+        mock_get_id.assert_called_once_with("Professional & Knowledge/Claude Code")
+        assert "nested_nb_id" in result
+        assert "Claude Code" in result
+        assert "Professional & Knowledge/Claude Code" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.get_notebook_id_by_name")
+    async def test_raises_on_not_found(self, mock_get_id):
+        """Should propagate ValueError when notebook not found."""
+        from joplin_mcp.tools.notebooks import get_folder_id
+
+        mock_get_id.side_effect = ValueError("Notebook 'NoSuchFolder' not found")
+
+        fn = _get_tool_fn(get_folder_id)
+        with pytest.raises(ValueError, match="not found"):
+            await fn(name="NoSuchFolder")
+
+
 # === Integration tests for cache invalidation ===
 
 
