@@ -1,0 +1,26 @@
+services:
+  joplin:
+    image: jspiers/headless-joplin:2.12.1-node-18.18.0
+    restart: unless-stopped
+    ports:
+      - "41184:80"
+    volumes:
+      - ./tests/e2e/joplin-config.json:/run/secrets/joplin-config.json:ro
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:80/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+
+  e2e-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    environment:
+      - JOPLIN_TOKEN=e2e_test_token
+      - JOPLIN_HOST=joplin
+      - JOPLIN_PORT=80
+    depends_on:
+      joplin:
+        condition: service_healthy
