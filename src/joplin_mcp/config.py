@@ -292,6 +292,9 @@ class JoplinMCPConfig:
         "enable_smart_toc": True,  # Enable smart TOC behavior in get_note
     }
 
+    # Sentinel value: when notebook_allowlist equals this, all notebooks are accessible
+    ALLOW_ALL = ["**"]
+
     # Default import settings
     DEFAULT_IMPORT_SETTINGS = {
         "max_file_size_mb": 100,  # Maximum file size in MB
@@ -345,13 +348,13 @@ class JoplinMCPConfig:
         if import_settings:
             self.import_settings.update(import_settings)
 
-        # Initialize notebook allowlist (None = no restrictions, [] = deny all)
-        self.notebook_allowlist = notebook_allowlist
+        # Initialize notebook allowlist (ALLOW_ALL = no restrictions, [] = deny all)
+        self.notebook_allowlist = notebook_allowlist if notebook_allowlist is not None else self.ALLOW_ALL
 
     @property
     def has_notebook_allowlist(self) -> bool:
         """Return True when a notebook allowlist is configured (including empty)."""
-        return self.notebook_allowlist is not None
+        return self.notebook_allowlist != self.ALLOW_ALL
 
     def is_tool_enabled(self, tool_name: str) -> bool:
         """Check if a specific tool is enabled."""
@@ -560,7 +563,7 @@ class JoplinMCPConfig:
             "enabled_tools_count": len(self.get_enabled_tools()),
             "disabled_tools_count": len(self.get_disabled_tools()),
             "content_exposure": self.content_exposure.copy(),
-            "notebook_allowlist": self.notebook_allowlist,
+            "notebook_allowlist": None if self.notebook_allowlist == self.ALLOW_ALL else self.notebook_allowlist,
         }
 
     def __repr__(self) -> str:
@@ -571,7 +574,7 @@ class JoplinMCPConfig:
         content_levels = {
             k: v for k, v in self.content_exposure.items() if k != "max_preview_length"
         }
-        if self.notebook_allowlist is None:
+        if self.notebook_allowlist == self.ALLOW_ALL:
             allowlist_info = "disabled"
         elif not self.notebook_allowlist:
             allowlist_info = "empty (deny all)"

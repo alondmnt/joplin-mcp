@@ -61,18 +61,18 @@ class TestNotebookAllowlistConfig:
 
         assert config.notebook_allowlist == ["Projects/*", "Work/**", "!Work/Secret"]
 
-    def test_allowlist_defaults_to_none(self):
-        """Test that notebook_allowlist defaults to None when not configured."""
+    def test_allowlist_defaults_to_allow_all(self):
+        """Test that notebook_allowlist defaults to ALLOW_ALL when not configured."""
         config = JoplinMCPConfig(token="test-token-1234567890")
 
-        assert config.notebook_allowlist is None
+        assert config.notebook_allowlist == JoplinMCPConfig.ALLOW_ALL
 
-    def test_allowlist_defaults_to_none_from_environment(self):
-        """Test that notebook_allowlist is None when env var is not set."""
+    def test_allowlist_defaults_to_allow_all_from_environment(self):
+        """Test that notebook_allowlist is ALLOW_ALL when env var is not set."""
         with patch.dict(os.environ, {}, clear=True):
             config = JoplinMCPConfig.from_environment()
 
-        assert config.notebook_allowlist is None
+        assert config.notebook_allowlist == JoplinMCPConfig.ALLOW_ALL
 
     def test_has_notebook_allowlist_true(self):
         """Test has_notebook_allowlist returns True for non-empty allowlist."""
@@ -84,7 +84,7 @@ class TestNotebookAllowlistConfig:
         assert config.has_notebook_allowlist is True
 
     def test_has_notebook_allowlist_false_none(self):
-        """Test has_notebook_allowlist returns False when allowlist is None."""
+        """Test has_notebook_allowlist returns False when allowlist is ALLOW_ALL (not configured)."""
         config = JoplinMCPConfig(token="test-token-1234567890")
 
         assert config.has_notebook_allowlist is False
@@ -111,8 +111,8 @@ class TestNotebookAllowlistConfig:
         assert "notebook_allowlist" in result
         assert result["notebook_allowlist"] == patterns
 
-    def test_allowlist_none_in_to_dict(self):
-        """Test that to_dict includes notebook_allowlist as None when not configured."""
+    def test_allowlist_allow_all_in_to_dict(self):
+        """Test that to_dict outputs notebook_allowlist as None when not configured."""
         config = JoplinMCPConfig(token="test-token-1234567890")
 
         result = config.to_dict()

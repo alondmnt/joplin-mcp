@@ -70,9 +70,12 @@ class TestNoAllowlistBehavior:
         """Clear caches before each test."""
         invalidate_notebook_map_cache()
 
-    def test_none_allowlist_allows_access(self):
-        """When allowlist_entries is None, all notebooks are accessible (no restrictions)."""
-        result = is_notebook_accessible("nb1", allowlist_entries=None)
+    def test_allow_all_allows_access(self):
+        """When allowlist_entries is ["**"], all notebooks are accessible (no restrictions)."""
+        nb_map = _make_notebook_map({"nb1": "Projects/Work"})
+        client_fn = _mock_client_fn(nb_map)
+
+        result = is_notebook_accessible("nb1", allowlist_entries=["**"], client_fn=client_fn)
 
         assert result is True
 
@@ -309,11 +312,13 @@ class TestFilterAccessibleNotebooks:
         assert "nb3" in result_ids
         assert "nb2" not in result_ids
 
-    def test_filter_with_none_allowlist_returns_all(self):
-        """filter_accessible_notebooks returns all notebooks when allowlist is None (no restrictions)."""
+    def test_filter_with_allow_all_returns_all(self):
+        """filter_accessible_notebooks returns all notebooks when allowlist is ["**"] (no restrictions)."""
+        nb_map = _make_notebook_map({"nb1": "Work"})
+        client_fn = _mock_client_fn(nb_map)
         notebooks = [SimpleNamespace(id="nb1", title="Work")]
 
-        result = filter_accessible_notebooks(notebooks, allowlist_entries=None)
+        result = filter_accessible_notebooks(notebooks, allowlist_entries=["**"], client_fn=client_fn)
 
         assert len(result) == 1
         assert result[0].id == "nb1"

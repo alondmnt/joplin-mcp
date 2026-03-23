@@ -162,21 +162,18 @@ def _build_allowlist_spec(
 
 
 def _get_allowlist_spec(
-    allowlist_entries: Optional[List[str]] = None,
+    allowlist_entries: List[str],
     force_refresh: bool = False,
-) -> Optional[pathspec.PathSpec]:
+) -> pathspec.PathSpec:
     """Return cached compiled PathSpec, rebuilding if stale or entries changed.
 
     Args:
         allowlist_entries: The allowlist patterns to compile.
-            If None, returns None (no allowlist configured).
         force_refresh: Force rebuild regardless of TTL.
 
     Returns:
-        Compiled PathSpec or None if no allowlist.
+        Compiled PathSpec.
     """
-    if allowlist_entries is None:
-        return None
     if not allowlist_entries:
         # Empty list = deny all; return an empty spec that matches nothing
         return _build_allowlist_spec([])
@@ -289,7 +286,7 @@ def _has_negation_for_path(path: str, allowlist_entries: List[str]) -> bool:
 
 def is_notebook_accessible(
     notebook_id: str,
-    allowlist_entries: Optional[List[str]] = None,
+    allowlist_entries: List[str],
     force_refresh: bool = False,
     client_fn: Optional[Callable] = None,
 ) -> bool:
@@ -298,25 +295,19 @@ def is_notebook_accessible(
     Args:
         notebook_id: The notebook ID to check.
         allowlist_entries: Allowlist patterns from config.notebook_allowlist.
-            None = no restrictions (allow all), [] = deny all.
+            [] = deny all.
         force_refresh: Force cache refresh.
         client_fn: Optional client factory for dependency injection.
 
     Returns:
         True if the notebook is accessible, False otherwise.
     """
-    # None = no allowlist configured, all notebooks accessible
-    if allowlist_entries is None:
-        return True
-
     # Empty list = deny all
     if not allowlist_entries:
         return False
 
     # Get the compiled pathspec
     spec = _get_allowlist_spec(allowlist_entries, force_refresh=force_refresh)
-    if spec is None:
-        return False
 
     # Get the notebook map to compute the path
     nb_map = get_notebook_map_cached(
@@ -339,7 +330,7 @@ def is_notebook_accessible(
 
 def validate_notebook_access(
     notebook_id: str,
-    allowlist_entries: Optional[List[str]] = None,
+    allowlist_entries: List[str],
     force_refresh: bool = False,
     client_fn: Optional[Callable] = None,
 ) -> None:
@@ -368,7 +359,7 @@ def validate_notebook_access(
 
 def filter_accessible_notebooks(
     notebooks: List[Any],
-    allowlist_entries: Optional[List[str]] = None,
+    allowlist_entries: List[str],
     client_fn: Optional[Callable] = None,
 ) -> List[Any]:
     """Filter a list of notebooks to only those accessible under the allowlist.
@@ -376,16 +367,12 @@ def filter_accessible_notebooks(
     Args:
         notebooks: List of notebook objects (must have .id attribute or 'id' key).
         allowlist_entries: Allowlist patterns from config.notebook_allowlist.
-            None = no restrictions (return all), [] = deny all (return empty).
+            [] = deny all (return empty).
         client_fn: Optional client factory.
 
     Returns:
         Filtered list of accessible notebooks.
     """
-    # None = no allowlist configured, all notebooks accessible
-    if allowlist_entries is None:
-        return list(notebooks)
-
     # Empty list = deny all
     if not allowlist_entries:
         return []
@@ -548,7 +535,7 @@ def _validate_allowlist_at_startup_inner(
     allowlist = config.notebook_allowlist
 
     # No allowlist configured — all notebooks accessible
-    if allowlist is None:
+    if not config.has_notebook_allowlist:
         logger.info(
             "No notebook allowlist configured -- all notebooks accessible"
         )
