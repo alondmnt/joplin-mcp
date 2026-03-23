@@ -11,6 +11,7 @@ A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://jop
 - [Supported Clients](#supported-clients)
 - [Example Usage](#example-usage)
 - [Tool Permissions](#tool-permissions)
+- [Notebook Allowlist](#notebook-allowlist)
 - [Advanced Configuration](#advanced-configuration)
 - [Docker](#docker)
 - [Project Structure](#project-structure)
@@ -162,6 +163,77 @@ The setup script offers **4 permission levels**:
 - **Delete** (optional): Remove content permanently
 
 Choose the level that matches your comfort and use case.
+
+## Notebook Allowlist
+
+Restrict AI access to specific notebooks using pattern-based access control. When configured, only matching notebooks (and their contents) are visible — all other notebooks are hidden.
+
+### Quick Setup
+
+**JSON config** (`joplin-mcp.json`):
+```json
+{
+  "token": "your_token",
+  "notebook_allowlist": ["Work", "Projects/Public"]
+}
+```
+
+**Environment variable**:
+```bash
+export JOPLIN_NOTEBOOK_ALLOWLIST="Work,Projects/Public"
+```
+
+### Pattern Syntax
+
+Patterns use [gitignore/gitwildmatch](https://git-scm.com/docs/gitignore) semantics:
+
+| Pattern | Matches | Example |
+|---------|---------|---------|
+| `Work` | Exact notebook name (and all children) | `Work`, `Work/Tasks`, `Work/Notes` |
+| `Projects/*` | Direct children of Projects | `Projects/Alpha`, `Projects/Beta` |
+| `Projects/**` | All descendants recursively | `Projects/Alpha/Tasks/Q1` |
+| `!Projects/Secret` | Exclude (negate) a specific path | Everything in Projects *except* Secret |
+
+Patterns are evaluated in order — last match wins for negation.
+
+### How It Works
+
+- **Hierarchical access**: Allowing a parent notebook grants access to all its children. Allowing `Projects` means notes in `Projects/Work/Tasks` are also accessible.
+- **Read protection**: `get_note`, `find_notes`, `get_links` — notes in blocked notebooks are filtered out or rejected.
+- **Write protection**: `create_note`, `update_note`, `edit_note`, `delete_note` — operations on notes in blocked notebooks are rejected.
+- **Notebook operations**: `list_notebooks` only shows accessible notebooks. `create_notebook` under a blocked parent is rejected.
+- **Search filtering**: `find_notes` results are filtered to only include notes in accessible notebooks.
+- **Tag operations**: `tag_note`, `untag_note`, `get_tags_by_note` enforce access on the note's notebook.
+- **Error privacy**: Blocked access raises a generic "Notebook not accessible" error without revealing notebook names or IDs.
+
+### Configuration Examples
+
+**Single project focus:**
+```json
+{ "notebook_allowlist": ["Work Projects"] }
+```
+
+**Multiple notebooks with exclusion:**
+```json
+{ "notebook_allowlist": ["Projects", "!Projects/Secret", "AI", "Reference"] }
+```
+
+**Glob patterns:**
+```json
+{ "notebook_allowlist": ["Projects/*", "!Projects/Private"] }
+```
+
+**No allowlist (default)** — all notebooks accessible:
+```json
+{ "notebook_allowlist": null }
+```
+
+### Startup Behavior
+
+At server startup, the allowlist is validated and logged:
+- Each entry is resolved against existing notebooks
+- Unresolvable patterns trigger warnings (but never block startup)
+- If the allowlist resolves to zero accessible notebooks, a default "MCP Access" notebook is auto-created
 
 ---
 
@@ -318,6 +390,12 @@ Every tool can be toggled individually via `JOPLIN_TOOL_<NAME>=true|false`. Thes
 | `JOPLIN_TOOL_RESTORE_FROM_TRASH` | `true` |
 | `JOPLIN_TOOL_IMPORT_FROM_FILE` | `false` |
 
+#### Notebook Allowlist Env Var
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `JOPLIN_NOTEBOOK_ALLOWLIST` | *(not set)* | Comma-separated list of notebook patterns (e.g., `Work,Projects/*,!Projects/Secret`) |
+
 ### HTTP Transport Support
 
 The server supports both STDIO and HTTP transports:
@@ -388,6 +466,11 @@ Note: Claude Desktop currently uses STDIO transport and does not consume HTTP/SS
 | `tools.ping_joplin` | `true` | Allow testing server connectivity |
 | `tools.import_from_file` | `false` | Allow importing files/directories (MD, HTML, CSV, TXT, JEX) |
 
+#### Notebook Allowlist
+| Option | Default | Description |
+|--------|---------|-------------|
+| `notebook_allowlist` | `null` | List of notebook patterns to allow access to. `null` = no restriction. Supports gitignore-style patterns: exact names, `*` wildcards, `**` recursive, `!` negation |
+
 #### Content Exposure (Privacy Settings)
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -442,11 +525,14 @@ The container listens on `0.0.0.0:8000` by default. If exposing publicly, place 
 
 - **`src/joplin_mcp/`** - Main package directory
   - `fastmcp_server.py` - Server implementation with 25 tools and Pydantic validation types
-  - `config.py` - Configuration management
+  - `config.py` - Configuration management (including notebook allowlist)
+  - `notebook_utils.py` - Notebook path resolution, allowlist matching, and caching
   - `server.py` - Server entrypoint (module and CLI)
+  - `tools/` - Tool implementations (notes, notebooks, tags)
   - `ui_integration.py` - UI integration utilities
 - **`docs/`** - Documentation (troubleshooting, privacy controls, enhancement proposals)
-- **`tests/`** - Test suite
+- **`tests/`** - Unit test suite
+- **`tests/e2e/`** - End-to-end tests against a real Joplin instance in Docker
 
 ## Testing
 
@@ -468,6 +554,18 @@ Found X notebooks, Y notes, Z tags
 FastMCP server starting...
 Available tools: 25 tools ready
 ```
+
+### Running Tests
+
+```bash
+# Unit tests (no Joplin instance required)
+pytest tests/ --ignore=tests/e2e
+
+# E2E tests (requires Docker)
+./scripts/run-e2e.sh
+```
+
+The E2E tests start a real Joplin instance in Docker and exercise all tools including notebook allowlist enforcement. See `tests/e2e/` for details.
 
 ## Complete Tool Reference
 
