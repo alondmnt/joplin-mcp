@@ -709,6 +709,7 @@ class TestConfigValidationAndEdgeCases:
             "enabled_tools_count",
             "disabled_tools_count",
             "content_exposure",
+            "notebook_allowlist",
         }
         assert set(config_dict.keys()) == expected_keys
 
