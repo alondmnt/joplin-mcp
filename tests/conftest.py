@@ -301,6 +301,70 @@ def reset_mocks():
 
 
 @pytest.fixture
+def allowlist_config():
+    """Create a JoplinMCPConfig with notebook_allowlist for integration tests.
+
+    Returns a config with a realistic allowlist containing exact path, glob,
+    and negation patterns. Tests can override the allowlist attribute as needed.
+    """
+    from joplin_mcp.config import JoplinMCPConfig
+
+    config = JoplinMCPConfig(
+        token="test_token_for_allowlist",
+        notebook_allowlist=["Projects", "Projects/*", "AI"],
+    )
+    return config
+
+
+@pytest.fixture
+def mock_notebook_hierarchy():
+    """Set up a mock notebook tree for allowlist integration tests.
+
+    Hierarchy:
+        Root
+        +-- Projects (id: proj_root_id_00000000000000000)
+        |   +-- Work (id: proj_work_id_00000000000000000)
+        |   +-- Fun  (id: proj_fun_id_000000000000000000)
+        +-- Personal (id: personal_id_000000000000000000)
+        |   +-- Diary (id: diary_id_00000000000000000000)
+        +-- AI (id: ai_id_000000000000000000000000)
+
+    Returns a dict with:
+        - notebooks: list of SimpleNamespace objects
+        - nb_map: dict mapping id -> {title, parent_id}
+        - ids: dict mapping friendly name -> id
+    """
+    from types import SimpleNamespace
+
+    ids = {
+        "Projects": "proj_root_id_00000000000000000",
+        "Work": "proj_work_id_00000000000000000",
+        "Fun": "proj_fun_id_000000000000000000",
+        "Personal": "personal_id_000000000000000000",
+        "Diary": "diary_id_00000000000000000000",
+        "AI": "ai_id_000000000000000000000000",
+    }
+
+    notebooks = [
+        SimpleNamespace(id=ids["Projects"], title="Projects", parent_id=""),
+        SimpleNamespace(id=ids["Work"], title="Work", parent_id=ids["Projects"]),
+        SimpleNamespace(id=ids["Fun"], title="Fun", parent_id=ids["Projects"]),
+        SimpleNamespace(id=ids["Personal"], title="Personal", parent_id=""),
+        SimpleNamespace(id=ids["Diary"], title="Diary", parent_id=ids["Personal"]),
+        SimpleNamespace(id=ids["AI"], title="AI", parent_id=""),
+    ]
+
+    nb_map = {}
+    for nb in notebooks:
+        nb_map[nb.id] = {
+            "title": nb.title,
+            "parent_id": nb.parent_id or None,
+        }
+
+    return {"notebooks": notebooks, "nb_map": nb_map, "ids": ids}
+
+
+@pytest.fixture
 def anyio_backend():
     """Configure anyio backend for async testing."""
     return "asyncio"
