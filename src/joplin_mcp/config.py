@@ -229,6 +229,22 @@ class JoplinMCPConfig:
         "ping_joplin": True,  # Test connection
         # Import operations (1 tool)
         "import_from_file": False,  # Import single file or folder
+        # Bulk operations (6 tools)
+        "move_note": True,  # Move single note to different notebook
+        "bulk_move_notes": True,  # Bulk move (auto-backup before operation)
+        "search_and_bulk_update_preview": True,  # Preview bulk changes (read-only)
+        "search_and_bulk_update_execute": True,  # Execute bulk changes (preview required first, auto-backup)
+        "bulk_tag_notes": True,  # Bulk tag notes
+        "strip_note_tags": True,  # Remove all tags from a note
+        # Trash operations (2 tools)
+        "list_trash": True,  # List soft-deleted items
+        "restore_from_trash": True,  # Restore from trash
+        # Revision operations (3 tools)
+        "get_note_history": True,  # List note revisions
+        "restore_note_revision": True,  # Restore from revision (creates new note)
+        "manually_backup_note": True,  # Create revision snapshot
+        # Backup operations (1 tool)
+        "backup_database": True,  # SQLite database backup
     }
 
     # Tool categories for easier management
@@ -261,6 +277,26 @@ class JoplinMCPConfig:
         "utilities": ["ping_joplin"],
         "import": [
             "import_from_file",
+        ],
+        "bulk": [
+            "move_note",
+            "bulk_move_notes",
+            "search_and_bulk_update_preview",
+            "search_and_bulk_update_execute",
+            "bulk_tag_notes",
+            "strip_note_tags",
+        ],
+        "trash": [
+            "list_trash",
+            "restore_from_trash",
+        ],
+        "revisions": [
+            "get_note_history",
+            "restore_note_revision",
+            "manually_backup_note",
+        ],
+        "backup": [
+            "backup_database",
         ],
     }
 
