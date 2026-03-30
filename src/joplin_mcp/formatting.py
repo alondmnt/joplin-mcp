@@ -40,13 +40,19 @@ ITEM_ID: {item_id}
 MESSAGE: {item_type.value} updated successfully in Joplin"""
 
 
-def format_delete_success(item_type: ItemType, item_id: str) -> str:
+def format_delete_success(item_type: ItemType, item_id: str, soft_delete: bool = True) -> str:
     """Format a standardized success message for delete operations optimized for LLM comprehension."""
-    return f"""OPERATION: DELETE_{item_type.value.upper()}
+    if soft_delete:
+        operation = f"SOFT_DELETE_{item_type.value.upper()}"
+        message = f"{item_type.value} moved to trash in Joplin (recoverable via list_trash/restore_from_trash)"
+    else:
+        operation = f"DELETE_{item_type.value.upper()}"
+        message = f"{item_type.value} deleted permanently from Joplin"
+    return f"""OPERATION: {operation}
 STATUS: SUCCESS
 ITEM_TYPE: {item_type.value}
 ITEM_ID: {item_id}
-MESSAGE: {item_type.value} deleted successfully from Joplin"""
+MESSAGE: {message}"""
 
 
 def format_relation_success(

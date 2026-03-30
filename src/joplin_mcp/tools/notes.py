@@ -77,6 +77,8 @@ from joplin_mcp.fastmcp_server import (
     timestamp_converter,
     validate_joplin_id,
 )
+from joplin_mcp.revision_utils import save_note_revision
+from joplin_mcp.tools.field_helpers import convert_todo_completed
 from joplin_mcp.formatting import (
     build_pagination_header,
     format_find_in_note_summary,
@@ -734,7 +736,8 @@ async def update_note(
         OptionalBoolType, Field(description="Convert to/from todo (optional)")
     ] = None,
     todo_completed: Annotated[
-        OptionalBoolType, Field(description="Mark todo completed (optional)")
+        Optional[Union[bool, str, int]],
+        Field(description="Mark todo completed: True/False (uses current time), epoch ms, or ISO datetime (optional)")
     ] = None,
     todo_due: Annotated[
         Optional[Union[int, str]],
@@ -759,9 +762,9 @@ async def update_note(
     # Runtime validation for Jan AI compatibility while preserving functionality
     note_id = validate_joplin_id(note_id)
     is_todo = flexible_bool_converter(is_todo)
-    todo_completed = flexible_bool_converter(todo_completed)
 
     update_data = {}
+    warning_msg = None
     if title is not None:
         update_data["title"] = title
     if body is not None:
@@ -769,7 +772,12 @@ async def update_note(
     if is_todo is not None:
         update_data["is_todo"] = 1 if is_todo else 0
     if todo_completed is not None:
-        update_data["todo_completed"] = 1 if todo_completed else 0
+        completed_value, warning_msg = convert_todo_completed(todo_completed)
+        if completed_value is not None:
+            update_data["todo_completed"] = completed_value
+            # Auto-set is_todo when marking complete
+            if completed_value > 0 and "is_todo" not in update_data:
+                update_data["is_todo"] = 1
     if todo_due is not None:
         update_data["todo_due"] = timestamp_converter(todo_due, "todo_due") or 0
 
@@ -777,10 +785,21 @@ async def update_note(
         raise ValueError("At least one field must be provided for update")
 
     client = get_joplin_client()
+
+    # Auto-backup revision before overwriting title or body
+    if "title" in update_data or "body" in update_data:
+        try:
+            save_note_revision(client, note_id)
+        except Exception:
+            pass  # Best-effort backup — don't block the update
+
     client.modify_note(note_id, **update_data)
     _clear_note_cache()
 
-    return format_update_success(ItemType.note, note_id)
+    result = format_update_success(ItemType.note, note_id)
+    if warning_msg:
+        result += f"\nWARNING: {warning_msg}"
+    return result
 
 
 @create_tool("edit_note", "Edit note")
@@ -856,6 +875,12 @@ async def edit_note(
     note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
     body = getattr(note, "body", "") or ""
 
+    # Auto-backup revision before modifying body
+    try:
+        save_note_revision(client, note_id)
+    except Exception:
+        pass  # Best-effort backup — don't block the edit
+
     if old_string is not None:
         # Replacement / deletion mode
         count = body.count(old_string)
@@ -908,14 +933,13 @@ async def edit_note(
 async def delete_note(
     note_id: Annotated[JoplinIdType, Field(description="Note ID to delete")],
 ) -> str:
-    """Delete a note from Joplin.
+    """Delete a note from Joplin (moves to trash).
 
-    Permanently removes a note from Joplin. This action cannot be undone.
+    Moves a note to Joplin's trash. The note can be recovered using list_trash
+    and restore_from_trash, or via Joplin Desktop's trash interface.
 
     Returns:
-        str: Success message confirming the note was deleted.
-
-    Warning: This action is permanent and cannot be undone.
+        str: Success message confirming the note was moved to trash.
     """
     # Runtime validation for Jan AI compatibility while preserving functionality
     note_id = validate_joplin_id(note_id)

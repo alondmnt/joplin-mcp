@@ -89,14 +89,13 @@ async def update_notebook(
 async def delete_notebook(
     notebook_id: Annotated[JoplinIdType, Field(description="Notebook ID to delete")],
 ) -> str:
-    """Delete a notebook from Joplin.
+    """Delete a notebook from Joplin (moves to trash).
 
-    Permanently removes a notebook from Joplin. This action cannot be undone.
+    Moves a notebook and its contained notes to Joplin's trash. Recoverable
+    via list_trash and restore_from_trash, or Joplin Desktop's trash interface.
 
     Returns:
-        str: Success message confirming the notebook was deleted.
-
-    Warning: This action is permanent and cannot be undone. All notes in the notebook will also be deleted.
+        str: Success message confirming the notebook was moved to trash.
     """
     client = get_joplin_client()
     client.delete_notebook(notebook_id)

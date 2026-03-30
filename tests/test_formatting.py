@@ -122,27 +122,27 @@ class TestFormatDeleteSuccess:
     """Tests for format_delete_success function."""
 
     def test_note_delete_success(self):
-        """Should format note delete success correctly."""
+        """Should format note soft-delete success correctly (default)."""
         result = format_delete_success(ItemType.note, "deleted_note_id")
-        assert "OPERATION: DELETE_NOTE" in result
+        assert "OPERATION: SOFT_DELETE_NOTE" in result
         assert "STATUS: SUCCESS" in result
         assert "ITEM_TYPE: note" in result
         assert "ITEM_ID: deleted_note_id" in result
-        assert "note deleted successfully" in result
+        assert "moved to trash" in result
 
     def test_notebook_delete_success(self):
-        """Should format notebook delete success correctly."""
+        """Should format notebook soft-delete success correctly (default)."""
         result = format_delete_success(ItemType.notebook, "nb_to_delete")
-        assert "OPERATION: DELETE_NOTEBOOK" in result
+        assert "OPERATION: SOFT_DELETE_NOTEBOOK" in result
         assert "ITEM_TYPE: notebook" in result
-        assert "notebook deleted successfully" in result
+        assert "moved to trash" in result
 
     def test_tag_delete_success(self):
-        """Should format tag delete success correctly."""
-        result = format_delete_success(ItemType.tag, "tag_gone")
+        """Should format tag permanent delete success correctly."""
+        result = format_delete_success(ItemType.tag, "tag_gone", soft_delete=False)
         assert "OPERATION: DELETE_TAG" in result
         assert "ITEM_TYPE: tag" in result
-        assert "tag deleted successfully" in result
+        assert "deleted permanently" in result
 
 
 # === Tests for format_relation_success ===

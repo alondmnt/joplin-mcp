@@ -150,7 +150,7 @@ async def delete_tag(
     """
     client = get_joplin_client()
     client.delete_tag(tag_id)
-    return format_delete_success(ItemType.tag, tag_id)
+    return format_delete_success(ItemType.tag, tag_id, soft_delete=False)
 
 
 @create_tool("get_tags_by_note", "Get tags by note")
