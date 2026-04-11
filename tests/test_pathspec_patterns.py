@@ -3,8 +3,6 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
-
 from joplin_mcp.notebook_utils import (
     _build_allowlist_spec,
     _has_negation_for_path,

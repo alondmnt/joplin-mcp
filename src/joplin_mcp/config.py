@@ -293,7 +293,8 @@ class JoplinMCPConfig:
     }
 
     # Sentinel value: when notebook_allowlist equals this, all notebooks are accessible
-    ALLOW_ALL = ["**"]
+    # Tuple to prevent accidental mutation of the shared sentinel
+    ALLOW_ALL = ("**",)
 
     # Default import settings
     DEFAULT_IMPORT_SETTINGS = {

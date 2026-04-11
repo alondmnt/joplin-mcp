@@ -4,11 +4,12 @@ import logging
 import os
 import re
 import time
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from joplin_mcp.config import JoplinMCPConfig
     from joppy.client_api import ClientApi
+
+    from joplin_mcp.config import JoplinMCPConfig
 
 import pathspec
 
@@ -146,11 +147,16 @@ def _build_allowlist_spec(
     """Build a pathspec.PathSpec from allowlist pattern entries.
 
     Patterns follow gitignore/gitwildmatch semantics:
-    - 'AI' matches only 'AI' exactly
+    - 'AI' matches notebooks named 'AI' at any level (basename matching)
+    - 'AI/' or '/AI' anchors the match to a specific position
     - 'AI/*' matches direct children of AI
     - 'AI/**' matches all descendants of AI recursively
     - '!Projects/Secret' negates (excludes even if matched by prior pattern)
     - Patterns evaluated in order; last match wins for negation
+
+    Note: Patterns without a '/' match basenames anywhere in the hierarchy
+    (standard gitwildmatch behavior). Use 'Parent/Child' paths for exact
+    position matching.
 
     Args:
         allowlist_entries: List of pattern strings.
@@ -240,7 +246,13 @@ def _matches_allowlist(
                 return True
 
     # Check literal notebook ID (for patterns that are raw 32-char hex IDs)
-    if notebook_id in allowlist_entries:
+    # Normalize to lowercase for case-insensitive hex ID comparison
+    notebook_id_lower = notebook_id.lower()
+    if any(
+        entry.lower() == notebook_id_lower
+        for entry in allowlist_entries
+        if _HEX_ID_RE.match(entry)
+    ):
         return True
 
     return False
@@ -259,27 +271,33 @@ def _has_negation_for_path(path: str, allowlist_entries: List[str]) -> bool:
     Returns:
         True if the path is negated (excluded) by the patterns.
     """
-    # Build a spec from just the negation patterns applied to this specific path
-    # We replay all patterns in order to determine the final state
-    included = False
+    # Precompute path ancestors once
+    parts = path.split("/")
+    ancestors = ["/".join(parts[:i]) for i in range(1, len(parts))]
+
+    # Precompile specs for all entries once
+    compiled_entries: List[tuple] = []
     for entry in allowlist_entries:
-        if entry.startswith("!"):
-            # Negation pattern
-            neg_pattern = entry[1:]
-            neg_spec = pathspec.PathSpec.from_lines("gitwildmatch", [neg_pattern])
-            if neg_spec.match_file(path):
+        is_negation = entry.startswith("!")
+        pattern = entry[1:] if is_negation else entry
+        spec = pathspec.PathSpec.from_lines("gitwildmatch", [pattern])
+        compiled_entries.append((is_negation, spec))
+
+    # Replay all patterns in order to determine the final state
+    included = False
+    for is_negation, spec in compiled_entries:
+        if is_negation:
+            if spec.match_file(path):
                 included = False  # Negated
         else:
-            pos_spec = pathspec.PathSpec.from_lines("gitwildmatch", [entry])
-            if pos_spec.match_file(path):
+            if spec.match_file(path):
                 included = True  # Included
-            # Also check if this is an ancestor match
-            parts = path.split("/")
-            for i in range(1, len(parts)):
-                ancestor = "/".join(parts[:i])
-                if pos_spec.match_file(ancestor):
-                    included = True
-                    break
+            else:
+                # Also check if this is an ancestor match
+                for ancestor in ancestors:
+                    if spec.match_file(ancestor):
+                        included = True
+                        break
 
     return not included
 
