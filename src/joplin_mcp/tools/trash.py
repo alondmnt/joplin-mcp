@@ -6,8 +6,10 @@ from typing import Annotated
 from pydantic import Field
 
 from joplin_mcp.fastmcp_server import (
+    ItemType,
     JoplinIdType,
     create_tool,
+    format_restore_success,
     get_joplin_client,
     validate_joplin_id,
 )
@@ -43,23 +45,11 @@ async def restore_from_trash(
     if item_type == "note":
         client.modify_note(item_id, deleted_time=0)
         _clear_note_cache()
-        return (
-            "OPERATION: RESTORE_NOTE\n"
-            "STATUS: SUCCESS\n"
-            "ITEM_TYPE: note\n"
-            f"ITEM_ID: {item_id}\n"
-            "MESSAGE: note restored from trash to its original notebook"
-        )
+        return format_restore_success(ItemType.note, item_id)
     elif item_type == "notebook":
         client.modify_notebook(item_id, deleted_time=0)
         invalidate_notebook_map_cache()
-        return (
-            "OPERATION: RESTORE_NOTEBOOK\n"
-            "STATUS: SUCCESS\n"
-            "ITEM_TYPE: notebook\n"
-            f"ITEM_ID: {item_id}\n"
-            "MESSAGE: notebook restored from trash"
-        )
+        return format_restore_success(ItemType.notebook, item_id)
     else:
         raise ValueError(
             f"item_type must be 'note' or 'notebook', got '{item_type}'"

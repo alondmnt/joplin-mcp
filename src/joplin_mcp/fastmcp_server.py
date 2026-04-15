@@ -76,6 +76,7 @@ from joplin_mcp.formatting import (
     format_creation_success,
     format_delete_success,
     format_find_in_note_summary,
+    format_restore_success,
     format_no_results_message,
     format_note_metadata_lines,
     format_relation_success,
@@ -866,6 +867,17 @@ def _collect_note_metadata(
             metadata["notebook_path"] = notebook_path
     elif default_notebook_id_if_missing is not None:
         metadata["notebook_id"] = default_notebook_id_if_missing
+
+    # joppy converts deleted_time=0 to None, so truthy check is sufficient
+    deleted_time = getattr(note, "deleted_time", None)
+    if deleted_time:
+        deleted_date = (
+            format_timestamp(deleted_time, timestamp_format)
+            if timestamp_format
+            else format_timestamp(deleted_time)
+        )
+        if deleted_date:
+            metadata["deleted"] = deleted_date
 
     if include_todo:
         is_todo = bool(getattr(note, "is_todo", 0))
