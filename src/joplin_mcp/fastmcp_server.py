@@ -436,8 +436,11 @@ def format_no_results_with_pagination(
 
 
 # Common fields list for note operations
+# deleted_time included so the DELETED metadata line surfaces on every
+# note-returning path (get_note, find_notes_in_notebook, find_notes_with_tag),
+# not just find_notes(trash=True).
 COMMON_NOTE_FIELDS = (
-    "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed,todo_due"
+    "id,title,body,created_time,updated_time,parent_id,is_todo,todo_completed,todo_due,deleted_time"
 )
 
 

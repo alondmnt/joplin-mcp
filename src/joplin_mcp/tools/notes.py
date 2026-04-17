@@ -1015,10 +1015,11 @@ async def find_notes(
             notes = process_search_results(results)
         else:
             # No filters, get all notes (include trashed if requested)
-            fields = COMMON_NOTE_FIELDS + ",deleted_time" if trash else COMMON_NOTE_FIELDS
+            get_all_kwargs = dict(sort_kwargs)
+            if trash:
+                get_all_kwargs["include_deleted"] = 1
             results = client.get_all_notes(
-                fields=fields, **sort_kwargs,
-                **({"include_deleted": 1} if trash else {}),
+                fields=COMMON_NOTE_FIELDS, **get_all_kwargs,
             )
             notes = process_search_results(results)
     else:

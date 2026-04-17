@@ -464,6 +464,29 @@ class TestFormatNoteMetadataLines:
         assert "CREATED: 2024-01-15 10:30:00" in lines
         assert "UPDATED: 2024-01-16 14:20:00" in lines
 
+    def test_deleted_line_included_when_present(self):
+        """Should include DELETED line for trashed notes (upper and lower style)."""
+        metadata = {
+            "note_id": "trash123",
+            "title": "Trashed Note",
+            "deleted": "2024-02-01 09:00:00",
+        }
+        lines_upper = format_note_metadata_lines(metadata)
+        assert "DELETED: 2024-02-01 09:00:00" in lines_upper
+
+        lines_lower = format_note_metadata_lines(metadata, style="lower")
+        assert "deleted: 2024-02-01 09:00:00" in lines_lower
+
+    def test_deleted_line_absent_for_live_notes(self):
+        """Should omit DELETED line when deleted key is not in metadata."""
+        metadata = {
+            "note_id": "live123",
+            "title": "Live Note",
+            "created": "2024-01-15 10:30:00",
+        }
+        lines = format_note_metadata_lines(metadata)
+        assert not any("DELETED" in line for line in lines)
+
     def test_content_stats_included(self):
         """Should include content stats when provided."""
         metadata = {
