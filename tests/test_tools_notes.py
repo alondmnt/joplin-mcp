@@ -700,6 +700,65 @@ class TestFindNotesTool:
         assert result == "ALL_NOTES"
 
 
+class TestFindNotesTrashGuards:
+    """Tests for find_notes trash=True validation guards.
+
+    Joplin's search API and filter queries ignore include_deleted entirely,
+    so trash=True is only supported for query='*' with no task/completed filters.
+    These tests pin the ValueError behaviour.
+    """
+
+    @pytest.mark.asyncio
+    async def test_trash_with_text_query_raises(self):
+        """Should raise ValueError when trash=True is combined with a text query."""
+        from joplin_mcp.tools.notes import find_notes
+
+        with pytest.raises(ValueError, match="trash=True only works with"):
+            await find_notes.fn("meeting", trash=True)
+
+    @pytest.mark.asyncio
+    async def test_trash_with_task_filter_raises(self):
+        """Should raise ValueError when trash=True is combined with task filter."""
+        from joplin_mcp.tools.notes import find_notes
+
+        with pytest.raises(ValueError, match="trash=True cannot be combined"):
+            await find_notes.fn("*", trash=True, task=True)
+
+    @pytest.mark.asyncio
+    async def test_trash_with_completed_filter_raises(self):
+        """Should raise ValueError when trash=True is combined with completed filter."""
+        from joplin_mcp.tools.notes import find_notes
+
+        with pytest.raises(ValueError, match="trash=True cannot be combined"):
+            await find_notes.fn("*", trash=True, completed=False)
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.format_search_results_with_pagination")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_trash_wildcard_passes_include_deleted(
+        self, mock_get_client, mock_format
+    ):
+        """Should forward include_deleted=1 to get_all_notes on the supported path."""
+        from joplin_mcp.tools.notes import find_notes
+
+        trashed = MagicMock()
+        trashed.id = "t1"
+        trashed.title = "Trashed"
+        trashed.deleted_time = 1700000000000
+        trashed.updated_time = 1609545600000
+
+        mock_client = MagicMock()
+        mock_client.get_all_notes.return_value = [trashed]
+        mock_get_client.return_value = mock_client
+        mock_format.return_value = "TRASHED_RESULTS"
+
+        result = await find_notes.fn("*", trash=True)
+
+        mock_client.get_all_notes.assert_called_once()
+        assert mock_client.get_all_notes.call_args[1].get("include_deleted") == 1
+        assert result == "TRASHED_RESULTS"
+
+
 class TestFindNoteWithTagTool:
     """Tests for find_notes_with_tag tool."""
 
