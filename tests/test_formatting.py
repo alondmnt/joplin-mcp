@@ -130,7 +130,9 @@ class TestFormatDeleteSuccess:
         assert "ITEM_TYPE: note" in result
         assert "ITEM_ID: deleted_note_id" in result
         assert "note moved to trash" in result
+        assert "find_notes(\"*\", trash=True)" in result
         assert "restore_from_trash" in result
+        assert "deleted_note_id" in result  # ID echoed in restore example
 
     def test_notebook_delete_success(self):
         """Should format notebook delete success correctly."""
@@ -138,6 +140,10 @@ class TestFormatDeleteSuccess:
         assert "OPERATION: DELETE_NOTEBOOK" in result
         assert "ITEM_TYPE: notebook" in result
         assert "notebook moved to trash" in result
+        # Notebook hint must NOT reference find_notes — that path only lists notes
+        assert "find_notes" not in result
+        assert "restore_from_trash" in result
+        assert "nb_to_delete" in result  # ID echoed in restore example
 
     def test_tag_delete_success(self):
         """Should format tag delete success correctly."""

@@ -42,12 +42,18 @@ MESSAGE: {item_type.value} updated successfully in Joplin"""
 
 def format_delete_success(item_type: ItemType, item_id: str) -> str:
     """Format a standardized success message for delete operations optimized for LLM comprehension."""
-    soft_delete_types = {ItemType.note, ItemType.notebook}
-    if item_type in soft_delete_types:
+    if item_type is ItemType.note:
         message = (
-            f"{item_type.value} moved to trash."
-            " Use find_notes(trash=True) to list trashed items,"
-            " restore_from_trash() to restore"
+            "note moved to trash."
+            " Use find_notes(\"*\", trash=True) to list trashed notes,"
+            f" restore_from_trash(item_id=\"{item_id}\", item_type=\"note\") to restore"
+        )
+    elif item_type is ItemType.notebook:
+        # No listing path for trashed notebooks yet — keep the ID prominent
+        message = (
+            "notebook moved to trash."
+            f" Restore with restore_from_trash(item_id=\"{item_id}\", item_type=\"notebook\")."
+            " Notes inside the notebook are also trashed; restore the notebook first."
         )
     else:
         message = f"{item_type.value} deleted successfully from Joplin"
