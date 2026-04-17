@@ -19,10 +19,10 @@ A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://jop
 
 ## What You Can Do
 
-This MCP server provides **24 optimized tools** for comprehensive Joplin integration:
+This MCP server provides **25 optimized tools** for comprehensive Joplin integration:
 
 ### **Note Management**
-- **Find & Search**: `find_notes`, `find_notes_with_tag`, `find_notes_in_notebook`, `get_all_notes`
+- **Find & Search**: `find_notes` (supports `trash=True` for trashed notes), `find_notes_with_tag`, `find_notes_in_notebook`, `get_all_notes`
 - **CRUD Operations**: `get_note`, `get_links`, `create_note`, `update_note`, `edit_note`, `delete_note`
 
 ### **Notebook Management** 
@@ -31,6 +31,9 @@ This MCP server provides **24 optimized tools** for comprehensive Joplin integra
 ### **Tag Management**
 - **Categorize**: `list_tags`, `create_tag`, `update_tag`, `delete_tag`, `get_tags_by_note`
 - **Link**: `tag_note`, `untag_note`
+
+### **Trash Management**
+- **Recover**: `restore_from_trash` - Restore soft-deleted notes or notebooks
 
 ### **Import**
 - **File Import**: `import_from_file` - Import Markdown, HTML, CSV, TXT, JEX files and directories
@@ -475,7 +478,7 @@ The container listens on `0.0.0.0:8000` by default. If exposing publicly, place 
 ## Project Structure
 
 - **`src/joplin_mcp/`** - Main package directory
-  - `fastmcp_server.py` - Server implementation with 24 tools and Pydantic validation types
+  - `fastmcp_server.py` - Server implementation with 25 tools and Pydantic validation types
   - `config.py` - Configuration management
   - `server.py` - Server entrypoint (module and CLI)
   - `ui_integration.py` - UI integration utilities
@@ -500,7 +503,7 @@ Starting Joplin FastMCP Server...
 Successfully connected to Joplin!
 Found X notebooks, Y notes, Z tags
 FastMCP server starting...
-Available tools: 24 tools ready
+Available tools: 25 tools ready
 ```
 
 ## Complete Tool Reference
@@ -508,7 +511,7 @@ Available tools: 24 tools ready
 | Tool | Permission | Description |
 |------|------------|-------------|
 | **Finding Notes** | | |
-| `find_notes` | Read | Full-text search across all notes (supports task filtering) |
+| `find_notes` | Read | Full-text search across all notes (supports task filtering; `trash=True` with `query="*"` lists trashed notes) |
 | `find_notes_with_tag` | Read | Find notes with specific tag (supports task filtering) |
 | `find_notes_in_notebook` | Read | Find notes in specific notebook (supports task filtering) |
 | `get_all_notes` | Read | Get all notes, most recent first *(disabled by default)* |
@@ -534,6 +537,8 @@ Available tools: 24 tools ready
 | **Tag-Note Relationships** | | |
 | `tag_note` | Update | Add tags to notes |
 | `untag_note` | Update | Remove tags from notes |
+| **Trash Management** | | |
+| `restore_from_trash` | Update | Restore a soft-deleted note or notebook (pass `item_type='note'` or `'notebook'`) |
 | **Import Tools** | | |
 | `import_from_file` | Write | Import files/directories (MD, HTML, CSV, TXT, JEX) |
 | **System Tools** | | |

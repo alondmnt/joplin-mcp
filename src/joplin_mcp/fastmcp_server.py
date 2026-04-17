@@ -1,7 +1,7 @@
 """FastMCP-based Joplin MCP Server Implementation.
 
 📝 FINDING NOTES:
-- find_notes(query, limit, offset, task, completed) - Find notes by text OR list all notes with pagination ⭐ MAIN FUNCTION FOR TEXT SEARCHES AND LISTING ALL NOTES!
+- find_notes(query, limit, offset, task, completed, trash) - Find notes by text OR list all notes with pagination ⭐ MAIN FUNCTION FOR TEXT SEARCHES AND LISTING ALL NOTES! Use trash=True with query="*" to list trashed notes.
 - find_notes_with_tag(tag_name, limit, offset, task, completed) - Find all notes with a specific tag with pagination ⭐ MAIN FUNCTION FOR TAG SEARCHES!
 - find_notes_in_notebook(notebook_name, limit, offset, task, completed) - Find all notes in a specific notebook with pagination ⭐ MAIN FUNCTION FOR NOTEBOOK SEARCHES!
 - find_in_note(note_id, pattern, limit, offset, case_sensitive, multiline, dotall) - Run regex searches inside a single note with context and pagination
@@ -29,6 +29,10 @@
 📁 MANAGING NOTEBOOKS:
 - list_notebooks() - List all available notebooks
 - create_notebook(title) - Create a new notebook
+
+🗑️ TRASH MANAGEMENT:
+- restore_from_trash(item_id, item_type) - Restore a soft-deleted note or notebook (item_type: 'note' or 'notebook')
+- delete_note / delete_notebook move items to trash (soft delete); find_notes("*", trash=True) lists trashed notes
 """
 
 import datetime
