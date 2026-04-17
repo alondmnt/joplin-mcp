@@ -36,6 +36,7 @@
 """
 
 import datetime
+import re
 import time
 import logging
 import os
@@ -472,6 +473,19 @@ def filter_items_by_title(items: List[Any], query: str) -> List[Any]:
     ]
 
 
+_TOKEN_QUERY_RE = re.compile(r"([?&]token=)[^&\s\"'`)\]]+", re.IGNORECASE)
+
+
+def _redact_token(text: str) -> str:
+    """Replace the token query param value with *** in any URL inside text.
+
+    joppy appends ?token=<full-token> to every Joplin API request, so any
+    requests.HTTPError raised upstream stringifies the full token through
+    the request URL. Redact before the error text reaches MCP clients or logs.
+    """
+    return _TOKEN_QUERY_RE.sub(r"\1***", text)
+
+
 def with_client_error_handling(operation_name: str):
     """Decorator to handle client operations with standardized error handling."""
 
@@ -483,7 +497,7 @@ def with_client_error_handling(operation_name: str):
             except Exception as e:
                 if "parameter is required" in str(e) or "must be between" in str(e):
                     raise e  # Re-raise validation errors as-is
-                raise ValueError(f"{operation_name} failed: {str(e)}")
+                raise ValueError(f"{operation_name} failed: {_redact_token(str(e))}")
 
         return wrapper
 
