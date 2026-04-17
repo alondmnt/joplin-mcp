@@ -227,6 +227,8 @@ class JoplinMCPConfig:
         "untag_note": True,  # Remove tag from note
         # Utility operations (1 tool)
         "ping_joplin": True,  # Test connection
+        # Trash operations (1 tool)
+        "restore_from_trash": True,  # Restore deleted note/notebook from trash
         # Import operations (1 tool)
         "import_from_file": False,  # Import single file or folder
     }
@@ -259,6 +261,7 @@ class JoplinMCPConfig:
             "untag_note",
         ],
         "utilities": ["ping_joplin"],
+        "trash": ["restore_from_trash"],
         "import": [
             "import_from_file",
         ],

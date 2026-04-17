@@ -12,6 +12,7 @@ from joplin_mcp.formatting import (
     format_no_results_message,
     format_note_metadata_lines,
     format_relation_success,
+    format_restore_success,
     format_update_success,
     get_item_emoji,
 )
@@ -128,14 +129,15 @@ class TestFormatDeleteSuccess:
         assert "STATUS: SUCCESS" in result
         assert "ITEM_TYPE: note" in result
         assert "ITEM_ID: deleted_note_id" in result
-        assert "note deleted successfully" in result
+        assert "note moved to trash" in result
+        assert "restore_from_trash" in result
 
     def test_notebook_delete_success(self):
         """Should format notebook delete success correctly."""
         result = format_delete_success(ItemType.notebook, "nb_to_delete")
         assert "OPERATION: DELETE_NOTEBOOK" in result
         assert "ITEM_TYPE: notebook" in result
-        assert "notebook deleted successfully" in result
+        assert "notebook moved to trash" in result
 
     def test_tag_delete_success(self):
         """Should format tag delete success correctly."""
@@ -143,6 +145,29 @@ class TestFormatDeleteSuccess:
         assert "OPERATION: DELETE_TAG" in result
         assert "ITEM_TYPE: tag" in result
         assert "tag deleted successfully" in result
+
+
+# === Tests for format_restore_success ===
+
+
+class TestFormatRestoreSuccess:
+    """Tests for format_restore_success function."""
+
+    def test_note_restore_success(self):
+        """Should format note restore success correctly."""
+        result = format_restore_success(ItemType.note, "restored_note_id")
+        assert "OPERATION: RESTORE_NOTE" in result
+        assert "STATUS: SUCCESS" in result
+        assert "ITEM_TYPE: note" in result
+        assert "ITEM_ID: restored_note_id" in result
+        assert "restored successfully" in result
+
+    def test_notebook_restore_success(self):
+        """Should format notebook restore success correctly."""
+        result = format_restore_success(ItemType.notebook, "restored_nb_id")
+        assert "OPERATION: RESTORE_NOTEBOOK" in result
+        assert "ITEM_TYPE: notebook" in result
+        assert "restored successfully" in result
 
 
 # === Tests for format_relation_success ===

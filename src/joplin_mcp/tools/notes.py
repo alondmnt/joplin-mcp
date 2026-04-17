@@ -908,14 +908,13 @@ async def edit_note(
 async def delete_note(
     note_id: Annotated[JoplinIdType, Field(description="Note ID to delete")],
 ) -> str:
-    """Delete a note from Joplin.
+    """Delete a note from Joplin (moves to trash).
 
-    Permanently removes a note from Joplin. This action cannot be undone.
+    Soft-deletes a note by moving it to Joplin's trash.  The note can be
+    found with find_notes("*", trash=True) and restored with restore_from_trash().
 
     Returns:
-        str: Success message confirming the note was deleted.
-
-    Warning: This action is permanent and cannot be undone.
+        str: Success message confirming the note was moved to trash.
     """
     # Runtime validation for Jan AI compatibility while preserving functionality
     note_id = validate_joplin_id(note_id)
@@ -945,6 +944,10 @@ async def find_notes(
         OptionalBoolType,
         Field(description="Filter by completion status (default: None)"),
     ] = None,
+    trash: Annotated[
+        OptionalBoolType,
+        Field(description="Show trashed (soft-deleted) notes instead of active notes (default: None/False)"),
+    ] = None,
     order_by: Annotated[
         OptionalSortByType,
         Field(description='Sort field: "title", "created_time", "updated_time" (default: updated_time for *, relevance for text)'),
@@ -962,16 +965,37 @@ async def find_notes(
         - find_notes("*") - List all notes
         - find_notes("meeting") - Find notes containing "meeting"
         - find_notes("*", task=True) - List all tasks
+        - find_notes("*", trash=True) - List trashed (soft-deleted) notes
         - find_notes("*", limit=20, offset=20) - Page 2
 
     TIP: Use find_notes_with_tag() or find_notes_in_notebook() for filtered searches.
+    TIP: Trashed notes can be restored with restore_from_trash().
+
+    IMPORTANT: trash=True only works with query="*" and no task/completed filters.
+    Joplin's search API does not index trashed notes and ignores include_deleted
+    for filter queries.
     """
 
     # Runtime validation for Jan AI compatibility while preserving functionality
     task = flexible_bool_converter(task)
     completed = flexible_bool_converter(completed)
+    trash = flexible_bool_converter(trash)
     order_by = flexible_enum_converter(order_by, SortBy, "order_by")
     order_dir = flexible_enum_converter(order_dir, SortOrder, "order_dir")
+
+    # trash=True only works with query="*" and no task/completed filters.
+    # Joplin's search API and filter queries ignore include_deleted entirely.
+    if trash:
+        if query.strip() != "*":
+            raise ValueError(
+                'trash=True only works with query="*". '
+                "Joplin's search API does not index trashed notes."
+            )
+        if task is not None or completed is not None:
+            raise ValueError(
+                "trash=True cannot be combined with task or completed filters. "
+                "Joplin's search API ignores include_deleted for filter queries."
+            )
 
     client = get_joplin_client()
 
@@ -990,9 +1014,11 @@ async def find_notes(
             )
             notes = process_search_results(results)
         else:
-            # No filters, get all notes
+            # No filters, get all notes (include trashed if requested)
+            fields = COMMON_NOTE_FIELDS + ",deleted_time" if trash else COMMON_NOTE_FIELDS
             results = client.get_all_notes(
-                fields=COMMON_NOTE_FIELDS, **sort_kwargs
+                fields=fields, **sort_kwargs,
+                **({"include_deleted": 1} if trash else {}),
             )
             notes = process_search_results(results)
     else:
@@ -1014,13 +1040,18 @@ async def find_notes(
         )
         notes = process_search_results(results)
 
+    # Post-filter for trash: keep only trashed notes
+    # (joppy converts deleted_time=0 to None, so truthy check is sufficient)
+    if trash:
+        notes = [n for n in notes if getattr(n, "deleted_time", None)]
+
     # Apply pagination
     paginated_notes, total_count = apply_pagination(notes, limit, offset)
 
     if not paginated_notes:
         # Create descriptive message based on search criteria
         if query.strip() == "*":
-            base_criteria = "(all notes)"
+            base_criteria = "(all trashed notes)" if trash else "(all notes)"
         else:
             base_criteria = f'containing "{query}"'
 
@@ -1029,7 +1060,7 @@ async def find_notes(
 
     # Format results with pagination info
     if query.strip() == "*":
-        search_description = "all notes"
+        search_description = "all trashed notes" if trash else "all notes"
         sort_kwargs_for_display = resolve_sort_params(order_by, order_dir)
     else:
         search_description = f"text search: {query}"
