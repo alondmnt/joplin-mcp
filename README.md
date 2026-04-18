@@ -12,6 +12,7 @@ A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://jop
 - [Example Usage](#example-usage)
 - [Tool Permissions](#tool-permissions)
 - [Advanced Configuration](#advanced-configuration)
+- [Docker](#docker)
 - [Project Structure](#project-structure)
 - [Testing](#testing)
 - [Complete Tool Reference](#complete-tool-reference)
@@ -77,10 +78,6 @@ This script will:
 
 After setup, restart Claude Desktop and you're ready to go!
 
-```
-"List my notebooks" or "Create a note about today's meeting"
-```
-
 ### Claude Code
 
 Install the orchestration plugin for smarter tool usage (edit vs update, long-note reading, bulk tagging):
@@ -119,10 +116,6 @@ joplin-mcp-install
 
 This will detect and configure Jan AI automatically, just like Claude Desktop.
 
-```
-"Show me my recent notes" or "Create a project planning note"
-```
-
 ### OllMCP (Local Ollama Models)
 
 **Auto-discovery (if you set up Claude Desktop first)**
@@ -142,8 +135,11 @@ pip install ollmcp
 # Set environment variable
 export JOPLIN_TOKEN="your_joplin_api_token_here"
 
-# Run with manual server configuration (requires uv installed)
+# Run with uvx (requires uv installed)
 ollmcp --server "joplin:uvx --from joplin-mcp joplin-mcp-server" --model qwen3:4b
+
+# Or with an installed package (pip install joplin-mcp)
+ollmcp --server "joplin:joplin-mcp-server" --model qwen3:4b
 ```
 
 ## Example Usage
@@ -171,23 +167,7 @@ Choose the level that matches your comfort and use case.
 
 ## Advanced Configuration
 
-### Alternative Installation Methods
-
-#### Method 1: Traditional pip install
-
-If you don't have `uvx` or prefer to customize MCP settings:
-
-```bash
-# Install the package
-pip install joplin-mcp
-
-# Run the setup script
-joplin-mcp-install
-```
-
-This method provides the same functionality as `uvx joplin-mcp-install` but requires a local Python environment.
-
-#### Method 2: Development Installation
+### Development Installation
 
 For developers or users who want the latest features:
 
@@ -261,28 +241,7 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-#### 3. OllMCP Manual Configuration
-
-**Option A: Using uvx (Zero-install)**
-```bash
-# Set environment variable
-export JOPLIN_TOKEN="your_token_here"
-
-# Run with manual server configuration
-ollmcp --server "joplin:uvx --from joplin-mcp joplin-mcp-server" --model qwen3:4b
-```
-*Requires `uv` installed: `pip install uv`*
-
-**Option B: Using installed package**
-```bash
-# Set environment variable
-export JOPLIN_TOKEN="your_token_here"
-
-# Run with manual server configuration
-ollmcp --server "joplin:joplin-mcp-server" --model qwen3:4b
-```
-
-#### 4. More Client Configuration Examples
+#### 3. More Client Configuration Examples
 
 For additional client configurations including different transport options (HTTP, SSE, Streamable HTTP), see [client-config.json.example](client-config.json.example).
 
@@ -301,17 +260,16 @@ Fine-tune which operations the AI can perform by editing your config:
 {
   "tools": {
     "create_note": true,
-    "update_note": true, 
+    "update_note": true,
     "delete_note": false,
     "create_notebook": true,
+    "update_notebook": false,
     "delete_notebook": false,
     "create_tag": true,
     "update_tag": false,
     "delete_tag": false,
-    "import_from_file": true,
     "get_all_notes": false,
-    "update_notebook": false,
-    "update_tag": false
+    "import_from_file": true
   }
 }
 ```
@@ -357,6 +315,7 @@ Every tool can be toggled individually via `JOPLIN_TOOL_<NAME>=true|false`. Thes
 | `JOPLIN_TOOL_TAG_NOTE` | `true` |
 | `JOPLIN_TOOL_UNTAG_NOTE` | `true` |
 | `JOPLIN_TOOL_PING_JOPLIN` | `true` |
+| `JOPLIN_TOOL_RESTORE_FROM_TRASH` | `true` |
 | `JOPLIN_TOOL_IMPORT_FROM_FILE` | `false` |
 
 ### HTTP Transport Support
@@ -375,7 +334,8 @@ PYTHONPATH=src python -m joplin_mcp.server --transport http-compat --port 8000 -
 # or keep --transport http and export MCP_HTTP_COMPAT=1/true to toggle the same behavior.
 ```
 
-# HTTP client config
+#### HTTP client config
+
 Note: Claude Desktop currently uses STDIO transport and does not consume HTTP/SSE configs directly. The following example applies to clients that support network transports.
 ```json
 {
@@ -404,6 +364,7 @@ Note: Claude Desktop currently uses STDIO transport and does not consume HTTP/SS
 |--------|---------|-------------|
 | `tools.create_note` | `true` | Allow creating new notes |
 | `tools.update_note` | `true` | Allow modifying existing notes |
+| `tools.edit_note` | `true` | Allow precision edits (find/replace, append, prepend) |
 | `tools.delete_note` | `false` | Allow deleting notes *(disabled by default — destructive)* |
 | `tools.create_notebook` | `true` | Allow creating new notebooks |
 | `tools.update_notebook` | `false` | Allow modifying notebook titles |
@@ -413,9 +374,11 @@ Note: Claude Desktop currently uses STDIO transport and does not consume HTTP/SS
 | `tools.delete_tag` | `false` | Allow deleting tags *(disabled by default — destructive)* |
 | `tools.tag_note` | `true` | Allow adding tags to notes |
 | `tools.untag_note` | `true` | Allow removing tags from notes |
+| `tools.restore_from_trash` | `true` | Allow restoring soft-deleted notes or notebooks |
 | `tools.find_notes` | `true` | Allow text search across notes (with task filtering) |
 | `tools.find_notes_with_tag` | `true` | Allow finding notes by tag (with task filtering) |
 | `tools.find_notes_in_notebook` | `true` | Allow finding notes by notebook (with task filtering) |
+| `tools.find_in_note` | `true` | Allow regex search within a single note |
 | `tools.get_all_notes` | `false` | Allow getting all notes (disabled by default - can fill context window) |
 | `tools.get_note` | `true` | Allow getting specific notes |
 | `tools.get_links` | `true` | Allow extracting links to other notes |
