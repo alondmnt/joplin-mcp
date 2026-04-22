@@ -621,6 +621,78 @@ class TestUpdateNoteTool:
         assert "UPDATE_NOTE" in result
         assert "SUCCESS" in result
 
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_notebook_id_by_name")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_moves_note_to_notebook(self, mock_get_client, mock_resolve_nb):
+        """Should move note when notebook_name is provided."""
+        from joplin_mcp.tools.notes import update_note
+
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        mock_resolve_nb.return_value = "target-notebook-id"
+
+        result = await update_note.fn(
+            "12345678901234567890123456789012",
+            notebook_name="Archive",
+        )
+
+        mock_resolve_nb.assert_called_once_with("Archive")
+        mock_client.modify_note.assert_called_once()
+        call_args = mock_client.modify_note.call_args
+        assert call_args[0][0] == "12345678901234567890123456789012"
+        assert call_args[1]["parent_id"] == "target-notebook-id"
+        assert "title" not in call_args[1]
+        assert "UPDATE_NOTE" in result
+        assert "SUCCESS" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_notebook_id_by_name")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_updates_title_and_moves_together(
+        self, mock_get_client, mock_resolve_nb
+    ):
+        """Should combine notebook move with other field updates in one call."""
+        from joplin_mcp.tools.notes import update_note
+
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        mock_resolve_nb.return_value = "target-notebook-id"
+
+        await update_note.fn(
+            "12345678901234567890123456789012",
+            title="Renamed",
+            notebook_name="Projects/Work",
+        )
+
+        mock_resolve_nb.assert_called_once_with("Projects/Work")
+        call_args = mock_client.modify_note.call_args
+        assert call_args[1]["title"] == "Renamed"
+        assert call_args[1]["parent_id"] == "target-notebook-id"
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_notebook_id_by_name")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_invalid_notebook_name_raises(
+        self, mock_get_client, mock_resolve_nb
+    ):
+        """Should propagate ValueError from get_notebook_id_by_name and not call modify_note."""
+        from joplin_mcp.tools.notes import update_note
+
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+        mock_resolve_nb.side_effect = ValueError(
+            "Notebook 'NoSuch' not found. Available notebooks: Work, Personal."
+        )
+
+        with pytest.raises(ValueError, match="not found"):
+            await update_note.fn(
+                "12345678901234567890123456789012",
+                notebook_name="NoSuch",
+            )
+
+        mock_client.modify_note.assert_not_called()
+
 
 def _get_tool_fn(tool):
     """Get the underlying function from a tool (handles both wrapped and unwrapped)."""

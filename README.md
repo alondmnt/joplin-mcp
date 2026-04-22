@@ -483,7 +483,7 @@ Available tools: 25 tools ready
 | `get_links` | Read | Extract links to other notes from a note |
 | **Managing Notes** | | |
 | `create_note` | Write | Create new notes |
-| `update_note` | Update | Modify existing notes |
+| `update_note` | Update | Modify existing notes (incl. moving between notebooks) |
 | `edit_note` | Update | Precision edit note content (find/replace, append, prepend) |
 | `delete_note` | Delete | Remove notes |
 | **Managing Notebooks** | | |

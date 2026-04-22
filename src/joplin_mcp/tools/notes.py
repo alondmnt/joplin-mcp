@@ -730,6 +730,10 @@ async def update_note(
     note_id: Annotated[JoplinIdType, Field(description="Note ID to update")],
     title: Annotated[Optional[str], Field(description="New title (optional)")] = None,
     body: Annotated[Optional[str], Field(description="New content (optional)")] = None,
+    notebook_name: Annotated[
+        Optional[str],
+        Field(description="Move note to this notebook by name or path (e.g., 'Work' or 'Projects/Work/Tasks')")
+    ] = None,
     is_todo: Annotated[
         OptionalBoolType, Field(description="Convert to/from todo (optional)")
     ] = None,
@@ -741,10 +745,15 @@ async def update_note(
         Field(description="Due date: Unix timestamp (ms), ISO 8601 string, or 0 to clear. Only for todos.")
     ] = None,
 ) -> str:
-    """Update note properties (title, body, todo status, due date). Replaces the entire body.
+    """Update note properties (title, body, todo status, due date) or move a note to another notebook. Replaces the entire body.
 
-    Use this for metadata changes or full body replacement. For targeted text edits
-    (fix a word, append a line) use edit_note instead — it doesn't require reading first.
+    Use this for metadata changes, moving a note between notebooks, or full body
+    replacement. For targeted text edits (fix a word, append a line) use edit_note
+    instead — it doesn't require reading first.
+
+    Notebook can be specified by name or path:
+    - "Work" - matches notebook named "Work" (must be unique)
+    - "Projects/Work" - matches "Work" notebook inside "Projects"
 
     Returns:
         str: Success message confirming the note was updated.
@@ -752,6 +761,8 @@ async def update_note(
     Examples:
         - update_note("note123", title="New Title") - Update only the title
         - update_note("note123", body="New content", is_todo=True) - Update content and convert to todo
+        - update_note("note123", notebook_name="Archive") - Move note to the "Archive" notebook
+        - update_note("note123", notebook_name="Projects/Work/Tasks") - Move to a sub-notebook by path
         - update_note("note123", todo_due="2024-12-31T17:00:00") - Set due date
         - update_note("note123", todo_due=0) - Clear due date
     """
@@ -766,6 +777,8 @@ async def update_note(
         update_data["title"] = title
     if body is not None:
         update_data["body"] = body
+    if notebook_name is not None:
+        update_data["parent_id"] = get_notebook_id_by_name(notebook_name)
     if is_todo is not None:
         update_data["is_todo"] = 1 if is_todo else 0
     if todo_completed is not None:
