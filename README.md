@@ -498,8 +498,8 @@ Available tools: 25 tools ready
 | `delete_tag` | Delete | Remove tags |
 | `get_tags_by_note` | Read | List tags on specific note |
 | **Tag-Note Relationships** | | |
-| `tag_note` | Update | Add tags to notes |
-| `untag_note` | Update | Remove tags from notes |
+| `tag_note` | Update | Add one or more tags to one or more notes (accepts lists) |
+| `untag_note` | Update | Remove one or more tags from one or more notes (accepts lists) |
 | **Trash Management** | | |
 | `restore_from_trash` | Update | Restore a soft-deleted note or notebook (pass `item_type='note'` or `'notebook'`) |
 | **Import Tools** | | |
