@@ -40,8 +40,10 @@ for i in $(seq 1 60); do
 done
 
 echo "==> Running E2E tests..."
+set +e
 docker compose -f "$COMPOSE_FILE" run --build --rm e2e-tests pytest tests/e2e/ -v -m e2e --no-header --override-ini="addopts=" --no-cov "$@"
 rc=$?
+set -e
 
 echo "==> Tearing down containers..."
 docker compose -f "$COMPOSE_FILE" down -v
