@@ -53,7 +53,7 @@ def e2e_config():
 def e2e_client(e2e_config):
     """Create a real ClientApi connected to the Joplin container."""
     client = ClientApi(token=e2e_config.token, url=e2e_config.base_url)
-    if not _joplin_reachable(client):
+    if not _wait_for_joplin(client):
         pytest.skip("Joplin instance not reachable — skipping E2E tests")
     return client
 
@@ -79,8 +79,10 @@ def _patch_joplin_client(e2e_config, e2e_client):
             p = patch(target, return_value=e2e_client)
             p.start()
             patches.append(p)
-        except Exception:
-            pass
+        except ModuleNotFoundError:
+            continue
+        except Exception as exc:
+            pytest.fail(f"Failed to patch {target} in _patch_joplin_client: {exc}")
 
     # Also patch _module_config so allowlist tests can work
     config_targets = [
@@ -93,8 +95,10 @@ def _patch_joplin_client(e2e_config, e2e_client):
             p = patch(target, e2e_config)
             p.start()
             patches.append(p)
-        except Exception:
-            pass
+        except ModuleNotFoundError:
+            continue
+        except Exception as exc:
+            pytest.fail(f"Failed to patch {target} in _patch_joplin_client: {exc}")
 
     yield
 

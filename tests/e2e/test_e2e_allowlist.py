@@ -1,7 +1,8 @@
 """E2E tests for the notebook allowlist feature against a live Joplin instance.
 
 These tests create a real notebook hierarchy and verify every tool's allowlist
-enforcement with actual Joplin API calls — no mocks.
+enforcement with actual Joplin API calls. Module configuration is patched for
+test isolation, but the Joplin API itself is never mocked.
 """
 
 import re
@@ -31,7 +32,11 @@ def _extract_id(tool_output: str) -> str:
     if m:
         return m.group(1)
     m = re.search(r"ID:\s*(\S+)", tool_output)
-    return m.group(1) if m else None
+    if m:
+        return m.group(1)
+    raise AssertionError(
+        f"Could not extract Joplin ID from tool output: {tool_output!r}"
+    )
 
 
 @contextmanager
@@ -180,15 +185,15 @@ class TestListNotebooksAllowlist:
             assert "AI" not in listing
 
     @pytest.mark.asyncio
-    async def test_empty_allowlist_treated_as_no_restriction(self, hierarchy):
-        """Empty list [] is treated same as None (not configured) — no restriction."""
+    async def test_empty_allowlist_denies_all_notebooks(self, hierarchy):
+        """Empty list [] means deny all notebooks, not unrestricted access."""
         from joplin_mcp.tools.notebooks import list_notebooks
 
         with _allowlist_config([]):
             listing = await _call(list_notebooks)
-            # Empty allowlist = not configured = everything visible
-            for name in ("Projects", "Work", "Personal", "AI"):
-                assert name in listing
+            # Empty allowlist = deny all = no notebooks visible
+            for name in ("Projects", "Work", "Secret", "Personal", "Diary", "AI"):
+                assert name not in listing
 
 
 # ===================================================================

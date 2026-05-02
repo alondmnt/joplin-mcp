@@ -194,7 +194,7 @@ Patterns use [gitignore/gitwildmatch](https://git-scm.com/docs/gitignore) semant
 | `Projects/**` | All descendants recursively | `Projects/Alpha/Tasks/Q1` |
 | `!Projects/Secret` | Exclude (negate) a specific path | Everything in Projects *except* Secret |
 
-Patterns are evaluated in order — last match wins for negation.
+Negation patterns always win over positive patterns (any negation match on a path or ancestor denies access).
 
 ### How It Works
 
@@ -208,7 +208,7 @@ Patterns are evaluated in order — last match wins for negation.
 
 ### Configuration Examples
 
-**Single project focus:**
+**Single project focus** (notebook name containing a space):
 ```json
 { "notebook_allowlist": ["Work Projects"] }
 ```
@@ -233,7 +233,7 @@ Patterns are evaluated in order — last match wins for negation.
 At server startup, the allowlist is validated and logged:
 - Each entry is resolved against existing notebooks
 - Unresolvable patterns trigger warnings (but never block startup)
-- If the allowlist resolves to zero accessible notebooks, a default "MCP Access" notebook is auto-created
+- If the allowlist resolves to zero accessible notebooks, a warning is logged
 
 ---
 

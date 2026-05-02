@@ -245,4 +245,6 @@ def _extract_id(tool_output: str) -> str:
     match = re.search(r"ID:\s*(\S+)", tool_output)
     if match:
         return match.group(1)
-    return None
+    raise AssertionError(
+        f"Could not extract Joplin ID from tool output: {tool_output!r}"
+    )
