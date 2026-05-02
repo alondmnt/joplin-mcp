@@ -1233,8 +1233,9 @@ def main(
         client = get_joplin_client()
         logger.info("Joplin client initialized successfully")
 
-        # Validate notebook allowlist and warm caches at startup
-        validate_allowlist_at_startup(_config, client)
+        # Validate and log notebook allowlist at startup (D3, D6, D9)
+        runtime_config = _config or _module_config
+        validate_allowlist_at_startup(runtime_config, client)
 
         # ---- Non-breaking compat toggle via env ----
         compat_env = os.getenv("MCP_HTTP_COMPAT", "").strip().lower() in {"1","true","yes","on"}

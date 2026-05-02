@@ -364,6 +364,44 @@ def mock_notebook_hierarchy():
     return {"notebooks": notebooks, "nb_map": nb_map, "ids": ids}
 
 
+@pytest.fixture(autouse=True)
+def _no_notebook_allowlist():
+    """Disable notebook allowlist for all tests by default.
+
+    This prevents any real allowlist configuration from leaking into tests.
+    Tests that need an allowlist should patch _module_config themselves.
+    """
+    from unittest.mock import patch
+
+    targets = [
+        "joplin_mcp.tools.notes._module_config",
+        "joplin_mcp.tools.notebooks._module_config",
+        "joplin_mcp.tools.tags._module_config",
+    ]
+    patches = []
+    for target in targets:
+        try:
+            p = patch(target)
+            mock_cfg = p.start()
+            mock_cfg.has_notebook_allowlist = False
+            mock_cfg.notebook_allowlist = None
+            # Preserve other config attributes that tools may need
+            mock_cfg.should_show_content.return_value = True
+            mock_cfg.should_show_full_content.return_value = True
+            mock_cfg.get_max_preview_length.return_value = 300
+            mock_cfg.is_smart_toc_enabled.return_value = False
+            mock_cfg.get_smart_toc_threshold.return_value = 2000
+            mock_cfg.tools = {}
+            patches.append(p)
+        except ModuleNotFoundError:
+            continue
+        except Exception as exc:
+            pytest.fail(f"Failed to patch {target} in _no_notebook_allowlist: {exc}")
+    yield
+    for p in patches:
+        p.stop()
+
+
 @pytest.fixture
 def anyio_backend():
     """Configure anyio backend for async testing."""
