@@ -346,13 +346,17 @@ class TestCacheInvalidation:
         _NOTEBOOK_MAP_CACHE["built_at"] = 999999.0
         _NOTEBOOK_MAP_CACHE["map"] = {"fake": "data"}
         _ALLOWLIST_SPEC_CACHE["built_at"] = 999999.0
-        _ALLOWLIST_SPEC_CACHE["spec"] = "fake_spec"
+        _ALLOWLIST_SPEC_CACHE["positive_spec"] = "fake_spec"
+        _ALLOWLIST_SPEC_CACHE["negation_spec"] = "fake_neg"
         _ALLOWLIST_SPEC_CACHE["entries"] = ["fake"]
+        _ALLOWLIST_SPEC_CACHE["hex_ids"] = {"fake"}
 
         invalidate_notebook_map_cache()
 
         assert _NOTEBOOK_MAP_CACHE["built_at"] == 0.0
         assert _NOTEBOOK_MAP_CACHE["map"] is None
         assert _ALLOWLIST_SPEC_CACHE["built_at"] == 0.0
-        assert _ALLOWLIST_SPEC_CACHE["spec"] is None
+        assert _ALLOWLIST_SPEC_CACHE["positive_spec"] is None
+        assert _ALLOWLIST_SPEC_CACHE["negation_spec"] is None
         assert _ALLOWLIST_SPEC_CACHE["entries"] is None
+        assert _ALLOWLIST_SPEC_CACHE["hex_ids"] is None

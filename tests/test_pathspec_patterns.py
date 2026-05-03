@@ -4,9 +4,9 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from joplin_mcp.notebook_utils import (
-    _build_allowlist_spec,
-    _has_negation_for_path,
+    _build_split_specs,
     _matches_allowlist,
+    _path_or_ancestor_matches,
     invalidate_notebook_map_cache,
     is_notebook_accessible,
 )
@@ -115,7 +115,7 @@ class TestWildcardPattern:
 
         # Grandchild should NOT match with single star alone
         # However, because "Projects/Work" matches, the ancestor check
-        # in _matches_allowlist will grant access to children.
+        # grants access to children.
         # This is by design per D2 (parent allowlisting grants child access).
         invalidate_notebook_map_cache()
         # The ancestor check means Projects/Work matches, and since
@@ -197,37 +197,57 @@ class TestNegationWithinAllowlist:
         client_fn = _mock_client_fn(nb_map)
 
         # Projects/Secret is negated, so Projects/Secret/Notes should also be denied
-        # because the negation check in _has_negation_for_path evaluates full path
+        # because negation covers descendants (ancestor of path matches negation)
         result = is_notebook_accessible(
             "nb1",
-            allowlist_entries=["Projects/**", "!Projects/Secret/Notes"],
+            allowlist_entries=["Projects/**", "!Projects/Secret"],
+            client_fn=client_fn,
+        )
+        assert result is False
+
+    def test_negation_descendants_are_blocked(self):
+        """Negating a path also blocks all descendants (no need for /**)."""
+        nb_map = _make_notebook_map({
+            "nb1": "Work/Personal/Sub",
+        })
+        client_fn = _mock_client_fn(nb_map)
+
+        # !Work/Personal should deny Work/Personal/Sub too
+        result = is_notebook_accessible(
+            "nb1",
+            allowlist_entries=["Work", "!Work/Personal"],
             client_fn=client_fn,
         )
         assert result is False
 
 
-class TestPatternOrderMatters:
-    """Test that last matching pattern wins (gitignore semantics)."""
+class TestNegationAlwaysWins:
+    """Test that any negation match denies access (negation wins over positive).
+
+    This is intentionally simpler than gitignore last-match-wins semantics.
+    For an access-control allowlist the failure mode should be over-deny
+    rather than over-allow.
+    """
 
     def setup_method(self):
         invalidate_notebook_map_cache()
 
-    def test_pattern_order_last_match_wins(self):
-        """Later patterns override earlier ones: negate then re-include."""
+    def test_negation_overrides_positive_regardless_of_order(self):
+        """Negation wins even if a positive pattern comes after it."""
         nb_map = _make_notebook_map({
             "nb1": "Projects/Secret",
         })
         client_fn = _mock_client_fn(nb_map)
 
-        # First negate, then re-include: last match wins
+        # Positive after negation: negation still wins (over-deny)
         result = is_notebook_accessible(
             "nb1",
             allowlist_entries=["Projects/**", "!Projects/Secret", "Projects/Secret"],
             client_fn=client_fn,
         )
-        assert result is True
+        assert result is False
 
-    def test_pattern_order_negate_wins_when_last(self):
+    def test_negation_wins_when_last(self):
         """When negation is the last matching pattern, notebook is denied."""
         nb_map = _make_notebook_map({
             "nb1": "Projects/Secret",
@@ -276,42 +296,94 @@ class TestNotebookIdLiteralPattern:
         assert result is False
 
 
-class TestBuildAllowlistSpec:
-    """Test the _build_allowlist_spec function directly."""
+class TestBuildSplitSpecs:
+    """Test the _build_split_specs function directly."""
 
-    def test_empty_entries_matches_nothing(self):
-        """An empty allowlist spec matches no paths."""
-        spec = _build_allowlist_spec([])
-        assert spec.match_file("anything") is False
+    def test_empty_entries(self):
+        """Empty entries produce specs that match nothing."""
+        pos, neg, ids = _build_split_specs([])
+        assert pos.match_file("anything") is False
+        assert neg.match_file("anything") is False
+        assert ids == set()
 
-    def test_spec_with_patterns(self):
-        """Spec built from patterns correctly matches paths."""
-        spec = _build_allowlist_spec(["Projects/*", "Work/**"])
-        assert spec.match_file("Projects/Foo") is True
-        assert spec.match_file("Work/Deep/Nested") is True
-        assert spec.match_file("Personal/Diary") is False
+    def test_positive_and_negation_split(self):
+        """Positive and negation patterns are separated correctly."""
+        pos, neg, ids = _build_split_specs(
+            ["Projects/*", "!Projects/Secret", "Work/**"]
+        )
+        assert pos.match_file("Projects/Foo") is True
+        assert pos.match_file("Work/Deep/Nested") is True
+        assert neg.match_file("Projects/Secret") is True
+        assert neg.match_file("Work/Foo") is False
+
+    def test_hex_ids_extracted(self):
+        """32-char hex IDs are extracted into a lowercase set."""
+        hex_id = "aabbccdd11223344aabbccdd11223344"
+        pos, neg, ids = _build_split_specs([hex_id, "Work"])
+        assert hex_id in ids
+        assert len(ids) == 1
 
 
-class TestHasNegationForPath:
-    """Test the _has_negation_for_path helper."""
+class TestPathOrAncestorMatches:
+    """Test the _path_or_ancestor_matches helper."""
 
-    def test_no_negation(self):
-        """Returns False (not negated) when no negation patterns exist."""
-        result = _has_negation_for_path("Projects/Work", ["Projects/*"])
-        assert result is False
+    def test_direct_match(self):
+        """Returns True when the path itself matches."""
+        import pathspec
+        spec = pathspec.PathSpec.from_lines("gitwildmatch", ["Projects/*"])
+        assert _path_or_ancestor_matches(spec, "Projects/Work") is True
 
-    def test_negation_applies(self):
-        """Returns True (negated) when path matches a negation pattern."""
-        result = _has_negation_for_path(
-            "Projects/Secret",
-            ["Projects/*", "!Projects/Secret"],
+    def test_ancestor_match(self):
+        """Returns True when an ancestor of the path matches."""
+        import pathspec
+        spec = pathspec.PathSpec.from_lines("gitwildmatch", ["Projects"])
+        assert _path_or_ancestor_matches(spec, "Projects/Work/Sub") is True
+
+    def test_no_match(self):
+        """Returns False when neither path nor ancestors match."""
+        import pathspec
+        spec = pathspec.PathSpec.from_lines("gitwildmatch", ["Work"])
+        assert _path_or_ancestor_matches(spec, "Personal/Diary") is False
+
+
+class TestSlashInNotebookTitles:
+    """Test that '/' in notebook titles doesn't break path matching."""
+
+    def setup_method(self):
+        invalidate_notebook_map_cache()
+
+    def test_slash_in_title_does_not_create_fictional_segments(self):
+        """A notebook titled 'Tax / 2025' should not split into fake path segments."""
+        from joplin_mcp.notebook_utils import _compute_notebook_path
+
+        # Simulate: Finance contains "Tax / 2025"
+        nb_map = {
+            "finance_id": {"title": "Finance", "parent_id": None},
+            "tax_id": {"title": "Tax / 2025", "parent_id": "finance_id"},
+        }
+        path = _compute_notebook_path("tax_id", nb_map, sep="/")
+        # The '/' in the title should be escaped, not treated as a separator
+        assert path.count("/") == 1  # only the real separator between Finance and title
+        assert "Tax" in path
+        assert "2025" in path
+
+    def test_slash_in_title_allowlist_matching(self):
+        """Allowlist should handle notebooks with '/' in titles correctly."""
+        # Build a map where the title has a '/'
+        nb_map = {
+            "finance_id": {"title": "Finance", "parent_id": None},
+            "tax_id": {"title": "Tax / 2025", "parent_id": "finance_id"},
+        }
+        notebooks = [
+            SimpleNamespace(id="finance_id", title="Finance", parent_id=""),
+            SimpleNamespace(id="tax_id", title="Tax / 2025", parent_id="finance_id"),
+        ]
+        client = MagicMock()
+        client.get_all_notebooks.return_value = notebooks
+        client_fn = lambda: client  # noqa: E731
+
+        # Allowlisting "Finance" should grant access to "Tax / 2025" child
+        result = is_notebook_accessible(
+            "tax_id", allowlist_entries=["Finance"], client_fn=client_fn
         )
         assert result is True
-
-    def test_re_inclusion_after_negation(self):
-        """Returns False (not negated) when re-included after negation."""
-        result = _has_negation_for_path(
-            "Projects/Secret",
-            ["Projects/*", "!Projects/Secret", "Projects/Secret"],
-        )
-        assert result is False

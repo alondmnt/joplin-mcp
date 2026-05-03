@@ -58,6 +58,8 @@ def _compute_notebook_path(
         if not info:
             break
         title = (info.get("title") or "Untitled").strip()
+        # Escape '/' in titles to avoid splitting into fictional path segments
+        title = title.replace("/", "\u2215")  # Unicode fraction slash
         parts.append(title)
         curr = info.get("parent_id")
 
@@ -124,8 +126,10 @@ def invalidate_notebook_map_cache() -> None:
     _NOTEBOOK_MAP_CACHE["map"] = None
     # Also invalidate the allowlist spec cache since it depends on notebook paths
     _ALLOWLIST_SPEC_CACHE["built_at"] = 0.0
-    _ALLOWLIST_SPEC_CACHE["spec"] = None
+    _ALLOWLIST_SPEC_CACHE["positive_spec"] = None
+    _ALLOWLIST_SPEC_CACHE["negation_spec"] = None
     _ALLOWLIST_SPEC_CACHE["entries"] = None
+    _ALLOWLIST_SPEC_CACHE["hex_ids"] = None
 
 
 # === ALLOWLIST PATHSPEC MATCHING ===
@@ -133,173 +137,150 @@ def invalidate_notebook_map_cache() -> None:
 
 _ALLOWLIST_SPEC_CACHE: Dict[str, Any] = {
     "built_at": 0.0,
-    "spec": None,
+    "positive_spec": None,
+    "negation_spec": None,
     "entries": None,
+    "hex_ids": None,
 }
 
 # Regex for 32-char hex IDs (Joplin notebook/note IDs)
 _HEX_ID_RE = re.compile(r"^[0-9a-f]{32}$", re.IGNORECASE)
 
 
-def _build_allowlist_spec(
+def _build_split_specs(
     allowlist_entries: List[str],
-) -> pathspec.PathSpec:
-    """Build a pathspec.PathSpec from allowlist pattern entries.
+) -> tuple:
+    """Build separate positive and negation PathSpec objects from allowlist entries.
 
-    Patterns follow gitignore/gitwildmatch semantics:
+    Splitting the allowlist into two pre-compiled specs allows a simple matching
+    model: any negation match on the path or any ancestor → deny; any positive
+    match on the path or any ancestor → allow; negation wins over positive.
+
+    This is intentionally simpler than full gitignore last-match-wins semantics.
+    For an access-control allowlist the security failure mode should be over-deny
+    rather than over-allow.
+
+    Patterns follow gitwildmatch semantics:
     - 'AI' matches notebooks named 'AI' at any level (basename matching)
     - 'AI/' or '/AI' anchors the match to a specific position
     - 'AI/*' matches direct children of AI
     - 'AI/**' matches all descendants of AI recursively
-    - '!Projects/Secret' negates (excludes even if matched by prior pattern)
-    - Patterns evaluated in order; last match wins for negation
+    - '!Work/Personal' negates the path and all descendants
 
     Note: Patterns without a '/' match basenames anywhere in the hierarchy
     (standard gitwildmatch behavior). Use 'Parent/Child' paths for exact
     position matching.
 
     Args:
-        allowlist_entries: List of pattern strings.
+        allowlist_entries: List of pattern strings (may include '!' prefixed negations).
 
     Returns:
-        Compiled PathSpec object.
+        Tuple of (positive_spec, negation_spec, hex_ids_set).
     """
-    return pathspec.PathSpec.from_lines("gitwildmatch", allowlist_entries)
+    positive = [e for e in allowlist_entries if not e.startswith("!")]
+    negation = [e[1:] for e in allowlist_entries if e.startswith("!")]
+    hex_ids = {
+        e.lower() for e in allowlist_entries if _HEX_ID_RE.match(e)
+    }
+
+    positive_spec = pathspec.PathSpec.from_lines("gitwildmatch", positive)
+    negation_spec = pathspec.PathSpec.from_lines("gitwildmatch", negation)
+    return positive_spec, negation_spec, hex_ids
 
 
-def _get_allowlist_spec(
+def _get_allowlist_specs(
     allowlist_entries: List[str],
     force_refresh: bool = False,
-) -> pathspec.PathSpec:
-    """Return cached compiled PathSpec, rebuilding if stale or entries changed.
+) -> tuple:
+    """Return cached (positive_spec, negation_spec, hex_ids), rebuilding if stale.
 
     Args:
         allowlist_entries: The allowlist patterns to compile.
         force_refresh: Force rebuild regardless of TTL.
 
     Returns:
-        Compiled PathSpec.
+        Tuple of (positive_spec, negation_spec, hex_ids_set).
     """
     if not allowlist_entries:
-        # Empty list = deny all; return an empty spec that matches nothing
-        return _build_allowlist_spec([])
+        empty = pathspec.PathSpec.from_lines("gitwildmatch", [])
+        return empty, empty, set()
 
     ttl = _get_notebook_cache_ttl()
     now = time.monotonic()
 
     if not force_refresh:
-        cached_spec = _ALLOWLIST_SPEC_CACHE.get("spec")
+        cached_pos = _ALLOWLIST_SPEC_CACHE.get("positive_spec")
         cached_entries = _ALLOWLIST_SPEC_CACHE.get("entries")
         built_at = _ALLOWLIST_SPEC_CACHE.get("built_at", 0.0) or 0.0
         if (
-            cached_spec is not None
+            cached_pos is not None
             and cached_entries == allowlist_entries
             and (now - built_at) < ttl
         ):
-            return cached_spec
+            return (
+                _ALLOWLIST_SPEC_CACHE["positive_spec"],
+                _ALLOWLIST_SPEC_CACHE["negation_spec"],
+                _ALLOWLIST_SPEC_CACHE["hex_ids"],
+            )
 
-    spec = _build_allowlist_spec(allowlist_entries)
-    _ALLOWLIST_SPEC_CACHE["spec"] = spec
+    positive_spec, negation_spec, hex_ids = _build_split_specs(allowlist_entries)
+    _ALLOWLIST_SPEC_CACHE["positive_spec"] = positive_spec
+    _ALLOWLIST_SPEC_CACHE["negation_spec"] = negation_spec
+    _ALLOWLIST_SPEC_CACHE["hex_ids"] = hex_ids
     _ALLOWLIST_SPEC_CACHE["entries"] = list(allowlist_entries)
     _ALLOWLIST_SPEC_CACHE["built_at"] = now
-    return spec
+    return positive_spec, negation_spec, hex_ids
+
+
+def _path_or_ancestor_matches(spec: pathspec.PathSpec, path: str) -> bool:
+    """Return True if spec matches the path or any of its ancestor prefixes."""
+    if spec.match_file(path):
+        return True
+    parts = path.split("/")
+    for i in range(1, len(parts)):
+        if spec.match_file("/".join(parts[:i])):
+            return True
+    return False
 
 
 def _matches_allowlist(
     notebook_path: str,
     notebook_id: str,
-    spec: pathspec.PathSpec,
-    allowlist_entries: List[str],
+    positive_spec: pathspec.PathSpec,
+    negation_spec: pathspec.PathSpec,
+    hex_ids: set,
 ) -> bool:
-    """Check if a notebook path or ID matches the allowlist spec.
+    """Check if a notebook path or ID matches the allowlist.
 
-    Matching logic:
-    1. Check the full path against the PathSpec (gitignore semantics)
-    2. Also check all ancestor prefixes so allowlisting 'Projects' matches
-       'Projects/Work/Tasks'
-    3. Check the raw notebook_id for literal 32-char hex ID patterns
+    Matching model (negation wins, covers descendants):
+    1. If any negation pattern matches the path or any ancestor → deny.
+    2. If any positive pattern matches the path or any ancestor → allow.
+    3. If the notebook ID is a literal hex ID in the allowlist → allow.
+    4. Otherwise → deny.
 
     Args:
-        notebook_path: Full path like 'Projects/Work/Tasks'
-        notebook_id: The notebook's ID (32-char hex)
-        spec: Compiled PathSpec object
-        allowlist_entries: Original allowlist entries (for ID matching)
+        notebook_path: Full path like 'Projects/Work/Tasks'.
+        notebook_id: The notebook's ID (32-char hex).
+        positive_spec: Compiled PathSpec from non-negated patterns.
+        negation_spec: Compiled PathSpec from negated patterns (without '!').
+        hex_ids: Set of lowercase hex IDs from the allowlist.
 
     Returns:
         True if the notebook is accessible.
     """
-    # Check full path
-    if spec.match_file(notebook_path):
+    # Negation wins: if any negation matches path or ancestor, deny
+    if _path_or_ancestor_matches(negation_spec, notebook_path):
+        return False
+
+    # Positive match on path or ancestor
+    if _path_or_ancestor_matches(positive_spec, notebook_path):
         return True
 
-    # Check ancestor paths (so allowlisting "Projects" matches "Projects/Work")
-    parts = notebook_path.split("/")
-    for i in range(1, len(parts)):
-        ancestor = "/".join(parts[:i])
-        if spec.match_file(ancestor):
-            # Ancestor matched, but check if a later negation excludes the full path
-            # We need to verify the full path is not negated
-            # Since pathspec handles negation for the full path already,
-            # and we're checking ancestors, we need to ensure no negation
-            # pattern targets the full path specifically
-            if not _has_negation_for_path(notebook_path, allowlist_entries):
-                return True
-
-    # Check literal notebook ID (for patterns that are raw 32-char hex IDs)
-    # Normalize to lowercase for case-insensitive hex ID comparison
-    notebook_id_lower = notebook_id.lower()
-    if any(
-        entry.lower() == notebook_id_lower
-        for entry in allowlist_entries
-        if _HEX_ID_RE.match(entry)
-    ):
+    # Literal hex ID match (case-insensitive)
+    if notebook_id.lower() in hex_ids:
         return True
 
     return False
-
-
-def _has_negation_for_path(path: str, allowlist_entries: List[str]) -> bool:
-    """Check if any negation pattern in the allowlist specifically targets this path.
-
-    Uses last-match-wins semantics: evaluates all patterns in order,
-    tracking whether the path is included or excluded.
-
-    Args:
-        path: The full notebook path to check.
-        allowlist_entries: The allowlist pattern list.
-
-    Returns:
-        True if the path is negated (excluded) by the patterns.
-    """
-    # Precompute path ancestors once
-    parts = path.split("/")
-    ancestors = ["/".join(parts[:i]) for i in range(1, len(parts))]
-
-    # Precompile specs for all entries once
-    compiled_entries: List[tuple] = []
-    for entry in allowlist_entries:
-        is_negation = entry.startswith("!")
-        pattern = entry[1:] if is_negation else entry
-        spec = pathspec.PathSpec.from_lines("gitwildmatch", [pattern])
-        compiled_entries.append((is_negation, spec))
-
-    # Replay all patterns in order to determine the final state
-    included = False
-    for is_negation, spec in compiled_entries:
-        if is_negation:
-            if spec.match_file(path):
-                included = False  # Negated
-        else:
-            if spec.match_file(path):
-                included = True  # Included
-            else:
-                # Also check if this is an ancestor match
-                for ancestor in ancestors:
-                    if spec.match_file(ancestor):
-                        included = True
-                        break
-
-    return not included
 
 
 def is_notebook_accessible(
@@ -324,8 +305,10 @@ def is_notebook_accessible(
     if not allowlist_entries:
         return False
 
-    # Get the compiled pathspec
-    spec = _get_allowlist_spec(allowlist_entries, force_refresh=force_refresh)
+    # Get the compiled specs
+    positive_spec, negation_spec, hex_ids = _get_allowlist_specs(
+        allowlist_entries, force_refresh=force_refresh
+    )
 
     # Get the notebook map to compute the path
     nb_map = get_notebook_map_cached(
@@ -343,7 +326,18 @@ def is_notebook_accessible(
     if not notebook_path:
         return False
 
-    return _matches_allowlist(notebook_path, notebook_id, spec, allowlist_entries)
+    return _matches_allowlist(
+        notebook_path, notebook_id, positive_spec, negation_spec, hex_ids
+    )
+
+
+class AllowlistDeniedError(ValueError):
+    """Raised when a notebook access check fails due to the allowlist.
+
+    Subclass of ValueError so existing error handlers that catch ValueError
+    continue to work. Callers that need to distinguish allowlist denials
+    from other validation errors can catch this type specifically.
+    """
 
 
 def validate_notebook_access(
@@ -352,7 +346,7 @@ def validate_notebook_access(
     force_refresh: bool = False,
     client_fn: Optional[Callable] = None,
 ) -> None:
-    """Validate that a notebook is accessible, raising ValueError if denied.
+    """Validate that a notebook is accessible, raising AllowlistDeniedError if denied.
 
     Error messages are intentionally generic to avoid revealing notebook
     details (per D7).
@@ -364,7 +358,7 @@ def validate_notebook_access(
         client_fn: Optional client factory.
 
     Raises:
-        ValueError: If the notebook is not accessible.
+        AllowlistDeniedError: If the notebook is not accessible.
     """
     if not is_notebook_accessible(
         notebook_id,
@@ -372,7 +366,7 @@ def validate_notebook_access(
         force_refresh=force_refresh,
         client_fn=client_fn,
     ):
-        raise ValueError("Notebook not accessible")
+        raise AllowlistDeniedError("Notebook not accessible")
 
 
 def filter_accessible_notebooks(
@@ -514,8 +508,6 @@ def get_notebook_id_by_name(name: str) -> str:
 
 # === STARTUP VALIDATION ===
 
-_DEFAULT_NOTEBOOK_NAME = "MCP Access"
-
 
 def validate_allowlist_at_startup(
     config: "JoplinMCPConfig",
@@ -526,9 +518,6 @@ def validate_allowlist_at_startup(
     Resolves each allowlist entry, logs accessible notebooks, warns about
     non-existent entries, and pre-populates caches. Never raises — the
     server always starts successfully regardless of allowlist validity.
-
-    When the allowlist is configured but resolves to zero accessible
-    notebooks, a default "MCP Access" notebook is auto-created (D9).
 
     Args:
         config: The server configuration object.
@@ -587,7 +576,7 @@ def _validate_allowlist_at_startup_inner(
 
         # Negation patterns (e.g. "!Secret") — just log them
         if entry_stripped.startswith("!"):
-            logger.info(
+            logger.debug(
                 "Allowlist negation pattern: %s", entry_stripped
             )
             resolved_entries.append(entry_stripped)
@@ -599,7 +588,7 @@ def _validate_allowlist_at_startup_inner(
                 path = _compute_notebook_path(
                     entry_stripped, nb_map, sep="/"
                 )
-                logger.info(
+                logger.debug(
                     "Allowlist entry resolved: ID %s -> %s",
                     entry_stripped,
                     path or "(root)",
@@ -618,11 +607,13 @@ def _validate_allowlist_at_startup_inner(
         has_glob = any(c in entry_stripped for c in ("*", "?"))
         if has_glob:
             # Count how many existing paths match this pattern
-            pattern_spec = _build_allowlist_spec([entry_stripped])
+            pattern_spec = pathspec.PathSpec.from_lines(
+                "gitwildmatch", [entry_stripped]
+            )
             match_count = sum(
                 1 for p in path_to_id if pattern_spec.match_file(p)
             )
-            logger.info(
+            logger.debug(
                 "Allowlist glob pattern: %s (matches %d notebook%s)",
                 entry_stripped,
                 match_count,
@@ -641,7 +632,7 @@ def _validate_allowlist_at_startup_inner(
 
         # Literal path — try exact match first, then case-insensitive
         if entry_stripped in path_to_id:
-            logger.info(
+            logger.debug(
                 "Allowlist entry resolved: '%s' -> ID %s",
                 entry_stripped,
                 path_to_id[entry_stripped],
@@ -653,7 +644,7 @@ def _validate_allowlist_at_startup_inner(
             matched = False
             for path, nb_id in path_to_id.items():
                 if path.lower() == lower_entry:
-                    logger.info(
+                    logger.debug(
                         "Allowlist entry resolved (case-insensitive): "
                         "'%s' -> '%s' (ID %s)",
                         entry_stripped,
@@ -672,7 +663,7 @@ def _validate_allowlist_at_startup_inner(
                 unresolved_entries.append(entry_stripped)
 
     # Pre-populate the allowlist spec cache (D6)
-    _get_allowlist_spec(allowlist, force_refresh=True)
+    _get_allowlist_specs(allowlist, force_refresh=True)
 
     # Summary logging
     if resolved_entries:
@@ -686,33 +677,17 @@ def _validate_allowlist_at_startup_inner(
             "All %d allowlist entries are unresolved", len(allowlist)
         )
 
-    # Check how many notebooks are actually accessible (D9)
+    # Check how many notebooks are actually accessible
     all_notebooks = client.get_all_notebooks(fields="id,title,parent_id")
     accessible = filter_accessible_notebooks(
         all_notebooks, allowlist_entries=allowlist, client_fn=client_fn
     )
 
     if len(accessible) == 0:
-        # Auto-create "MCP Access" default notebook (D9)
-        try:
-            new_id = client.add_notebook(title=_DEFAULT_NOTEBOOK_NAME)
-            logger.info(
-                "Allowlist resolved to zero accessible notebooks. "
-                "Created default '%s' (ID: %s)",
-                _DEFAULT_NOTEBOOK_NAME,
-                new_id,
-            )
-            # Refresh notebook map cache to include new notebook
-            invalidate_notebook_map_cache()
-            get_notebook_map_cached(force_refresh=True, client_fn=client_fn)
-            # Re-populate the allowlist spec cache
-            _get_allowlist_spec(allowlist, force_refresh=True)
-        except Exception:
-            logger.warning(
-                "Failed to auto-create default '%s' notebook",
-                _DEFAULT_NOTEBOOK_NAME,
-                exc_info=True,
-            )
+        logger.warning(
+            "Allowlist is configured but resolves to zero accessible "
+            "notebooks -- check your allowlist configuration"
+        )
     else:
         logger.info(
             "%d notebook%s accessible under current allowlist",
