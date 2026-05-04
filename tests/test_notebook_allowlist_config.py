@@ -67,17 +67,10 @@ class TestNotebookAllowlistConfig:
 
         assert config.notebook_allowlist == JoplinMCPConfig.ALLOW_ALL
 
-    def test_allowlist_defaults_to_allow_all_from_environment(self):
+    def test_allowlist_defaults_to_allow_all_from_environment(self, monkeypatch):
         """Test that notebook_allowlist is ALLOW_ALL when env var is not set."""
-        env_overrides = {
-            k: "" for k in os.environ if k.startswith("JOPLIN_")
-        }
-        env_overrides.pop("JOPLIN_NOTEBOOK_ALLOWLIST", None)
-        with patch.dict(os.environ, env_overrides):
-            # Ensure the allowlist env var is absent
-            os.environ.pop("JOPLIN_NOTEBOOK_ALLOWLIST", None)
-            config = JoplinMCPConfig.from_environment()
-
+        monkeypatch.delenv("JOPLIN_NOTEBOOK_ALLOWLIST", raising=False)
+        config = JoplinMCPConfig.from_environment()
         assert config.notebook_allowlist == JoplinMCPConfig.ALLOW_ALL
 
     def test_has_notebook_allowlist_true(self):
