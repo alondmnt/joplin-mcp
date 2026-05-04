@@ -292,6 +292,10 @@ class JoplinMCPConfig:
         "enable_smart_toc": True,  # Enable smart TOC behavior in get_note
     }
 
+    # Sentinel value: when notebook_allowlist equals this, all notebooks are accessible
+    # Tuple to prevent accidental mutation of the shared sentinel
+    ALLOW_ALL = ("**",)
+
     # Default import settings
     DEFAULT_IMPORT_SETTINGS = {
         "max_file_size_mb": 100,  # Maximum file size in MB
@@ -314,6 +318,7 @@ class JoplinMCPConfig:
         tools: Optional[Dict[str, bool]] = None,
         content_exposure: Optional[Dict[str, Union[str, int]]] = None,
         import_settings: Optional[Dict[str, Any]] = None,
+        notebook_allowlist: Optional[List[str]] = None,
     ):
         """Initialize configuration with default values."""
         # Use centralized defaults if not provided
@@ -343,6 +348,14 @@ class JoplinMCPConfig:
         self.import_settings = self.DEFAULT_IMPORT_SETTINGS.copy()
         if import_settings:
             self.import_settings.update(import_settings)
+
+        # Initialize notebook allowlist (ALLOW_ALL = no restrictions, [] = deny all)
+        self.notebook_allowlist = notebook_allowlist if notebook_allowlist is not None else self.ALLOW_ALL
+
+    @property
+    def has_notebook_allowlist(self) -> bool:
+        """Return True when a notebook allowlist is configured (including empty)."""
+        return self.notebook_allowlist != self.ALLOW_ALL
 
     def is_tool_enabled(self, tool_name: str) -> bool:
         """Check if a specific tool is enabled."""
@@ -460,6 +473,12 @@ class JoplinMCPConfig:
                 max_preview_env, "max_preview_length"
             )
 
+        # Load notebook allowlist from environment (comma-separated)
+        notebook_allowlist = None
+        raw = os.environ.get(f"{prefix}NOTEBOOK_ALLOWLIST")
+        if raw is not None:
+            notebook_allowlist = [e.strip() for e in raw.split(",") if e.strip()]
+
         return cls(
             host=host,
             port=port,
@@ -468,6 +487,7 @@ class JoplinMCPConfig:
             verify_ssl=verify_ssl,
             tools=tools,
             content_exposure=content_exposure,
+            notebook_allowlist=notebook_allowlist,
         )
 
     def validate(self) -> None:
@@ -544,6 +564,7 @@ class JoplinMCPConfig:
             "enabled_tools_count": len(self.get_enabled_tools()),
             "disabled_tools_count": len(self.get_disabled_tools()),
             "content_exposure": self.content_exposure.copy(),
+            "notebook_allowlist": None if self.notebook_allowlist == self.ALLOW_ALL else self.notebook_allowlist,
         }
 
     def __repr__(self) -> str:
@@ -554,11 +575,18 @@ class JoplinMCPConfig:
         content_levels = {
             k: v for k, v in self.content_exposure.items() if k != "max_preview_length"
         }
+        if self.notebook_allowlist == self.ALLOW_ALL:
+            allowlist_info = "disabled"
+        elif not self.notebook_allowlist:
+            allowlist_info = "empty (deny all)"
+        else:
+            allowlist_info = f"{len(self.notebook_allowlist)} patterns"
         return (
             f"JoplinMCPConfig(host='{self.host}', port={self.port}, "
             f"token={token_display}, timeout={self.timeout}, "
             f"verify_ssl={self.verify_ssl}, tools={enabled_count}/{total_count} enabled, "
-            f"content_exposure={content_levels})"
+            f"content_exposure={content_levels}, "
+            f"notebook_allowlist={allowlist_info})"
         )
 
     @classmethod
@@ -802,6 +830,29 @@ class JoplinMCPConfig:
                     f"Invalid data type for 'import_settings': expected dictionary, got {type(data['import_settings'])}"
                 )
 
+        # Notebook allowlist - must be a list of strings or None
+        if "notebook_allowlist" in data:
+            if data["notebook_allowlist"] is None:
+                # Explicit null = no allowlist (no restrictions)
+                validated["notebook_allowlist"] = None
+            elif isinstance(data["notebook_allowlist"], list):
+                allowlist = []
+                for i, entry in enumerate(data["notebook_allowlist"]):
+                    if not isinstance(entry, str):
+                        raise ConfigError(
+                            f"Invalid type for notebook_allowlist[{i}]: "
+                            f"expected string, got {type(entry)}"
+                        )
+                    stripped = entry.strip()
+                    if stripped:
+                        allowlist.append(stripped)
+                validated["notebook_allowlist"] = allowlist
+            else:
+                raise ConfigError(
+                    f"Invalid data type for 'notebook_allowlist': "
+                    f"expected list, got {type(data['notebook_allowlist'])}"
+                )
+
         return validated
 
     @classmethod
@@ -865,6 +916,13 @@ class JoplinMCPConfig:
         if "import_settings" in overrides and isinstance(overrides["import_settings"], dict):
             merged_import_settings.update(overrides["import_settings"])
 
+        # Merge notebook allowlist: env overrides file if explicitly set
+        merged_notebook_allowlist = config.notebook_allowlist
+        if f"{prefix}NOTEBOOK_ALLOWLIST" in os.environ:
+            merged_notebook_allowlist = env_config.notebook_allowlist
+        if "notebook_allowlist" in overrides:
+            merged_notebook_allowlist = overrides["notebook_allowlist"]
+
         merged_data = {
             "host": get_value(
                 "host", "host_override", env_config.host, config.host, "localhost"
@@ -888,6 +946,7 @@ class JoplinMCPConfig:
             "tools": merged_tools,
             "content_exposure": merged_content_exposure,
             "import_settings": merged_import_settings,
+            "notebook_allowlist": merged_notebook_allowlist,
         }
 
         return cls(**merged_data)
