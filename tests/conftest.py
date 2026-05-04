@@ -300,6 +300,163 @@ def reset_mocks():
     # This runs after each test to ensure clean state
 
 
+# === ALLOWLIST TEST HELPERS ===
+# Shared by test_pathspec_patterns.py, test_notebook_allowlist_access.py,
+# and test_integration_allowlist.py.
+
+
+def make_notebook_map(paths):
+    """Build a notebook map from a dict of {notebook_id: "Parent/Child/Leaf"} paths.
+
+    Returns a map suitable for get_notebook_map_cached, where each notebook ID
+    maps to {title, parent_id} and the hierarchy is reconstructed from paths.
+    """
+    from types import SimpleNamespace
+
+    nb_map = {}
+    path_to_id = {}
+
+    for nb_id, path_str in paths.items():
+        parts = path_str.split("/")
+        parent_id = None
+        for i, part in enumerate(parts):
+            partial_path = "/".join(parts[: i + 1])
+            if partial_path not in path_to_id:
+                if i == len(parts) - 1:
+                    node_id = nb_id
+                else:
+                    node_id = f"auto_{partial_path.replace('/', '_').lower()}"
+                path_to_id[partial_path] = node_id
+                nb_map[node_id] = {
+                    "title": part,
+                    "parent_id": parent_id,
+                }
+            parent_id = path_to_id[partial_path]
+
+    return nb_map
+
+
+def mock_client_fn(nb_map):
+    """Create a mock client_fn that returns a client whose get_all_notebooks
+    returns notebook objects matching the given map."""
+    from types import SimpleNamespace
+
+    notebooks = []
+    for nb_id, info in nb_map.items():
+        nb = SimpleNamespace(
+            id=nb_id,
+            title=info["title"],
+            parent_id=info["parent_id"] or "",
+        )
+        notebooks.append(nb)
+
+    mock_client = MagicMock()
+    mock_client.get_all_notebooks.return_value = notebooks
+    return lambda: mock_client
+
+
+@pytest.fixture
+def allowlist_config():
+    """Create a JoplinMCPConfig with notebook_allowlist for integration tests.
+
+    Returns a config with a realistic allowlist containing exact path, glob,
+    and negation patterns. Tests can override the allowlist attribute as needed.
+    """
+    from joplin_mcp.config import JoplinMCPConfig
+
+    config = JoplinMCPConfig(
+        token="test_token_for_allowlist",
+        notebook_allowlist=["Projects", "Projects/*", "AI"],
+    )
+    return config
+
+
+@pytest.fixture
+def mock_notebook_hierarchy():
+    """Set up a mock notebook tree for allowlist integration tests.
+
+    Hierarchy:
+        Root
+        +-- Projects (id: proj_root_id_00000000000000000)
+        |   +-- Work (id: proj_work_id_00000000000000000)
+        |   +-- Fun  (id: proj_fun_id_000000000000000000)
+        +-- Personal (id: personal_id_000000000000000000)
+        |   +-- Diary (id: diary_id_00000000000000000000)
+        +-- AI (id: ai_id_000000000000000000000000)
+
+    Returns a dict with:
+        - notebooks: list of SimpleNamespace objects
+        - nb_map: dict mapping id -> {title, parent_id}
+        - ids: dict mapping friendly name -> id
+    """
+    from types import SimpleNamespace
+
+    ids = {
+        "Projects": "proj_root_id_00000000000000000",
+        "Work": "proj_work_id_00000000000000000",
+        "Fun": "proj_fun_id_000000000000000000",
+        "Personal": "personal_id_000000000000000000",
+        "Diary": "diary_id_00000000000000000000",
+        "AI": "ai_id_000000000000000000000000",
+    }
+
+    notebooks = [
+        SimpleNamespace(id=ids["Projects"], title="Projects", parent_id=""),
+        SimpleNamespace(id=ids["Work"], title="Work", parent_id=ids["Projects"]),
+        SimpleNamespace(id=ids["Fun"], title="Fun", parent_id=ids["Projects"]),
+        SimpleNamespace(id=ids["Personal"], title="Personal", parent_id=""),
+        SimpleNamespace(id=ids["Diary"], title="Diary", parent_id=ids["Personal"]),
+        SimpleNamespace(id=ids["AI"], title="AI", parent_id=""),
+    ]
+
+    nb_map = {}
+    for nb in notebooks:
+        nb_map[nb.id] = {
+            "title": nb.title,
+            "parent_id": nb.parent_id or None,
+        }
+
+    return {"notebooks": notebooks, "nb_map": nb_map, "ids": ids}
+
+
+@pytest.fixture(autouse=True)
+def _no_notebook_allowlist():
+    """Disable notebook allowlist for all tests by default.
+
+    This prevents any real allowlist configuration from leaking into tests.
+    Tests that need an allowlist should patch _module_config themselves.
+    """
+    from unittest.mock import patch
+
+    targets = [
+        "joplin_mcp.tools.notes._module_config",
+        "joplin_mcp.tools.notebooks._module_config",
+        "joplin_mcp.tools.tags._module_config",
+    ]
+    patches = []
+    for target in targets:
+        try:
+            p = patch(target)
+            mock_cfg = p.start()
+            mock_cfg.has_notebook_allowlist = False
+            mock_cfg.notebook_allowlist = None
+            # Preserve other config attributes that tools may need
+            mock_cfg.should_show_content.return_value = True
+            mock_cfg.should_show_full_content.return_value = True
+            mock_cfg.get_max_preview_length.return_value = 300
+            mock_cfg.is_smart_toc_enabled.return_value = False
+            mock_cfg.get_smart_toc_threshold.return_value = 2000
+            mock_cfg.tools = {}
+            patches.append(p)
+        except ModuleNotFoundError:
+            continue
+        except Exception as exc:
+            pytest.fail(f"Failed to patch {target} in _no_notebook_allowlist: {exc}")
+    yield
+    for p in patches:
+        p.stop()
+
+
 @pytest.fixture
 def anyio_backend():
     """Configure anyio backend for async testing."""

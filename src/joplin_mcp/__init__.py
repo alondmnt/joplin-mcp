@@ -21,7 +21,7 @@ import logging
 # Import configuration
 from .config import JoplinMCPConfig
 
-__version__ = "0.6.0"
+__version__ = "0.7.1"
 __author__ = "Alon Diament"
 __license__ = "MIT"
 __description__ = "Model Context Protocol server for the Joplin note-taking application"

@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1
+# E2E test runner — installs joplin-mcp + dev deps + test suite
+
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+# Note: Dockerfile.e2e.dockerignore keeps tests/ in the build context
+COPY tests ./tests
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir ".[dev]"
+
+CMD ["pytest", "tests/e2e/", "-v", "-m", "e2e", "--no-header", "--override-ini=addopts="]

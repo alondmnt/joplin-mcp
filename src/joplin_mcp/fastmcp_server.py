@@ -375,6 +375,7 @@ from joplin_mcp.notebook_utils import (
     get_notebook_id_by_name,
     get_notebook_map_cached,
     invalidate_notebook_map_cache,
+    validate_allowlist_at_startup,
 )
 
 
@@ -1231,6 +1232,10 @@ def main(
         logger.info("Initializing Joplin client...")
         client = get_joplin_client()
         logger.info("Joplin client initialized successfully")
+
+        # Validate and log notebook allowlist at startup (D3, D6, D9)
+        runtime_config = _config or _module_config
+        validate_allowlist_at_startup(runtime_config, client)
 
         # ---- Non-breaking compat toggle via env ----
         compat_env = os.getenv("MCP_HTTP_COMPAT", "").strip().lower() in {"1","true","yes","on"}

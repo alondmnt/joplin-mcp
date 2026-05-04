@@ -40,6 +40,7 @@ dependencies = [
     "PyYAML>=6.0.0",
     "beautifulsoup4>=4.9.0",
     "markdownify>=0.11.0",
+    "pathspec>=0.11",
 ]
 
 [project.optional-dependencies]
@@ -174,6 +175,7 @@ filterwarnings = [
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
+    "e2e: end-to-end tests requiring a real Joplin instance",
 ]
 
 # Coverage configuration

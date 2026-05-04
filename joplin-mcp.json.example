@@ -28,6 +28,7 @@
     "import_from_file": true,
     "ping_joplin": true
   },
+  "notebook_allowlist": null,
   "content_exposure": {
     "search_results": "preview",
     "individual_notes": "full",

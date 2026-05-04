@@ -1,3 +1,18 @@
+# v0.7.1
+*Released on 2026-03-09*
+
+- added: **notebook allowlist** — pattern-based access control restricting AI to specific notebooks
+  - gitignore-style patterns: exact names, `*` wildcards, `**` recursive, `!` negation
+  - hierarchical access: allowing a parent grants access to all children
+  - enforced across all tools: read, write, search, list, tag operations
+  - generic error messages prevent leaking notebook details
+  - configurable via JSON (`notebook_allowlist`) or env var (`JOPLIN_NOTEBOOK_ALLOWLIST`)
+  - startup validation with logging and auto-creation of default notebook when allowlist resolves to zero
+- added: E2E test suite (43 tests) running against a real Joplin instance in Docker
+- added: `notebook_utils.py` module for path resolution, allowlist matching, and notebook map caching
+
+---
+
 # [v0.6.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.6.0)
 *Released on 2026-02-10*
 
