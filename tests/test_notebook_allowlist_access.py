@@ -361,3 +361,29 @@ class TestCacheInvalidation:
         assert _ALLOWLIST_SPEC_CACHE["negation_spec"] is None
         assert _ALLOWLIST_SPEC_CACHE["entries"] is None
         assert _ALLOWLIST_SPEC_CACHE["hex_ids"] is None
+
+
+class TestStartupValidationNoAutoCreate:
+    """Regression test: startup validator must never create notebooks."""
+
+    def setup_method(self):
+        invalidate_notebook_map_cache()
+
+    def test_zero_match_does_not_create_notebook(self):
+        """When allowlist resolves to zero notebooks, warn but do not auto-create."""
+        from unittest.mock import MagicMock
+
+        from joplin_mcp.config import JoplinMCPConfig
+        from joplin_mcp.notebook_utils import validate_allowlist_at_startup
+
+        client = MagicMock()
+        client.get_all_notebooks.return_value = []
+        client.ping.return_value = "JoplinClipperServer"
+
+        config = JoplinMCPConfig(
+            token="test_token",
+            notebook_allowlist=["NonExistent"],
+        )
+
+        validate_allowlist_at_startup(config, client)
+        client.add_notebook.assert_not_called()
