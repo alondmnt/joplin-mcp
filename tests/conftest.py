@@ -300,6 +300,61 @@ def reset_mocks():
     # This runs after each test to ensure clean state
 
 
+# === ALLOWLIST TEST HELPERS ===
+# Shared by test_pathspec_patterns.py, test_notebook_allowlist_access.py,
+# and test_integration_allowlist.py.
+
+
+def make_notebook_map(paths):
+    """Build a notebook map from a dict of {notebook_id: "Parent/Child/Leaf"} paths.
+
+    Returns a map suitable for get_notebook_map_cached, where each notebook ID
+    maps to {title, parent_id} and the hierarchy is reconstructed from paths.
+    """
+    from types import SimpleNamespace
+
+    nb_map = {}
+    path_to_id = {}
+
+    for nb_id, path_str in paths.items():
+        parts = path_str.split("/")
+        parent_id = None
+        for i, part in enumerate(parts):
+            partial_path = "/".join(parts[: i + 1])
+            if partial_path not in path_to_id:
+                if i == len(parts) - 1:
+                    node_id = nb_id
+                else:
+                    node_id = f"auto_{partial_path.replace('/', '_').lower()}"
+                path_to_id[partial_path] = node_id
+                nb_map[node_id] = {
+                    "title": part,
+                    "parent_id": parent_id,
+                }
+            parent_id = path_to_id[partial_path]
+
+    return nb_map
+
+
+def mock_client_fn(nb_map):
+    """Create a mock client_fn that returns a client whose get_all_notebooks
+    returns notebook objects matching the given map."""
+    from types import SimpleNamespace
+
+    notebooks = []
+    for nb_id, info in nb_map.items():
+        nb = SimpleNamespace(
+            id=nb_id,
+            title=info["title"],
+            parent_id=info["parent_id"] or "",
+        )
+        notebooks.append(nb)
+
+    mock_client = MagicMock()
+    mock_client.get_all_notebooks.return_value = notebooks
+    return lambda: mock_client
+
+
 @pytest.fixture
 def allowlist_config():
     """Create a JoplinMCPConfig with notebook_allowlist for integration tests.

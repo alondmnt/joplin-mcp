@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from conftest import make_notebook_map, mock_client_fn
 
 from joplin_mcp.notebook_utils import (
     AllowlistDeniedError,
@@ -12,56 +13,6 @@ from joplin_mcp.notebook_utils import (
     is_notebook_accessible,
     validate_notebook_access,
 )
-
-
-def _make_notebook_map(paths):
-    """Build a notebook map from a dict of {notebook_id: "Parent/Child/Leaf"} paths.
-
-    Returns a map suitable for get_notebook_map_cached, where each notebook ID
-    maps to {title, parent_id} and the hierarchy is reconstructed from paths.
-    """
-    nb_map = {}
-    # Track which title at which parent corresponds to which ID
-    # We need to assign IDs to intermediate nodes too
-    path_to_id = {}
-
-    for nb_id, path_str in paths.items():
-        parts = path_str.split("/")
-        parent_id = None
-        for i, part in enumerate(parts):
-            partial_path = "/".join(parts[: i + 1])
-            if partial_path not in path_to_id:
-                # For the final part, use the given nb_id
-                if i == len(parts) - 1:
-                    node_id = nb_id
-                else:
-                    # Generate a synthetic ID for intermediate nodes
-                    node_id = f"auto_{partial_path.replace('/', '_').lower()}"
-                path_to_id[partial_path] = node_id
-                nb_map[node_id] = {
-                    "title": part,
-                    "parent_id": parent_id,
-                }
-            parent_id = path_to_id[partial_path]
-
-    return nb_map
-
-
-def _mock_client_fn(nb_map):
-    """Create a mock client_fn that returns a client whose get_all_notebooks
-    returns notebook objects matching the given map."""
-    notebooks = []
-    for nb_id, info in nb_map.items():
-        nb = SimpleNamespace(
-            id=nb_id,
-            title=info["title"],
-            parent_id=info["parent_id"] or "",
-        )
-        notebooks.append(nb)
-
-    mock_client = MagicMock()
-    mock_client.get_all_notebooks.return_value = notebooks
-    return lambda: mock_client
 
 
 class TestNoAllowlistBehavior:
@@ -73,8 +24,8 @@ class TestNoAllowlistBehavior:
 
     def test_allow_all_allows_access(self):
         """When allowlist_entries is ["**"], all notebooks are accessible (no restrictions)."""
-        nb_map = _make_notebook_map({"nb1": "Projects/Work"})
-        client_fn = _mock_client_fn(nb_map)
+        nb_map = make_notebook_map({"nb1": "Projects/Work"})
+        client_fn = mock_client_fn(nb_map)
 
         result = is_notebook_accessible("nb1", allowlist_entries=["**"], client_fn=client_fn)
 
@@ -82,8 +33,8 @@ class TestNoAllowlistBehavior:
 
     def test_empty_allowlist_denies_access(self):
         """When allowlist_entries is [], is_notebook_accessible returns False (deny all)."""
-        nb_map = _make_notebook_map({"nb1": "Projects/Work"})
-        client_fn = _mock_client_fn(nb_map)
+        nb_map = make_notebook_map({"nb1": "Projects/Work"})
+        client_fn = mock_client_fn(nb_map)
 
         result = is_notebook_accessible("nb1", allowlist_entries=[], client_fn=client_fn)
 
@@ -98,8 +49,8 @@ class TestExactPathMatching:
 
     def test_exact_path_match(self):
         """Notebook at 'Projects/Work' is accessible when allowlist has 'Projects/Work'."""
-        nb_map = _make_notebook_map({"nb1": "Projects/Work"})
-        client_fn = _mock_client_fn(nb_map)
+        nb_map = make_notebook_map({"nb1": "Projects/Work"})
+        client_fn = mock_client_fn(nb_map)
 
         result = is_notebook_accessible(
             "nb1", allowlist_entries=["Projects/Work"], client_fn=client_fn
@@ -109,11 +60,11 @@ class TestExactPathMatching:
 
     def test_exact_path_no_match(self):
         """Notebook at 'Personal/Diary' is denied when allowlist only has 'Projects/Work'."""
-        nb_map = _make_notebook_map({
+        nb_map = make_notebook_map({
             "nb1": "Projects/Work",
             "nb2": "Personal/Diary",
         })
-        client_fn = _mock_client_fn(nb_map)
+        client_fn = mock_client_fn(nb_map)
 
         result = is_notebook_accessible(
             "nb2", allowlist_entries=["Projects/Work"], client_fn=client_fn
@@ -123,8 +74,8 @@ class TestExactPathMatching:
 
     def test_notebook_id_not_in_map(self):
         """Notebook ID not found in map returns False."""
-        nb_map = _make_notebook_map({"nb1": "Projects/Work"})
-        client_fn = _mock_client_fn(nb_map)
+        nb_map = make_notebook_map({"nb1": "Projects/Work"})
+        client_fn = mock_client_fn(nb_map)
 
         result = is_notebook_accessible(
             "nonexistent", allowlist_entries=["Projects/Work"], client_fn=client_fn
@@ -141,11 +92,11 @@ class TestWildcardMatching:
 
     def test_wildcard_match(self):
         """Wildcard 'Projects/*' matches direct children of Projects."""
-        nb_map = _make_notebook_map({
+        nb_map = make_notebook_map({
             "nb1": "Projects/Work",
             "nb2": "Projects/Personal",
         })
-        client_fn = _mock_client_fn(nb_map)
+        client_fn = mock_client_fn(nb_map)
 
         assert is_notebook_accessible(
             "nb1", allowlist_entries=["Projects/*"], client_fn=client_fn
@@ -158,11 +109,11 @@ class TestWildcardMatching:
 
     def test_double_star_match(self):
         """Double-star '**' pattern matches at any depth."""
-        nb_map = _make_notebook_map({
+        nb_map = make_notebook_map({
             "nb1": "Projects/Archive",
             "nb2": "Work/Old/Archive",
         })
-        client_fn = _mock_client_fn(nb_map)
+        client_fn = mock_client_fn(nb_map)
 
         assert is_notebook_accessible(
             "nb1", allowlist_entries=["**/Archive"], client_fn=client_fn
@@ -182,8 +133,8 @@ class TestHierarchicalAccess:
 
     def test_parent_grants_child_access(self):
         """Allowlisting 'Projects' grants access to 'Projects/Work/Tasks'."""
-        nb_map = _make_notebook_map({"nb1": "Projects/Work/Tasks"})
-        client_fn = _mock_client_fn(nb_map)
+        nb_map = make_notebook_map({"nb1": "Projects/Work/Tasks"})
+        client_fn = mock_client_fn(nb_map)
 
         result = is_notebook_accessible(
             "nb1", allowlist_entries=["Projects"], client_fn=client_fn
@@ -193,8 +144,8 @@ class TestHierarchicalAccess:
 
     def test_parent_grants_direct_child_access(self):
         """Allowlisting 'Projects' grants access to 'Projects/Work'."""
-        nb_map = _make_notebook_map({"nb1": "Projects/Work"})
-        client_fn = _mock_client_fn(nb_map)
+        nb_map = make_notebook_map({"nb1": "Projects/Work"})
+        client_fn = mock_client_fn(nb_map)
 
         result = is_notebook_accessible(
             "nb1", allowlist_entries=["Projects"], client_fn=client_fn
@@ -211,11 +162,11 @@ class TestNegationPatterns:
 
     def test_negation_pattern(self):
         """Negation '!Projects/Secret' denies access even when 'Projects/*' matches."""
-        nb_map = _make_notebook_map({
+        nb_map = make_notebook_map({
             "nb1": "Projects/Work",
             "nb2": "Projects/Secret",
         })
-        client_fn = _mock_client_fn(nb_map)
+        client_fn = mock_client_fn(nb_map)
 
         # Projects/Work should be accessible
         assert is_notebook_accessible(
@@ -241,8 +192,8 @@ class TestValidateNotebookAccess:
 
     def test_validate_notebook_access_raises(self):
         """validate_notebook_access raises AllowlistDeniedError when notebook is denied."""
-        nb_map = _make_notebook_map({"nb1": "Personal/Diary"})
-        client_fn = _mock_client_fn(nb_map)
+        nb_map = make_notebook_map({"nb1": "Personal/Diary"})
+        client_fn = mock_client_fn(nb_map)
 
         with pytest.raises(AllowlistDeniedError, match="Notebook not accessible"):
             validate_notebook_access(
@@ -253,8 +204,8 @@ class TestValidateNotebookAccess:
 
     def test_error_message_generic(self):
         """Error message does not reveal notebook name, path, or ID (per D7)."""
-        nb_map = _make_notebook_map({"abc12345678901234567890123456789": "Secret/Diary"})
-        client_fn = _mock_client_fn(nb_map)
+        nb_map = make_notebook_map({"abc12345678901234567890123456789": "Secret/Diary"})
+        client_fn = mock_client_fn(nb_map)
 
         with pytest.raises(ValueError) as exc_info:
             validate_notebook_access(
@@ -270,8 +221,8 @@ class TestValidateNotebookAccess:
 
     def test_validate_passes_for_accessible_notebook(self):
         """validate_notebook_access does not raise for accessible notebook."""
-        nb_map = _make_notebook_map({"nb1": "Projects/Work"})
-        client_fn = _mock_client_fn(nb_map)
+        nb_map = make_notebook_map({"nb1": "Projects/Work"})
+        client_fn = mock_client_fn(nb_map)
 
         # Should not raise
         validate_notebook_access(
@@ -289,12 +240,12 @@ class TestFilterAccessibleNotebooks:
 
     def test_filter_accessible_notebooks(self):
         """filter_accessible_notebooks returns only accessible notebooks."""
-        nb_map = _make_notebook_map({
+        nb_map = make_notebook_map({
             "nb1": "Projects/Work",
             "nb2": "Personal/Diary",
             "nb3": "Projects/Fun",
         })
-        client_fn = _mock_client_fn(nb_map)
+        client_fn = mock_client_fn(nb_map)
 
         notebooks = [
             SimpleNamespace(id="nb1", title="Work"),
@@ -315,8 +266,8 @@ class TestFilterAccessibleNotebooks:
 
     def test_filter_with_allow_all_returns_all(self):
         """filter_accessible_notebooks returns all notebooks when allowlist is ["**"] (no restrictions)."""
-        nb_map = _make_notebook_map({"nb1": "Work"})
-        client_fn = _mock_client_fn(nb_map)
+        nb_map = make_notebook_map({"nb1": "Work"})
+        client_fn = mock_client_fn(nb_map)
         notebooks = [SimpleNamespace(id="nb1", title="Work")]
 
         result = filter_accessible_notebooks(notebooks, allowlist_entries=["**"], client_fn=client_fn)
