@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from joplin_mcp.notebook_utils import (
+    AllowlistDeniedError,
     filter_accessible_notebooks,
     invalidate_notebook_map_cache,
     is_notebook_accessible,
@@ -239,11 +240,11 @@ class TestValidateNotebookAccess:
         invalidate_notebook_map_cache()
 
     def test_validate_notebook_access_raises(self):
-        """validate_notebook_access raises ValueError when notebook is denied."""
+        """validate_notebook_access raises AllowlistDeniedError when notebook is denied."""
         nb_map = _make_notebook_map({"nb1": "Personal/Diary"})
         client_fn = _mock_client_fn(nb_map)
 
-        with pytest.raises(ValueError, match="Notebook not accessible"):
+        with pytest.raises(AllowlistDeniedError, match="Notebook not accessible"):
             validate_notebook_access(
                 "nb1",
                 allowlist_entries=["Projects/*"],
