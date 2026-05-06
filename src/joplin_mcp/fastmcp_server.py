@@ -1221,6 +1221,12 @@ def main(
         if config_file:
             _config = JoplinMCPConfig.from_file(config_file)
             logger.info(f"Runtime configuration loaded from {config_file}")
+            # Tools read _module_config directly via `from ... import _module_config`
+            # and hold a reference to the original object. Mutate that object's
+            # allowlist in place so runtime config and tool enforcement stay aligned;
+            # otherwise the startup log would reflect the runtime config while the
+            # tools still enforce the auto-discovered module-level one.
+            _module_config.notebook_allowlist = _config.notebook_allowlist
         else:
             _config = _module_config
             logger.info("Using module-level configuration for runtime")
