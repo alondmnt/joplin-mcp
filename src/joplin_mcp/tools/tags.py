@@ -231,13 +231,12 @@ async def tag_note(
     Both args accept a single string or a list. When either is a list, the cartesian
     product is applied (every tag on every note) in one call — preferred over looping.
 
-    Output shape:
-    - Scalar note_id + scalar tag_name: single-op success line (unchanged).
-    - Any list input: aggregated TAG_NOTE report with TOTAL_OPS / SUCCEEDED / FAILED.
+    Output: aggregated TAG_NOTE report with TOTAL_OPS / SUCCEEDED / FAILED, one row
+    per (note, tag) pair (so the scalar case is a one-row report).
 
     Tags must exist beforehand — use create_tag to add new ones. Missing tags are
-    reported up front and nothing is applied. Per-op failures (e.g. invalid note ID)
-    are captured in the aggregated report; other ops still run.
+    reported up front and nothing is applied. Per-op failures (e.g. invalid note ID
+    or allowlist denial) are captured in the report; other ops still run.
 
     Examples:
         - tag_note("abc...", "Work") - Tag one note with one tag
@@ -245,7 +244,6 @@ async def tag_note(
         - tag_note("abc...", ["Work", "Urgent"]) - Add two tags to one note
         - tag_note(["abc...", "def..."], ["Work", "Urgent"]) - 2x2 = 4 ops
     """
-    scalar_inputs = isinstance(note_id, str) and isinstance(tag_name, str)
     note_ids = [note_id] if isinstance(note_id, str) else list(note_id)
     tag_names = [tag_name] if isinstance(tag_name, str) else list(tag_name)
     if not note_ids:
@@ -255,35 +253,7 @@ async def tag_note(
 
     client = get_joplin_client()
 
-    if scalar_inputs:
-        # Preserve existing single-op output format for backwards compatibility.
-        try:
-            note = client.get_note(note_ids[0], fields=COMMON_NOTE_FIELDS)
-            note_title = getattr(note, "title", "Unknown Note")
-        except Exception:
-            raise ValueError(
-                f"Note with ID '{note_ids[0]}' not found. "
-                "Use find_notes to find available notes."
-            )
-
-        # Allowlist validation: ensure note is in an accessible notebook
-        if _module_config.has_notebook_allowlist:
-            parent_id = getattr(note, "parent_id", "")
-            validate_notebook_access(
-                parent_id, allowlist_entries=_module_config.notebook_allowlist
-            )
-
-        tag_id = get_tag_id_by_name(tag_names[0])
-        client.add_tag_to_note(tag_id, note_ids[0])
-        return format_relation_success(
-            "tagged note",
-            ItemType.note,
-            f"{note_title} (ID: {note_ids[0]})",
-            ItemType.tag,
-            tag_names[0],
-        )
-
-    # Bulk path: resolve all tags up front, then loop the cartesian product.
+    # Resolve all tags up front, then loop the cartesian product.
     tag_map = _resolve_tag_ids(client, tag_names)
 
     results: List[Tuple[str, str, bool, str]] = []
@@ -327,13 +297,12 @@ async def untag_note(
     Both args accept a single string or a list. When either is a list, the cartesian
     product is applied (remove every tag from every note) in one call.
 
-    Output shape:
-    - Scalar note_id + scalar tag_name: single-op success line (unchanged).
-    - Any list input: aggregated UNTAG_NOTE report with TOTAL_OPS / SUCCEEDED / FAILED.
+    Output: aggregated UNTAG_NOTE report with TOTAL_OPS / SUCCEEDED / FAILED, one row
+    per (note, tag) pair (so the scalar case is a one-row report).
 
     Tags must exist (by name). Missing tags are reported up front and nothing is
-    removed. Per-op failures are captured in the aggregated report; other ops still
-    run.
+    removed. Per-op failures (including allowlist denials) are captured in the
+    report; other ops still run.
 
     Examples:
         - untag_note("abc...", "Work") - Remove one tag from one note
@@ -341,7 +310,6 @@ async def untag_note(
         - untag_note("abc...", ["Work", "Urgent"]) - Remove two tags from one note
         - untag_note(["abc...", "def..."], ["Work", "Urgent"]) - 2x2 = 4 ops
     """
-    scalar_inputs = isinstance(note_id, str) and isinstance(tag_name, str)
     note_ids = [note_id] if isinstance(note_id, str) else list(note_id)
     tag_names = [tag_name] if isinstance(tag_name, str) else list(tag_name)
     if not note_ids:
@@ -351,35 +319,7 @@ async def untag_note(
 
     client = get_joplin_client()
 
-    if scalar_inputs:
-        # Preserve existing single-op output format for backwards compatibility.
-        try:
-            note = client.get_note(note_ids[0], fields=COMMON_NOTE_FIELDS)
-            note_title = getattr(note, "title", "Unknown Note")
-        except Exception:
-            raise ValueError(
-                f"Note with ID '{note_ids[0]}' not found. "
-                "Use find_notes to find available notes."
-            )
-
-        # Allowlist validation: ensure note is in an accessible notebook
-        if _module_config.has_notebook_allowlist:
-            parent_id = getattr(note, "parent_id", "")
-            validate_notebook_access(
-                parent_id, allowlist_entries=_module_config.notebook_allowlist
-            )
-
-        tag_id = get_tag_id_by_name(tag_names[0])
-        client.delete(f"/tags/{tag_id}/notes/{note_ids[0]}")
-        return format_relation_success(
-            "removed tag from note",
-            ItemType.note,
-            f"{note_title} (ID: {note_ids[0]})",
-            ItemType.tag,
-            tag_names[0],
-        )
-
-    # Bulk path: resolve all tags up front, then loop the cartesian product.
+    # Resolve all tags up front, then loop the cartesian product.
     tag_map = _resolve_tag_ids(client, tag_names)
 
     results: List[Tuple[str, str, bool, str]] = []

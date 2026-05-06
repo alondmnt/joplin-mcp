@@ -195,49 +195,26 @@ NOTE_C = "c" * 32
 
 
 class TestTagNoteTool:
-    """Tests for tag_note tool (scalar and bulk paths)."""
+    """Tests for tag_note tool — all inputs use the aggregated report contract."""
 
     @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.tags.get_tag_id_by_name")
     @patch("joplin_mcp.tools.tags.get_joplin_client")
-    async def test_scalar_preserves_single_op_format(
-        self, mock_get_client, mock_get_tag_id
-    ):
-        """Scalar + scalar returns the existing single-op success line unchanged."""
+    async def test_scalar_returns_one_row_report(self, mock_get_client):
+        """Scalar inputs go through the bulk path and produce a one-row report."""
         from joplin_mcp.tools.tags import tag_note
 
-        mock_note = MagicMock()
-        mock_note.title = "Test Note"
-
         mock_client = MagicMock()
-        mock_client.get_note.return_value = mock_note
+        mock_client.get_all_tags.return_value = [_make_tag("t1", "Work")]
         mock_get_client.return_value = mock_client
-        mock_get_tag_id.return_value = "tag_id_123"
 
         fn = _get_tool_fn(tag_note)
         result = await fn(note_id=NOTE_A, tag_name="Work")
 
-        mock_get_tag_id.assert_called_once_with("Work")
-        mock_client.add_tag_to_note.assert_called_once_with("tag_id_123", NOTE_A)
-        assert "tagged note" in result.lower()
-        assert "SUCCESS" in result
-        assert "TOTAL_OPS" not in result  # not the aggregated format
-
-    @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.tags.get_joplin_client")
-    async def test_scalar_raises_when_note_not_found(self, mock_get_client):
-        """Scalar path raises ValueError with find_notes hint when note missing."""
-        from joplin_mcp.tools.tags import tag_note
-
-        mock_client = MagicMock()
-        mock_client.get_note.side_effect = Exception("Note not found")
-        mock_get_client.return_value = mock_client
-
-        fn = _get_tool_fn(tag_note)
-        with pytest.raises(ValueError) as exc_info:
-            await fn(note_id=NOTE_A, tag_name="Work")
-        assert "not found" in str(exc_info.value)
-        assert "find_notes" in str(exc_info.value)
+        mock_client.add_tag_to_note.assert_called_once_with("t1", NOTE_A)
+        assert "OPERATION: TAG_NOTE" in result
+        assert "TOTAL_OPS: 1" in result
+        assert "SUCCEEDED: 1" in result
+        assert "FAILED: 0" in result
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.tags.get_joplin_client")
@@ -482,22 +459,14 @@ class TestTagNoteTool:
         assert fline.count('"') == 4
 
     @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.tags.get_tag_id_by_name")
     @patch("joplin_mcp.tools.tags.get_joplin_client")
-    async def test_scalar_path_propagates_missing_tag_error(
-        self, mock_get_client, mock_get_tag_id
-    ):
-        """Scalar path surfaces get_tag_id_by_name's ValueError when the tag is missing."""
+    async def test_scalar_missing_tag_raises_before_any_mutation(self, mock_get_client):
+        """Scalar input with an unknown tag still raises up-front via _resolve_tag_ids."""
         from joplin_mcp.tools.tags import tag_note
 
-        mock_note = MagicMock()
-        mock_note.title = "Test Note"
         mock_client = MagicMock()
-        mock_client.get_note.return_value = mock_note
+        mock_client.get_all_tags.return_value = [_make_tag("t1", "Work")]
         mock_get_client.return_value = mock_client
-        mock_get_tag_id.side_effect = ValueError(
-            "Tag 'Ghost' not found. Available tags: Work. Use create_tag to create a new tag."
-        )
 
         fn = _get_tool_fn(tag_note)
         with pytest.raises(ValueError) as exc_info:
@@ -512,46 +481,26 @@ class TestTagNoteTool:
 
 
 class TestUntagNoteTool:
-    """Tests for untag_note tool (scalar and bulk paths)."""
+    """Tests for untag_note tool — all inputs use the aggregated report contract."""
 
     @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.tags.get_tag_id_by_name")
     @patch("joplin_mcp.tools.tags.get_joplin_client")
-    async def test_scalar_preserves_single_op_format(
-        self, mock_get_client, mock_get_tag_id
-    ):
-        """Scalar + scalar returns the existing single-op success line unchanged."""
+    async def test_scalar_returns_one_row_report(self, mock_get_client):
+        """Scalar inputs go through the bulk path and produce a one-row report."""
         from joplin_mcp.tools.tags import untag_note
 
-        mock_note = MagicMock()
-        mock_note.title = "Test Note"
         mock_client = MagicMock()
-        mock_client.get_note.return_value = mock_note
+        mock_client.get_all_tags.return_value = [_make_tag("t1", "Work")]
         mock_get_client.return_value = mock_client
-        mock_get_tag_id.return_value = "tag_id_789"
 
         fn = _get_tool_fn(untag_note)
         result = await fn(note_id=NOTE_A, tag_name="Work")
 
-        mock_client.delete.assert_called_once_with(f"/tags/tag_id_789/notes/{NOTE_A}")
-        assert "removed tag" in result.lower()
-        assert "SUCCESS" in result
-        assert "TOTAL_OPS" not in result
-
-    @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.tags.get_joplin_client")
-    async def test_scalar_raises_when_note_not_found(self, mock_get_client):
-        """Scalar path raises ValueError with find_notes hint when note missing."""
-        from joplin_mcp.tools.tags import untag_note
-
-        mock_client = MagicMock()
-        mock_client.get_note.side_effect = Exception("Note not found")
-        mock_get_client.return_value = mock_client
-
-        fn = _get_tool_fn(untag_note)
-        with pytest.raises(ValueError) as exc_info:
-            await fn(note_id=NOTE_A, tag_name="Work")
-        assert "not found" in str(exc_info.value)
+        mock_client.delete.assert_called_once_with(f"/tags/t1/notes/{NOTE_A}")
+        assert "OPERATION: UNTAG_NOTE" in result
+        assert "TOTAL_OPS: 1" in result
+        assert "SUCCEEDED: 1" in result
+        assert "FAILED: 0" in result
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.tags.get_joplin_client")

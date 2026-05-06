@@ -12,6 +12,13 @@ def _get_tool_fn(tool):
     return tool
 
 
+def _make_tag(tag_id: str, title: str):
+    tag = MagicMock()
+    tag.id = tag_id
+    tag.title = title
+    return tag
+
+
 # === Fixtures ===
 
 
@@ -43,12 +50,10 @@ class TestTagNoteAllowlist:
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.tags.validate_notebook_access")
-    @patch("joplin_mcp.tools.tags.get_tag_id_by_name")
     @patch("joplin_mcp.tools.tags.get_joplin_client")
     async def test_tag_note_allowlisted(
         self,
         mock_get_client,
-        mock_get_tag_id,
         mock_validate,
         mock_allowlist_config,
     ):
@@ -61,8 +66,8 @@ class TestTagNoteAllowlist:
 
         mock_client = MagicMock()
         mock_client.get_note.return_value = mock_note
+        mock_client.get_all_tags.return_value = [_make_tag("tag_id_123", "Important")]
         mock_get_client.return_value = mock_client
-        mock_get_tag_id.return_value = "tag_id_123"
 
         fn = _get_tool_fn(tag_note)
         result = await fn(
@@ -74,7 +79,9 @@ class TestTagNoteAllowlist:
             allowlist_entries=mock_allowlist_config.notebook_allowlist,
         )
         mock_client.add_tag_to_note.assert_called_once()
-        assert "SUCCESS" in result
+        assert "OPERATION: TAG_NOTE" in result
+        assert "SUCCEEDED: 1" in result
+        assert "FAILED: 0" in result
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.tags.validate_notebook_access")
@@ -85,8 +92,9 @@ class TestTagNoteAllowlist:
         mock_validate,
         mock_allowlist_config,
     ):
-        """Should raise error when note is in a non-allowlisted notebook."""
+        """Allowlist denial is captured in the report, not raised."""
         from joplin_mcp.tools.tags import tag_note
+        from joplin_mcp.notebook_utils import AllowlistDeniedError
 
         mock_note = MagicMock()
         mock_note.parent_id = "blocked_nb_id"
@@ -94,46 +102,45 @@ class TestTagNoteAllowlist:
 
         mock_client = MagicMock()
         mock_client.get_note.return_value = mock_note
+        mock_client.get_all_tags.return_value = [_make_tag("tag_id_123", "Important")]
         mock_get_client.return_value = mock_client
 
-        mock_validate.side_effect = ValueError("Notebook not accessible")
+        mock_validate.side_effect = AllowlistDeniedError("Notebook not accessible")
 
         fn = _get_tool_fn(tag_note)
-        with pytest.raises(ValueError, match="Notebook not accessible"):
-            await fn(
-                note_id="12345678901234567890123456789012", tag_name="Important"
-            )
+        result = await fn(
+            note_id="12345678901234567890123456789012", tag_name="Important"
+        )
 
         mock_client.add_tag_to_note.assert_not_called()
+        assert "OPERATION: TAG_NOTE" in result
+        assert "SUCCEEDED: 0" in result
+        assert "FAILED: 1" in result
+        assert "Notebook not accessible" in result
 
     @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.tags.get_tag_id_by_name")
     @patch("joplin_mcp.tools.tags.get_joplin_client")
     async def test_tag_note_no_allowlist(
         self,
         mock_get_client,
-        mock_get_tag_id,
         mock_no_allowlist_config,
     ):
         """Should succeed without allowlist checks when allowlist is disabled."""
         from joplin_mcp.tools.tags import tag_note
 
-        mock_note = MagicMock()
-        mock_note.parent_id = "any_nb_id"
-        mock_note.title = "Test Note"
-
         mock_client = MagicMock()
-        mock_client.get_note.return_value = mock_note
+        mock_client.get_all_tags.return_value = [_make_tag("tag_id_123", "Work")]
         mock_get_client.return_value = mock_client
-        mock_get_tag_id.return_value = "tag_id_123"
 
         fn = _get_tool_fn(tag_note)
         result = await fn(
             note_id="12345678901234567890123456789012", tag_name="Work"
         )
 
+        # No allowlist → bulk path skips client.get_note entirely.
+        mock_client.get_note.assert_not_called()
         mock_client.add_tag_to_note.assert_called_once()
-        assert "SUCCESS" in result
+        assert "SUCCEEDED: 1" in result
 
 
 # === Tests for untag_note with allowlist ===
@@ -144,12 +151,10 @@ class TestUntagNoteAllowlist:
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.tags.validate_notebook_access")
-    @patch("joplin_mcp.tools.tags.get_tag_id_by_name")
     @patch("joplin_mcp.tools.tags.get_joplin_client")
     async def test_untag_note_allowlisted(
         self,
         mock_get_client,
-        mock_get_tag_id,
         mock_validate,
         mock_allowlist_config,
     ):
@@ -162,8 +167,8 @@ class TestUntagNoteAllowlist:
 
         mock_client = MagicMock()
         mock_client.get_note.return_value = mock_note
+        mock_client.get_all_tags.return_value = [_make_tag("tag_id_123", "Important")]
         mock_get_client.return_value = mock_client
-        mock_get_tag_id.return_value = "tag_id_123"
 
         fn = _get_tool_fn(untag_note)
         result = await fn(
@@ -174,7 +179,9 @@ class TestUntagNoteAllowlist:
             "allowlisted_nb_id",
             allowlist_entries=mock_allowlist_config.notebook_allowlist,
         )
-        assert "SUCCESS" in result
+        assert "OPERATION: UNTAG_NOTE" in result
+        assert "SUCCEEDED: 1" in result
+        assert "FAILED: 0" in result
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.tags.validate_notebook_access")
@@ -185,8 +192,9 @@ class TestUntagNoteAllowlist:
         mock_validate,
         mock_allowlist_config,
     ):
-        """Should raise error when note is in a non-allowlisted notebook."""
+        """Allowlist denial is captured in the report, not raised."""
         from joplin_mcp.tools.tags import untag_note
+        from joplin_mcp.notebook_utils import AllowlistDeniedError
 
         mock_note = MagicMock()
         mock_note.parent_id = "blocked_nb_id"
@@ -194,45 +202,45 @@ class TestUntagNoteAllowlist:
 
         mock_client = MagicMock()
         mock_client.get_note.return_value = mock_note
+        mock_client.get_all_tags.return_value = [_make_tag("tag_id_123", "Important")]
         mock_get_client.return_value = mock_client
 
-        mock_validate.side_effect = ValueError("Notebook not accessible")
+        mock_validate.side_effect = AllowlistDeniedError("Notebook not accessible")
 
         fn = _get_tool_fn(untag_note)
-        with pytest.raises(ValueError, match="Notebook not accessible"):
-            await fn(
-                note_id="12345678901234567890123456789012", tag_name="Important"
-            )
+        result = await fn(
+            note_id="12345678901234567890123456789012", tag_name="Important"
+        )
 
         mock_client.delete.assert_not_called()
+        assert "OPERATION: UNTAG_NOTE" in result
+        assert "SUCCEEDED: 0" in result
+        assert "FAILED: 1" in result
+        assert "Notebook not accessible" in result
 
     @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.tags.get_tag_id_by_name")
     @patch("joplin_mcp.tools.tags.get_joplin_client")
     async def test_untag_note_no_allowlist(
         self,
         mock_get_client,
-        mock_get_tag_id,
         mock_no_allowlist_config,
     ):
         """Should succeed without allowlist checks when allowlist is disabled."""
         from joplin_mcp.tools.tags import untag_note
 
-        mock_note = MagicMock()
-        mock_note.parent_id = "any_nb_id"
-        mock_note.title = "Test Note"
-
         mock_client = MagicMock()
-        mock_client.get_note.return_value = mock_note
+        mock_client.get_all_tags.return_value = [_make_tag("tag_id_123", "Work")]
         mock_get_client.return_value = mock_client
-        mock_get_tag_id.return_value = "tag_id_123"
 
         fn = _get_tool_fn(untag_note)
         result = await fn(
             note_id="12345678901234567890123456789012", tag_name="Work"
         )
 
-        assert "SUCCESS" in result
+        # No allowlist → bulk path skips client.get_note entirely.
+        mock_client.get_note.assert_not_called()
+        mock_client.delete.assert_called_once()
+        assert "SUCCEEDED: 1" in result
 
 
 # === Tests for get_tags_by_note with allowlist ===
