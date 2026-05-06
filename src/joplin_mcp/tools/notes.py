@@ -82,7 +82,6 @@ from joplin_mcp.formatting import (
     format_note_metadata_lines,
 )
 from joplin_mcp.notebook_utils import (
-    AllowlistDeniedError,
     is_notebook_accessible,
     validate_notebook_access,
 )

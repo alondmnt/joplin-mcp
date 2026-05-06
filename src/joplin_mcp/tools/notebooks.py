@@ -17,7 +17,6 @@ from joplin_mcp.fastmcp_server import (
     invalidate_notebook_map_cache,
 )
 from joplin_mcp.notebook_utils import (
-    AllowlistDeniedError,
     filter_accessible_notebooks,
     validate_notebook_access,
 )
