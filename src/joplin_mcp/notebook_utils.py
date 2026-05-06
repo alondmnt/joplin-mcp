@@ -369,6 +369,43 @@ def validate_notebook_access(
         raise AllowlistDeniedError("Notebook not accessible")
 
 
+def get_accessible_notebook_map(
+    allowlist_entries: Optional[List[str]] = None,
+    force_refresh: bool = False,
+    client_fn: Optional[Callable] = None,
+) -> Dict[str, Dict[str, Optional[str]]]:
+    """Return the notebook map filtered by allowlist for path resolution.
+
+    When allowlist_entries is None or empty, returns the full cached map.
+    When set, returns a map containing only accessible notebooks plus their
+    ancestors. Ancestors are kept so that path resolution still works for
+    nested allowlist entries (e.g. allowlist=['Personal/Work'] requires
+    'Personal' in the map to resolve 'Personal/Work').
+
+    Shares the same TTL as get_notebook_map_cached.
+    """
+    nb_map = get_notebook_map_cached(
+        force_refresh=force_refresh, client_fn=client_fn
+    )
+    if not allowlist_entries:
+        return nb_map
+
+    positive_spec, negation_spec, hex_ids = _get_allowlist_specs(allowlist_entries)
+
+    visible: set = set()
+    for nb_id in nb_map:
+        path = _compute_notebook_path(nb_id, nb_map, sep="/")
+        if not path:
+            continue
+        if _matches_allowlist(path, nb_id, positive_spec, negation_spec, hex_ids):
+            curr = nb_id
+            while curr and curr not in visible:
+                visible.add(curr)
+                curr = (nb_map.get(curr) or {}).get("parent_id")
+
+    return {nb_id: info for nb_id, info in nb_map.items() if nb_id in visible}
+
+
 def filter_accessible_notebooks(
     notebooks: List[Any],
     allowlist_entries: List[str],
@@ -452,7 +489,18 @@ def _resolve_notebook_by_path(path: str) -> str:
     if not parts:
         raise ValueError("Empty notebook path")
 
-    notebooks_map = get_notebook_map_cached(force_refresh=True)
+    # Filter the map by allowlist when one is configured so that suggestions
+    # and partial-resolution errors can't leak the names of denied notebooks.
+    from joplin_mcp.fastmcp_server import _module_config
+
+    allowlist = (
+        _module_config.notebook_allowlist
+        if _module_config.has_notebook_allowlist
+        else None
+    )
+    notebooks_map = get_accessible_notebook_map(
+        allowlist_entries=allowlist, force_refresh=True
+    )
 
     current_parent: Optional[str] = None
     for part in parts:
