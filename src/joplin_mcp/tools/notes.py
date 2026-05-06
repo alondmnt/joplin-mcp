@@ -825,11 +825,16 @@ async def update_note(
 
     client = get_joplin_client()
 
-    # Allowlist validation: ensure note is in an accessible notebook
+    # Allowlist validation: source must be accessible, and if moving, destination too.
     if _module_config.has_notebook_allowlist:
         note = client.get_note(note_id, fields="id,parent_id")
         parent_id_check = getattr(note, 'parent_id', '')
         validate_notebook_access(parent_id_check, allowlist_entries=_module_config.notebook_allowlist)
+        if "parent_id" in update_data:
+            validate_notebook_access(
+                update_data["parent_id"],
+                allowlist_entries=_module_config.notebook_allowlist,
+            )
 
     client.modify_note(note_id, **update_data)
     _clear_note_cache()
