@@ -417,6 +417,109 @@ def test_find_notebook_suggestions_exact_match_first():
     assert suggestions[0] == "personal"  # Exact match first
 
 
+def test_get_notebook_id_by_name_flat_hides_denied_notebooks():
+    """Flat-name not-found error must not leak titles of allowlist-denied notebooks."""
+    from unittest.mock import patch
+    from joplin_mcp.notebook_utils import get_notebook_id_by_name
+
+    # Two top-level notebooks; only "Work" is allowlisted.
+    full_map = {
+        "work_id": {"title": "Work", "parent_id": None},
+        "secret_id": {"title": "Secrets", "parent_id": None},
+    }
+
+    mock_cfg = type("C", (), {})()
+    mock_cfg.has_notebook_allowlist = True
+    mock_cfg.notebook_allowlist = ["Work"]
+
+    with patch(
+        "joplin_mcp.notebook_utils.get_notebook_map_cached",
+        return_value=full_map,
+    ), patch("joplin_mcp.fastmcp_server._module_config", mock_cfg):
+        with pytest.raises(ValueError) as exc_info:
+            get_notebook_id_by_name("NonExistent")
+        msg = str(exc_info.value)
+        assert "Secrets" not in msg
+        assert "Available notebooks" not in msg
+
+
+def test_get_notebook_id_by_name_flat_resolves_allowlisted():
+    """Flat name in the allowlisted set must still resolve."""
+    from unittest.mock import patch
+    from joplin_mcp.notebook_utils import get_notebook_id_by_name
+
+    full_map = {
+        "work_id": {"title": "Work", "parent_id": None},
+        "secret_id": {"title": "Secrets", "parent_id": None},
+    }
+
+    mock_cfg = type("C", (), {})()
+    mock_cfg.has_notebook_allowlist = True
+    mock_cfg.notebook_allowlist = ["Work"]
+
+    with patch(
+        "joplin_mcp.notebook_utils.get_notebook_map_cached",
+        return_value=full_map,
+    ), patch("joplin_mcp.fastmcp_server._module_config", mock_cfg):
+        assert get_notebook_id_by_name("Work") == "work_id"
+
+
+def test_get_notebook_id_by_name_flat_multi_match_only_lists_accessible():
+    """Multi-match disambiguation must not surface denied notebook paths."""
+    from unittest.mock import patch
+    from joplin_mcp.notebook_utils import get_notebook_id_by_name
+
+    # Two notebooks both named "Inbox": one under allowed Work, one under denied Personal.
+    full_map = {
+        "work_id": {"title": "Work", "parent_id": None},
+        "work_inbox_id": {"title": "Inbox", "parent_id": "work_id"},
+        "personal_id": {"title": "Personal", "parent_id": None},
+        "personal_inbox_id": {"title": "Inbox", "parent_id": "personal_id"},
+    }
+
+    mock_cfg = type("C", (), {})()
+    mock_cfg.has_notebook_allowlist = True
+    mock_cfg.notebook_allowlist = ["Work", "Work/**"]
+
+    with patch(
+        "joplin_mcp.notebook_utils.get_notebook_map_cached",
+        return_value=full_map,
+    ), patch("joplin_mcp.fastmcp_server._module_config", mock_cfg):
+        # Only Work/Inbox is accessible — single match, should resolve cleanly.
+        assert get_notebook_id_by_name("Inbox") == "work_inbox_id"
+
+
+def test_get_notebook_id_by_name_flat_multi_match_disambiguation_filtered():
+    """When multiple accessible notebooks share a name, paths come from the filtered map."""
+    from unittest.mock import patch
+    from joplin_mcp.notebook_utils import get_notebook_id_by_name
+
+    full_map = {
+        "work_id": {"title": "Work", "parent_id": None},
+        "work_inbox_id": {"title": "Inbox", "parent_id": "work_id"},
+        "ai_id": {"title": "AI", "parent_id": None},
+        "ai_inbox_id": {"title": "Inbox", "parent_id": "ai_id"},
+        "personal_id": {"title": "Personal", "parent_id": None},
+        "personal_inbox_id": {"title": "Inbox", "parent_id": "personal_id"},
+    }
+
+    mock_cfg = type("C", (), {})()
+    mock_cfg.has_notebook_allowlist = True
+    mock_cfg.notebook_allowlist = ["Work", "Work/**", "AI", "AI/**"]
+
+    with patch(
+        "joplin_mcp.notebook_utils.get_notebook_map_cached",
+        return_value=full_map,
+    ), patch("joplin_mcp.fastmcp_server._module_config", mock_cfg):
+        with pytest.raises(ValueError) as exc_info:
+            get_notebook_id_by_name("Inbox")
+        msg = str(exc_info.value)
+        assert "Work/Inbox" in msg
+        assert "AI/Inbox" in msg
+        assert "Personal/Inbox" not in msg
+        assert "Personal" not in msg
+
+
 def test_resolve_notebook_by_path_suggests_on_not_found():
     """Test _resolve_notebook_by_path provides suggestions when path component not found."""
     from unittest.mock import patch

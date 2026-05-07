@@ -369,6 +369,43 @@ def validate_notebook_access(
         raise AllowlistDeniedError("Notebook not accessible")
 
 
+def get_accessible_notebook_map(
+    allowlist_entries: Optional[List[str]] = None,
+    force_refresh: bool = False,
+    client_fn: Optional[Callable] = None,
+) -> Dict[str, Dict[str, Optional[str]]]:
+    """Return the notebook map filtered by allowlist for path resolution.
+
+    When allowlist_entries is None or empty, returns the full cached map.
+    When set, returns a map containing only accessible notebooks plus their
+    ancestors. Ancestors are kept so that path resolution still works for
+    nested allowlist entries (e.g. allowlist=['Personal/Work'] requires
+    'Personal' in the map to resolve 'Personal/Work').
+
+    Shares the same TTL as get_notebook_map_cached.
+    """
+    nb_map = get_notebook_map_cached(
+        force_refresh=force_refresh, client_fn=client_fn
+    )
+    if not allowlist_entries:
+        return nb_map
+
+    positive_spec, negation_spec, hex_ids = _get_allowlist_specs(allowlist_entries)
+
+    visible: set = set()
+    for nb_id in nb_map:
+        path = _compute_notebook_path(nb_id, nb_map, sep="/")
+        if not path:
+            continue
+        if _matches_allowlist(path, nb_id, positive_spec, negation_spec, hex_ids):
+            curr = nb_id
+            while curr and curr not in visible:
+                visible.add(curr)
+                curr = (nb_map.get(curr) or {}).get("parent_id")
+
+    return {nb_id: info for nb_id, info in nb_map.items() if nb_id in visible}
+
+
 def filter_accessible_notebooks(
     notebooks: List[Any],
     allowlist_entries: List[str],
@@ -452,7 +489,18 @@ def _resolve_notebook_by_path(path: str) -> str:
     if not parts:
         raise ValueError("Empty notebook path")
 
-    notebooks_map = get_notebook_map_cached(force_refresh=True)
+    # Filter the map by allowlist when one is configured so that suggestions
+    # and partial-resolution errors can't leak the names of denied notebooks.
+    from joplin_mcp.fastmcp_server import _module_config
+
+    allowlist = (
+        _module_config.notebook_allowlist
+        if _module_config.has_notebook_allowlist
+        else None
+    )
+    notebooks_map = get_accessible_notebook_map(
+        allowlist_entries=allowlist, force_refresh=True
+    )
 
     current_parent: Optional[str] = None
     for part in parts:
@@ -494,16 +542,50 @@ def get_notebook_id_by_name(name: str) -> str:
     if "/" in name:
         return _resolve_notebook_by_path(name)
 
-    # Otherwise, use flat name matching via generic helper
-    from joplin_mcp.fastmcp_server import _get_item_id_by_name, get_joplin_client
+    # Flat name: walk the allowlist-filtered map so error messages can't leak
+    # the names of denied notebooks. The generic _get_item_id_by_name helper
+    # is shared with tag lookups (tags aren't allowlist-gated), so the filter
+    # belongs at this call site rather than in the helper.
+    from joplin_mcp.fastmcp_server import _module_config
 
-    client = get_joplin_client()
-    return _get_item_id_by_name(
-        name=name,
-        item_type="notebook",
-        fetch_fn=client.get_all_notebooks,
-        fields="id,title,created_time,updated_time,parent_id",
+    allowlist = (
+        _module_config.notebook_allowlist
+        if _module_config.has_notebook_allowlist
+        else None
     )
+    notebooks_map = get_accessible_notebook_map(
+        allowlist_entries=allowlist, force_refresh=True
+    )
+
+    name_lower = name.lower()
+    matches = [
+        nb_id for nb_id, info in notebooks_map.items()
+        if (info.get("title") or "").lower() == name_lower
+    ]
+
+    if not matches:
+        suggestions = _find_notebook_suggestions(name, notebooks_map)
+        if suggestions:
+            suggestion_str = ", ".join(f"'{s}'" for s in suggestions)
+            raise ValueError(
+                f"Notebook '{name}' not found. "
+                f"Did you mean: {suggestion_str}?"
+            )
+        raise ValueError(f"Notebook '{name}' not found")
+
+    if len(matches) > 1:
+        paths = [
+            _compute_notebook_path(nb_id, notebooks_map, sep="/")
+            or (notebooks_map[nb_id].get("title") or "Untitled")
+            for nb_id in matches
+        ]
+        paths_str = ", ".join(f"'{p}'" for p in paths)
+        raise ValueError(
+            f"Multiple notebooks found with name '{name}'. "
+            f"Use full path to specify: {paths_str}"
+        )
+
+    return matches[0]
 
 
 # === STARTUP VALIDATION ===

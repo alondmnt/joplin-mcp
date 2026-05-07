@@ -533,12 +533,16 @@ def _get_item_id_by_name(
     fields: str,
     not_found_hint: str = "",
 ) -> str:
-    """Generic helper to find notebook/tag ID by name with helpful error messages.
+    """Generic helper to find an item ID by name with helpful error messages.
+
+    Notebook lookups go through get_notebook_id_by_name which walks the
+    allowlist-filtered cache directly; this helper is used for tag lookups
+    (and any future item type that doesn't need allowlist filtering).
 
     Args:
         name: The item name to search for
-        item_type: Type of item for error messages (e.g., "notebook", "tag")
-        fetch_fn: Function to fetch all items (e.g., client.get_all_notebooks)
+        item_type: Type of item for error messages (e.g., "tag")
+        fetch_fn: Function to fetch all items (e.g., client.get_all_tags)
         fields: Fields to request from the API
         not_found_hint: Optional hint to append to "not found" error message
 
@@ -562,28 +566,14 @@ def _get_item_id_by_name(
         )
 
     if len(matching_items) > 1:
-        if item_type == "notebook":
-            # Show full paths for notebooks to help disambiguation
-            notebooks_map = get_notebook_map_cached()
-            item_paths = [
-                _compute_notebook_path(getattr(item, 'id', ''), notebooks_map, sep="/")
-                or getattr(item, 'title', 'Untitled')
-                for item in matching_items
-            ]
-            paths_str = ", ".join(f"'{p}'" for p in item_paths)
-            raise ValueError(
-                f"Multiple notebooks found with name '{name}'. "
-                f"Use full path to specify: {paths_str}"
-            )
-        else:
-            item_details = [
-                f"'{getattr(item, 'title', 'Untitled')}' (ID: {getattr(item, 'id', 'unknown')})"
-                for item in matching_items
-            ]
-            raise ValueError(
-                f"Multiple {item_type}s found with name '{name}': {', '.join(item_details)}. "
-                "Please be more specific."
-            )
+        item_details = [
+            f"'{getattr(item, 'title', 'Untitled')}' (ID: {getattr(item, 'id', 'unknown')})"
+            for item in matching_items
+        ]
+        raise ValueError(
+            f"Multiple {item_type}s found with name '{name}': {', '.join(item_details)}. "
+            "Please be more specific."
+        )
 
     item_id = getattr(matching_items[0], "id", None)
     if not item_id:
@@ -1221,6 +1211,12 @@ def main(
         if config_file:
             _config = JoplinMCPConfig.from_file(config_file)
             logger.info(f"Runtime configuration loaded from {config_file}")
+            # Tools read _module_config directly via `from ... import _module_config`
+            # and hold a reference to the original object. Mutate that object's
+            # allowlist in place so runtime config and tool enforcement stay aligned;
+            # otherwise the startup log would reflect the runtime config while the
+            # tools still enforce the auto-discovered module-level one.
+            _module_config.notebook_allowlist = _config.notebook_allowlist
         else:
             _config = _module_config
             logger.info("Using module-level configuration for runtime")
@@ -1233,8 +1229,9 @@ def main(
         client = get_joplin_client()
         logger.info("Joplin client initialized successfully")
 
-        # Validate notebook allowlist and warm caches at startup
-        validate_allowlist_at_startup(_config, client)
+        # Validate and log notebook allowlist at startup (D3, D6, D9)
+        runtime_config = _config or _module_config
+        validate_allowlist_at_startup(runtime_config, client)
 
         # ---- Non-breaking compat toggle via env ----
         compat_env = os.getenv("MCP_HTTP_COMPAT", "").strip().lower() in {"1","true","yes","on"}
