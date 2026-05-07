@@ -542,16 +542,50 @@ def get_notebook_id_by_name(name: str) -> str:
     if "/" in name:
         return _resolve_notebook_by_path(name)
 
-    # Otherwise, use flat name matching via generic helper
-    from joplin_mcp.fastmcp_server import _get_item_id_by_name, get_joplin_client
+    # Flat name: walk the allowlist-filtered map so error messages can't leak
+    # the names of denied notebooks. The generic _get_item_id_by_name helper
+    # is shared with tag lookups (tags aren't allowlist-gated), so the filter
+    # belongs at this call site rather than in the helper.
+    from joplin_mcp.fastmcp_server import _module_config
 
-    client = get_joplin_client()
-    return _get_item_id_by_name(
-        name=name,
-        item_type="notebook",
-        fetch_fn=client.get_all_notebooks,
-        fields="id,title,created_time,updated_time,parent_id",
+    allowlist = (
+        _module_config.notebook_allowlist
+        if _module_config.has_notebook_allowlist
+        else None
     )
+    notebooks_map = get_accessible_notebook_map(
+        allowlist_entries=allowlist, force_refresh=True
+    )
+
+    name_lower = name.lower()
+    matches = [
+        nb_id for nb_id, info in notebooks_map.items()
+        if (info.get("title") or "").lower() == name_lower
+    ]
+
+    if not matches:
+        suggestions = _find_notebook_suggestions(name, notebooks_map)
+        if suggestions:
+            suggestion_str = ", ".join(f"'{s}'" for s in suggestions)
+            raise ValueError(
+                f"Notebook '{name}' not found. "
+                f"Did you mean: {suggestion_str}?"
+            )
+        raise ValueError(f"Notebook '{name}' not found")
+
+    if len(matches) > 1:
+        paths = [
+            _compute_notebook_path(nb_id, notebooks_map, sep="/")
+            or (notebooks_map[nb_id].get("title") or "Untitled")
+            for nb_id in matches
+        ]
+        paths_str = ", ".join(f"'{p}'" for p in paths)
+        raise ValueError(
+            f"Multiple notebooks found with name '{name}'. "
+            f"Use full path to specify: {paths_str}"
+        )
+
+    return matches[0]
 
 
 # === STARTUP VALIDATION ===

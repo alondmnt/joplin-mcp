@@ -740,6 +740,56 @@ class TestNoteAllowlistErrorMessages:
         assert "My Private Diary" not in error_msg
         assert "Notebook not accessible" in error_msg
 
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes._module_config")
+    @patch(
+        "joplin_mcp.notebook_utils._module_config",
+        create=True,
+    )
+    @patch("joplin_mcp.fastmcp_server._module_config")
+    @patch("joplin_mcp.notebook_utils.get_notebook_map_cached")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_create_note_flat_unknown_name_does_not_leak_titles(
+        self,
+        mock_get_client,
+        mock_get_map,
+        mock_server_cfg,
+        mock_utils_cfg,
+        mock_notes_cfg,
+    ):
+        """create_note(notebook_name='X-not-real') under allowlist must not enumerate denied notebooks."""
+        from joplin_mcp.tools.notes import create_note
+
+        for cfg in (mock_server_cfg, mock_utils_cfg, mock_notes_cfg):
+            cfg.has_notebook_allowlist = True
+            cfg.notebook_allowlist = ["Work"]
+            cfg.should_show_content.return_value = True
+            cfg.should_show_full_content.return_value = True
+            cfg.get_max_preview_length.return_value = 300
+            cfg.is_smart_toc_enabled.return_value = False
+            cfg.get_smart_toc_threshold.return_value = 2000
+            cfg.tools = {}
+
+        mock_get_map.return_value = {
+            "work_id": {"title": "Work", "parent_id": None},
+            "secret_id": {"title": "Secrets", "parent_id": None},
+            "diary_id": {"title": "Diary", "parent_id": None},
+            "tax_id": {"title": "Tax", "parent_id": None},
+        }
+
+        fn = _get_tool_fn(create_note)
+        with pytest.raises(ValueError) as exc_info:
+            await fn(
+                title="Test",
+                notebook_name="anything-not-real",
+                body="content",
+            )
+
+        msg = str(exc_info.value)
+        for denied in ("Secrets", "Diary", "Tax"):
+            assert denied not in msg
+        assert "Available notebooks" not in msg
+
 
 # === Tests for get_links with allowlist ===
 
