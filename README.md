@@ -532,7 +532,7 @@ The container listens on `0.0.0.0:8000` by default. If exposing publicly, place 
   - `ui_integration.py` - UI integration utilities
 - **`docs/`** - Documentation (troubleshooting, privacy controls, enhancement proposals)
 - **`tests/`** - Unit test suite
-- **`tests/e2e/`** - End-to-end tests against a real Joplin instance in Docker
+- **`tests/e2e/`** - End-to-end tests against a real Joplin Desktop (3.x) via the Web Clipper API; see "Running Tests"
 
 ## Testing
 
@@ -561,11 +561,14 @@ Available tools: 25 tools ready
 # Unit tests (no Joplin instance required)
 pytest tests/ --ignore=tests/e2e
 
-# E2E tests (requires Docker)
-./scripts/run-e2e.sh
+# E2E tests (requires a running Joplin instance)
+JOPLIN_TOKEN=your_api_token \
+JOPLIN_HOST=localhost \
+JOPLIN_PORT=41184 \
+pytest tests/e2e/ -v -m e2e --override-ini="addopts="
 ```
 
-The E2E tests start a real Joplin instance in Docker and exercise all tools including notebook allowlist enforcement. See `tests/e2e/` for details.
+The E2E suite talks to a real Joplin Desktop via the Web Clipper API and exercises every tool including notebook allowlist enforcement. If `JOPLIN_HOST:JOPLIN_PORT` is unreachable the suite skips itself, so it's safe to run alongside the unit tests. Requires Joplin 3.x (the trash schema introduced in 3.0 — earlier versions fail with `no such column: deleted_time`).
 
 ## Complete Tool Reference
 
