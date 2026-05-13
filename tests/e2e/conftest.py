@@ -1,5 +1,6 @@
 """E2E test fixtures for real Joplin instance testing."""
 
+import logging
 import os
 import time
 from unittest.mock import patch
@@ -8,6 +9,8 @@ import pytest
 from joppy.client_api import ClientApi
 
 from joplin_mcp.config import JoplinMCPConfig
+
+logger = logging.getLogger(__name__)
 
 
 def _joplin_reachable(client: ClientApi) -> bool:
@@ -140,30 +143,45 @@ def e2e_cleanup(e2e_client):
             if note.id not in pre_notes:
                 try:
                     e2e_client.delete_note(note.id)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning(
+                        "e2e_cleanup: failed to delete note id=%s title=%r: %s",
+                        note.id, getattr(note, "title", "?"), exc,
+                    )
 
         # Delete tags
         for tag in e2e_client.get_all_tags():
             if tag.id not in pre_tags:
                 try:
                     e2e_client.delete_tag(tag.id)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning(
+                        "e2e_cleanup: failed to delete tag id=%s title=%r: %s",
+                        tag.id, getattr(tag, "title", "?"), exc,
+                    )
 
         # Delete notebooks (may need multiple passes for nested ones)
+        last_errors: dict[str, str] = {}
         for _ in range(3):
             remaining = False
             for nb in e2e_client.get_all_notebooks():
                 if nb.id not in pre_notebooks:
                     try:
                         e2e_client.delete_notebook(nb.id)
-                    except Exception:
+                        last_errors.pop(nb.id, None)
+                    except Exception as exc:
                         remaining = True
+                        last_errors[nb.id] = (
+                            f"title={getattr(nb, 'title', '?')!r}: {exc}"
+                        )
             if not remaining:
                 break
-    except Exception:
-        pass  # Joplin may be temporarily unavailable
+        for nb_id, detail in last_errors.items():
+            logger.warning(
+                "e2e_cleanup: failed to delete notebook id=%s %s", nb_id, detail
+            )
+    except Exception as exc:
+        logger.warning("e2e_cleanup: aborted with %s", exc)
 
     # Invalidate cache so next test starts fresh
     invalidate_notebook_map_cache()
