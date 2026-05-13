@@ -15,11 +15,31 @@ from joplin_mcp.fastmcp_server import (
     format_update_success,
     get_joplin_client,
     invalidate_notebook_map_cache,
+    validate_joplin_id,
 )
 from joplin_mcp.notebook_utils import (
     filter_accessible_notebooks,
     validate_notebook_access,
 )
+
+
+PARENT_ID_ERROR = "parent_id must be null or a valid notebook ID"
+
+
+def _normalize_parent_id(parent_id: Optional[str]) -> Optional[str]:
+    """Validate optional notebook parent IDs for top-level/sub-notebook creation."""
+    if parent_id is None:
+        return None
+
+    normalized = parent_id.strip()
+    if not normalized:
+        raise ValueError(PARENT_ID_ERROR)
+
+    try:
+        return validate_joplin_id(normalized)
+    except ValueError as exc:
+        raise ValueError(PARENT_ID_ERROR) from exc
+
 
 # === NOTEBOOK TOOLS ===
 
@@ -47,7 +67,7 @@ async def list_notebooks() -> str:
 async def create_notebook(
     title: Annotated[RequiredStringType, Field(description="Notebook title")],
     parent_id: Annotated[
-        Optional[str], Field(description="Parent notebook ID (optional)")
+        Optional[JoplinIdType], Field(description="Parent notebook ID (optional)")
     ] = None,
 ) -> str:
     """Create a new notebook (folder) in Joplin to organize your notes.
@@ -63,10 +83,12 @@ async def create_notebook(
         - create_notebook("2024 Projects", "work_notebook_id") - Create a sub-notebook
     """
 
+    normalized_parent_id = _normalize_parent_id(parent_id)
+
     if _module_config.has_notebook_allowlist:
-        if parent_id:
+        if normalized_parent_id:
             validate_notebook_access(
-                parent_id.strip(),
+                normalized_parent_id,
                 allowlist_entries=_module_config.notebook_allowlist,
             )
         else:
@@ -74,8 +96,8 @@ async def create_notebook(
 
     client = get_joplin_client()
     notebook_kwargs = {"title": title}
-    if parent_id:
-        notebook_kwargs["parent_id"] = parent_id.strip()
+    if normalized_parent_id:
+        notebook_kwargs["parent_id"] = normalized_parent_id
 
     notebook = client.add_notebook(**notebook_kwargs)
     # Invalidate notebook path cache to reflect new structure immediately

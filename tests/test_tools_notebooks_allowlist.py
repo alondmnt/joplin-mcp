@@ -159,10 +159,12 @@ class TestCreateNotebookAllowlist:
         mock_get_client.return_value = mock_client
 
         fn = _get_tool_fn(create_notebook)
-        result = await fn(title="Sub Notebook", parent_id="allowlisted_parent_id")
+        result = await fn(
+            title="Sub Notebook", parent_id="12345678901234567890123456789012"
+        )
 
         mock_validate.assert_called_once_with(
-            "allowlisted_parent_id",
+            "12345678901234567890123456789012",
             allowlist_entries=mock_allowlist_config.notebook_allowlist,
         )
         mock_client.add_notebook.assert_called_once()
@@ -186,7 +188,9 @@ class TestCreateNotebookAllowlist:
 
         fn = _get_tool_fn(create_notebook)
         with pytest.raises(ValueError, match="Notebook not accessible"):
-            await fn(title="Bad Notebook", parent_id="blocked_parent_id")
+            await fn(
+                title="Bad Notebook", parent_id="12345678901234567890123456789012"
+            )
 
         # Verify error message is generic (D7) -- no notebook details leaked
         mock_validate.assert_called_once()
