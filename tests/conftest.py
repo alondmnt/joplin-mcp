@@ -474,6 +474,40 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "slow: mark test as slow running")
 
 
+def pytest_addoption(parser):
+    """Register the --run-e2e opt-in flag for live-Joplin tests.
+
+    The e2e suite creates and deletes real notes, notebooks, and tags on
+    the developer's local Joplin instance, so a routine ``pytest`` run is
+    non-destructive by default; pass ``--run-e2e`` before releases or
+    when changes touch code paths the unit tests don't exercise.
+    """
+    parser.addoption(
+        "--run-e2e",
+        action="store_true",
+        help=(
+            "Run e2e tests against a live Joplin instance. "
+            "Creates/deletes real notes, notebooks, and tags — don't run "
+            "routinely; use before releases or when changes touch code "
+            "paths unit tests don't exercise (notebook allowlist, FTS "
+            "search, joppy client). Without this flag, e2e-marked tests "
+            "are skipped."
+        ),
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip e2e-marked tests unless --run-e2e is set."""
+    if config.getoption("--run-e2e"):
+        return
+    skip_e2e = pytest.mark.skip(
+        reason="opt-in: pass --run-e2e (mutates live Joplin data)"
+    )
+    for item in items:
+        if "e2e" in item.keywords:
+            item.add_marker(skip_e2e)
+
+
 @pytest.fixture
 def temp_config_file(tmp_path):
     """Create a temporary config file for testing."""
