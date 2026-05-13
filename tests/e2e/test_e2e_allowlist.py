@@ -5,7 +5,9 @@ enforcement with actual Joplin API calls. Module configuration is patched for
 test isolation, but the Joplin API itself is never mocked.
 """
 
+import asyncio
 import re
+import time
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -36,6 +38,29 @@ def _extract_id(tool_output: str) -> str:
         return m.group(1)
     raise AssertionError(
         f"Could not extract Joplin ID from tool output: {tool_output!r}"
+    )
+
+
+async def _wait_for_search(tool, *, expected: str, timeout: float = 15.0, **kwargs) -> str:
+    """Poll an FTS-backed search tool until ``expected`` appears in its output.
+
+    Joplin's FTS index lags note/tag mutations by several seconds, so tools
+    that go through ``client.search_all`` (find_notes, find_notes_with_tag,
+    and get_links' backlink resolver) can return empty immediately after a
+    create or tag. Without this wait, negative assertions like
+    ``assert "X" not in result`` would pass trivially on an empty result and
+    silently hide a broken allowlist filter.
+    """
+    deadline = time.monotonic() + timeout
+    last = ""
+    while time.monotonic() < deadline:
+        last = await _call(tool, **kwargs)
+        if expected in last:
+            return last
+        await asyncio.sleep(0.5)
+    raise AssertionError(
+        f"Timed out after {timeout}s waiting for {expected!r} in search output. "
+        f"Last output: {last!r}"
     )
 
 
@@ -294,7 +319,6 @@ class TestUpdateNoteAllowlist:
             await _call(update_note, note_id=nid, title="Edited", body="v2")
             result = await _call(get_note, note_id=nid)
             assert "Edited" in result
-            # update_note must not relocate the note out of its notebook
             assert e2e_client.get_note(nid, fields="id,parent_id").parent_id == hierarchy["E2ETest_AI"]
 
     @pytest.mark.asyncio
@@ -326,7 +350,6 @@ class TestEditNoteAllowlist:
             await _call(edit_note, note_id=nid, old_string="hello", new_string="goodbye")
             result = await _call(get_note, note_id=nid)
             assert "goodbye world" in result
-            # edit_note must not relocate the note out of its notebook
             assert e2e_client.get_note(nid, fields="id,parent_id").parent_id == hierarchy["E2ETest_AI"]
 
     @pytest.mark.asyncio
@@ -690,3 +713,190 @@ class TestMixedPatterns:
                 await _call(create_note, title="No", notebook_name="E2ETest_Secret", body="no")
             with pytest.raises(Exception):
                 await _call(create_note, title="No", notebook_name="E2ETest_Personal", body="no")
+
+
+# ===================================================================
+# 17. FIND NOTES WITH TAG — search result filtering
+# ===================================================================
+
+class TestFindNotesWithTagAllowlist:
+    """find_notes_with_tag must filter out notes in inaccessible notebooks."""
+
+    @pytest.mark.asyncio
+    async def test_returns_only_notes_in_allowed_notebooks(self, hierarchy):
+        from joplin_mcp.tools.notes import create_note, find_notes_with_tag
+        from joplin_mcp.tools.tags import create_tag, tag_note
+
+        r_allow = await _call(create_note, title="TaggedAllow", notebook_name="E2ETest_AI", body="x")
+        r_block = await _call(create_note, title="TaggedBlock", notebook_name="E2ETest_Personal", body="x")
+        nid_allow = _extract_id(r_allow)
+        nid_block = _extract_id(r_block)
+        await _call(create_tag, title="e2e-fnwt")
+        await _call(tag_note, note_id=nid_allow, tag_name="e2e-fnwt")
+        await _call(tag_note, note_id=nid_block, tag_name="e2e-fnwt")
+
+        # Wait for Joplin's FTS index to catch up so the blocked note would
+        # appear without filtering — otherwise the negative assertion would
+        # pass trivially on an empty result.
+        await _wait_for_search(find_notes_with_tag, expected="TaggedAllow", tag_name="e2e-fnwt")
+        await _wait_for_search(find_notes_with_tag, expected="TaggedBlock", tag_name="e2e-fnwt")
+
+        with _allowlist_config(["E2ETest_AI"]):
+            result = await _call(find_notes_with_tag, tag_name="e2e-fnwt")
+            assert "TaggedAllow" in result
+            assert "TaggedBlock" not in result
+
+    @pytest.mark.asyncio
+    async def test_returns_nothing_when_all_tagged_notes_blocked(self, hierarchy):
+        from joplin_mcp.tools.notes import create_note, find_notes_with_tag
+        from joplin_mcp.tools.tags import create_tag, tag_note
+
+        r = await _call(create_note, title="TaggedHidden", notebook_name="E2ETest_Personal", body="x")
+        nid = _extract_id(r)
+        await _call(create_tag, title="e2e-fnwt-hidden")
+        await _call(tag_note, note_id=nid, tag_name="e2e-fnwt-hidden")
+
+        # Wait for indexing so the assertion isn't a trivial empty-result pass.
+        await _wait_for_search(find_notes_with_tag, expected="TaggedHidden", tag_name="e2e-fnwt-hidden")
+
+        with _allowlist_config(["E2ETest_AI"]):
+            result = await _call(find_notes_with_tag, tag_name="e2e-fnwt-hidden")
+            assert "TaggedHidden" not in result
+
+
+# ===================================================================
+# 18. FIND IN NOTE — single-note regex search
+# ===================================================================
+
+class TestFindInNoteAllowlist:
+    """find_in_note must enforce allowlist on the target note's notebook."""
+
+    @pytest.mark.asyncio
+    async def test_find_in_allowed_note(self, hierarchy):
+        from joplin_mcp.tools.notes import create_note, find_in_note
+
+        r = await _call(create_note, title="FINAllowed", notebook_name="E2ETest_AI", body="hello target world")
+        nid = _extract_id(r)
+
+        with _allowlist_config(["E2ETest_AI"]):
+            result = await _call(find_in_note, note_id=nid, pattern="target")
+            assert "target" in result
+
+    @pytest.mark.asyncio
+    async def test_find_in_blocked_note_raises(self, hierarchy):
+        from joplin_mcp.tools.notes import create_note, find_in_note
+
+        r = await _call(create_note, title="FINBlocked", notebook_name="E2ETest_Personal", body="secret target value")
+        nid = _extract_id(r)
+
+        with _allowlist_config(["E2ETest_AI"]):
+            with pytest.raises(Exception):
+                await _call(find_in_note, note_id=nid, pattern="target")
+
+
+# ===================================================================
+# 19. GET ALL NOTES — full-listing filtering
+# ===================================================================
+
+class TestGetAllNotesAllowlist:
+    """get_all_notes must filter out notes in inaccessible notebooks."""
+
+    @pytest.mark.asyncio
+    async def test_returns_only_notes_in_allowed_notebooks(self, hierarchy):
+        from joplin_mcp.tools.notes import create_note, get_all_notes
+
+        await _call(create_note, title="GANVisible", notebook_name="E2ETest_AI", body="x")
+        await _call(create_note, title="GANHidden", notebook_name="E2ETest_Personal", body="x")
+
+        with _allowlist_config(["E2ETest_AI"]):
+            result = await _call(get_all_notes, limit=100)
+            assert "GANVisible" in result
+            assert "GANHidden" not in result
+
+    @pytest.mark.asyncio
+    async def test_returns_nothing_when_all_blocked(self, hierarchy):
+        from joplin_mcp.tools.notes import create_note, get_all_notes
+
+        await _call(create_note, title="GANOnlyHidden", notebook_name="E2ETest_Personal", body="x")
+
+        with _allowlist_config(["E2ETest_AI"]):
+            result = await _call(get_all_notes, limit=100)
+            assert "GANOnlyHidden" not in result
+
+
+# ===================================================================
+# 20. GET LINKS — outgoing-link + backlink filtering
+# ===================================================================
+
+class TestGetLinksAllowlist:
+    """get_links must deny the source note when blocked, and filter both
+    outgoing-link targets and backlinks that live in inaccessible notebooks."""
+
+    @pytest.mark.asyncio
+    async def test_get_links_from_allowed_source(self, hierarchy):
+        from joplin_mcp.tools.notes import create_note, get_links
+
+        target_r = await _call(create_note, title="GLTarget", notebook_name="E2ETest_AI", body="dst")
+        target_id = _extract_id(target_r)
+        source_r = await _call(
+            create_note,
+            title="GLSource",
+            notebook_name="E2ETest_AI",
+            body=f"see [t](:/{target_id})",
+        )
+        source_id = _extract_id(source_r)
+
+        with _allowlist_config(["E2ETest_AI"]):
+            result = await _call(get_links, note_id=source_id)
+            assert "GLTarget" in result
+
+    @pytest.mark.asyncio
+    async def test_get_links_from_blocked_source_raises(self, hierarchy):
+        from joplin_mcp.tools.notes import create_note, get_links
+
+        r = await _call(create_note, title="GLBlockedSource", notebook_name="E2ETest_Personal", body="x")
+        nid = _extract_id(r)
+
+        with _allowlist_config(["E2ETest_AI"]):
+            with pytest.raises(Exception):
+                await _call(get_links, note_id=nid)
+
+    @pytest.mark.asyncio
+    async def test_get_links_filters_blocked_outgoing_target(self, hierarchy):
+        from joplin_mcp.tools.notes import create_note, get_links
+
+        hidden_r = await _call(create_note, title="GLHiddenTarget", notebook_name="E2ETest_Personal", body="x")
+        hidden_id = _extract_id(hidden_r)
+        source_r = await _call(
+            create_note,
+            title="GLMixedSource",
+            notebook_name="E2ETest_AI",
+            body=f"link [h](:/{hidden_id})",
+        )
+        source_id = _extract_id(source_r)
+
+        with _allowlist_config(["E2ETest_AI"]):
+            result = await _call(get_links, note_id=source_id)
+            assert "GLHiddenTarget" not in result
+
+    @pytest.mark.asyncio
+    async def test_get_links_filters_blocked_backlinks(self, hierarchy):
+        from joplin_mcp.tools.notes import create_note, find_notes, get_links
+
+        target_r = await _call(create_note, title="GLBacklinkTarget", notebook_name="E2ETest_AI", body="x")
+        target_id = _extract_id(target_r)
+        await _call(
+            create_note,
+            title="GLHiddenBacklinker",
+            notebook_name="E2ETest_Personal",
+            body=f"refers [t](:/{target_id})",
+        )
+
+        # Backlinks are resolved via search_all, which is gated by Joplin's
+        # FTS index. Wait until the backlink would surface without filtering
+        # so the negative assertion isn't a trivial empty-result pass.
+        await _wait_for_search(find_notes, expected="GLHiddenBacklinker", query=f":/{target_id}")
+
+        with _allowlist_config(["E2ETest_AI"]):
+            result = await _call(get_links, note_id=target_id)
+            assert "GLHiddenBacklinker" not in result
