@@ -128,7 +128,7 @@ async def test_e2e_update_note(e2e_client):
 
 @pytest.mark.asyncio
 async def test_e2e_delete_note(e2e_client):
-    """Delete a note and verify it's gone."""
+    """Delete a note and verify it's in trash (soft-deleted)."""
     from joplin_mcp.tools.notebooks import create_notebook
     from joplin_mcp.tools.notes import create_note, delete_note
 
@@ -144,9 +144,11 @@ async def test_e2e_delete_note(e2e_client):
     del_result = await _call(delete_note, note_id=note_id)
     assert "delete" in del_result.lower() or "success" in del_result.lower()
 
-    # Attempting to get should fail
-    with pytest.raises(Exception):
-        e2e_client.get_note(note_id)
+    # Joplin soft-deletes to trash — the note is still fetchable but has
+    # deleted_time set. Asserting raise here would only catch hard-delete
+    # behaviour the API doesn't have.
+    note = e2e_client.get_note(note_id, fields="id,deleted_time")
+    assert note.deleted_time is not None
 
 
 # ---------------------------------------------------------------------------
