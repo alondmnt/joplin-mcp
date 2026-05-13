@@ -209,12 +209,14 @@ class TestListNotebooksAllowlist:
 class TestCreateNoteAllowlist:
 
     @pytest.mark.asyncio
-    async def test_create_in_allowed_notebook(self, hierarchy):
+    async def test_create_in_allowed_notebook(self, hierarchy, e2e_client):
         from joplin_mcp.tools.notes import create_note
 
         with _allowlist_config(["E2ETest_AI"]):
             r = await _call(create_note, title="Allowed", notebook_name="E2ETest_AI", body="ok")
             assert "Allowed" in r
+            nid = _extract_id(r)
+            assert e2e_client.get_note(nid, fields="id,parent_id").parent_id == hierarchy["E2ETest_AI"]
 
     @pytest.mark.asyncio
     async def test_create_in_blocked_notebook_raises(self, hierarchy):
@@ -225,13 +227,15 @@ class TestCreateNoteAllowlist:
                 await _call(create_note, title="Nope", notebook_name="E2ETest_Personal", body="no")
 
     @pytest.mark.asyncio
-    async def test_create_in_child_of_allowed_parent(self, hierarchy):
+    async def test_create_in_child_of_allowed_parent(self, hierarchy, e2e_client):
         """Allowlisting 'Projects' should allow creating notes in 'Work'."""
         from joplin_mcp.tools.notes import create_note
 
         with _allowlist_config(["E2ETest_Projects"]):
             r = await _call(create_note, title="Child OK", notebook_name="E2ETest_Work", body="ok")
             assert "Child OK" in r
+            nid = _extract_id(r)
+            assert e2e_client.get_note(nid, fields="id,parent_id").parent_id == hierarchy["E2ETest_Work"]
 
     @pytest.mark.asyncio
     async def test_create_in_child_of_blocked_parent(self, hierarchy):
@@ -280,7 +284,7 @@ class TestGetNoteAllowlist:
 class TestUpdateNoteAllowlist:
 
     @pytest.mark.asyncio
-    async def test_update_allowed_note(self, hierarchy):
+    async def test_update_allowed_note(self, hierarchy, e2e_client):
         from joplin_mcp.tools.notes import create_note, get_note, update_note
 
         r = await _call(create_note, title="Editable", notebook_name="E2ETest_AI", body="v1")
@@ -290,6 +294,8 @@ class TestUpdateNoteAllowlist:
             await _call(update_note, note_id=nid, title="Edited", body="v2")
             result = await _call(get_note, note_id=nid)
             assert "Edited" in result
+            # update_note must not relocate the note out of its notebook
+            assert e2e_client.get_note(nid, fields="id,parent_id").parent_id == hierarchy["E2ETest_AI"]
 
     @pytest.mark.asyncio
     async def test_update_blocked_note_raises(self, hierarchy):
@@ -310,7 +316,7 @@ class TestUpdateNoteAllowlist:
 class TestEditNoteAllowlist:
 
     @pytest.mark.asyncio
-    async def test_edit_allowed_note(self, hierarchy):
+    async def test_edit_allowed_note(self, hierarchy, e2e_client):
         from joplin_mcp.tools.notes import create_note, edit_note, get_note
 
         r = await _call(create_note, title="EditMe", notebook_name="E2ETest_AI", body="hello world")
@@ -320,6 +326,8 @@ class TestEditNoteAllowlist:
             await _call(edit_note, note_id=nid, old_string="hello", new_string="goodbye")
             result = await _call(get_note, note_id=nid)
             assert "goodbye world" in result
+            # edit_note must not relocate the note out of its notebook
+            assert e2e_client.get_note(nid, fields="id,parent_id").parent_id == hierarchy["E2ETest_AI"]
 
     @pytest.mark.asyncio
     async def test_edit_blocked_note_raises(self, hierarchy):
@@ -425,12 +433,14 @@ class TestFindNotesInNotebookAllowlist:
 class TestCreateNotebookAllowlist:
 
     @pytest.mark.asyncio
-    async def test_create_sub_notebook_in_allowed_parent(self, hierarchy):
+    async def test_create_sub_notebook_in_allowed_parent(self, hierarchy, e2e_client):
         from joplin_mcp.tools.notebooks import create_notebook
 
         with _allowlist_config(["E2ETest_Projects"]):
             r = await _call(create_notebook, title="New Sub", parent_id=hierarchy["E2ETest_Projects"])
             assert "New Sub" in r
+            nb_id = _extract_id(r)
+            assert e2e_client.get_notebook(nb_id, fields="id,parent_id").parent_id == hierarchy["E2ETest_Projects"]
 
     @pytest.mark.asyncio
     async def test_create_sub_notebook_in_blocked_parent_raises(self, hierarchy):
@@ -469,12 +479,14 @@ class TestHierarchicalAccess:
             assert "Deep Note" in result
 
     @pytest.mark.asyncio
-    async def test_parent_allowlist_grants_child_note_write(self, hierarchy):
+    async def test_parent_allowlist_grants_child_note_write(self, hierarchy, e2e_client):
         from joplin_mcp.tools.notes import create_note
 
         with _allowlist_config(["E2ETest_Projects"]):
             r = await _call(create_note, title="Work Note", notebook_name="E2ETest_Work", body="ok")
             assert "Work Note" in r
+            nid = _extract_id(r)
+            assert e2e_client.get_note(nid, fields="id,parent_id").parent_id == hierarchy["E2ETest_Work"]
 
     @pytest.mark.asyncio
     async def test_child_allowlist_does_not_grant_parent(self, hierarchy):
@@ -493,13 +505,15 @@ class TestHierarchicalAccess:
 class TestNegationPatterns:
 
     @pytest.mark.asyncio
-    async def test_negation_excludes_child(self, hierarchy):
+    async def test_negation_excludes_child(self, hierarchy, e2e_client):
         """'Projects' + '!Projects/Secret' should block Secret but allow Work."""
         from joplin_mcp.tools.notes import create_note
 
         with _allowlist_config(["E2ETest_Projects", "!E2ETest_Projects/E2ETest_Secret"]):
             r = await _call(create_note, title="OK", notebook_name="E2ETest_Work", body="ok")
             assert "OK" in r
+            nid = _extract_id(r)
+            assert e2e_client.get_note(nid, fields="id,parent_id").parent_id == hierarchy["E2ETest_Work"]
 
             with pytest.raises(Exception):
                 await _call(create_note, title="No", notebook_name="E2ETest_Secret", body="no")
@@ -569,12 +583,13 @@ class TestErrorMessagePrivacy:
 class TestTagsWithAllowlist:
 
     @pytest.mark.asyncio
-    async def test_tag_note_in_allowed_notebook(self, hierarchy):
+    async def test_tag_note_in_allowed_notebook(self, hierarchy, e2e_client):
         from joplin_mcp.tools.notes import create_note
         from joplin_mcp.tools.tags import create_tag, get_tags_by_note, tag_note
 
         r = await _call(create_note, title="TagTarget", notebook_name="E2ETest_AI", body="x")
         nid = _extract_id(r)
+        assert e2e_client.get_note(nid, fields="id,parent_id").parent_id == hierarchy["E2ETest_AI"]
         await _call(create_tag, title="e2e-al-tag")
 
         with _allowlist_config(["E2ETest_AI"]):
@@ -597,12 +612,13 @@ class TestTagsWithAllowlist:
                 await _call(tag_note, note_id=nid, tag_name="e2e-al-blocked-tag")
 
     @pytest.mark.asyncio
-    async def test_untag_note_in_allowed_notebook(self, hierarchy):
+    async def test_untag_note_in_allowed_notebook(self, hierarchy, e2e_client):
         from joplin_mcp.tools.notes import create_note
         from joplin_mcp.tools.tags import create_tag, tag_note, untag_note
 
         r = await _call(create_note, title="UntagTarget", notebook_name="E2ETest_AI", body="x")
         nid = _extract_id(r)
+        assert e2e_client.get_note(nid, fields="id,parent_id").parent_id == hierarchy["E2ETest_AI"]
         await _call(create_tag, title="e2e-al-untag")
         await _call(tag_note, note_id=nid, tag_name="e2e-al-untag")
 
@@ -646,7 +662,7 @@ class TestTagsWithAllowlist:
 class TestMixedPatterns:
 
     @pytest.mark.asyncio
-    async def test_exact_plus_glob_plus_negation(self, hierarchy):
+    async def test_exact_plus_glob_plus_negation(self, hierarchy, e2e_client):
         """Combine 'AI' (exact) + 'Projects/*' (glob) + '!Projects/Secret' (negate)."""
         from joplin_mcp.tools.notebooks import list_notebooks
         from joplin_mcp.tools.notes import create_note
@@ -661,9 +677,13 @@ class TestMixedPatterns:
             # Can create in allowed notebooks
             r = await _call(create_note, title="MixedOK", notebook_name="E2ETest_AI", body="ok")
             assert "MixedOK" in r
+            nid = _extract_id(r)
+            assert e2e_client.get_note(nid, fields="id,parent_id").parent_id == hierarchy["E2ETest_AI"]
 
             r2 = await _call(create_note, title="MixedOK2", notebook_name="E2ETest_Work", body="ok")
             assert "MixedOK2" in r2
+            nid2 = _extract_id(r2)
+            assert e2e_client.get_note(nid2, fields="id,parent_id").parent_id == hierarchy["E2ETest_Work"]
 
             # Blocked notebooks
             with pytest.raises(Exception):
