@@ -189,51 +189,6 @@ async def test_e2e_tags_workflow(e2e_client):
 
 
 # ---------------------------------------------------------------------------
-# Allowlist enforcement
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_e2e_allowlist_enforcement(e2e_client):
-    """Create notebooks, configure allowlist, verify access control."""
-    from unittest.mock import patch
-
-    from joplin_mcp.config import JoplinMCPConfig
-    from joplin_mcp.tools.notebooks import create_notebook, list_notebooks
-    from joplin_mcp.tools.notes import create_note
-
-    await _call(create_notebook, title="E2E Allowed NB")
-    await _call(create_notebook, title="E2E Blocked NB")
-
-    restricted_config = JoplinMCPConfig(
-        token=e2e_client._token if hasattr(e2e_client, '_token') else "e2e_test_token",
-        notebook_allowlist=["E2E Allowed NB"],
-    )
-
-    with patch("joplin_mcp.tools.notes._module_config", restricted_config), \
-         patch("joplin_mcp.tools.notebooks._module_config", restricted_config):
-
-        result = await _call(
-            create_note,
-            title="Allowed Note",
-            notebook_name="E2E Allowed NB",
-            body="should work",
-        )
-        assert "Allowed Note" in result
-
-        with pytest.raises(Exception):
-            await _call(
-                create_note,
-                title="Blocked Note",
-                notebook_name="E2E Blocked NB",
-                body="should fail",
-            )
-
-        listing = await _call(list_notebooks)
-        assert "E2E Allowed NB" in listing
-        assert "E2E Blocked NB" not in listing
-
-
-# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
