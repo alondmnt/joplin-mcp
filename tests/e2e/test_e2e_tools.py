@@ -1,6 +1,8 @@
 """E2E tests exercising real MCP tool functions against a live Joplin instance."""
 
+import asyncio
 import re
+import time
 
 import pytest
 
@@ -11,6 +13,28 @@ async def _call(tool, **kwargs):
     """Call a FunctionTool or raw async function."""
     fn = getattr(tool, "fn", tool)
     return await fn(**kwargs)
+
+
+async def _wait_for_search(tool, *, expected: str, timeout: float = 15.0, **kwargs) -> str:
+    """Poll an FTS-backed search tool until ``expected`` appears in its output.
+
+    Joplin's FTS index lags note/tag mutations by several seconds, so tools
+    that go through ``client.search_all`` (find_notes, find_notes_with_tag)
+    can return empty immediately after a create. Without this wait, a
+    substring assertion like ``"Title" in result`` can pass on the
+    no-results template, which echoes the query back in its CONTEXT line.
+    """
+    deadline = time.monotonic() + timeout
+    last = ""
+    while time.monotonic() < deadline:
+        last = await _call(tool, **kwargs)
+        if expected in last:
+            return last
+        await asyncio.sleep(0.5)
+    raise AssertionError(
+        f"Timed out after {timeout}s waiting for {expected!r} in search output. "
+        f"Last output: {last!r}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -131,20 +155,26 @@ async def test_e2e_delete_note(e2e_client):
 
 @pytest.mark.asyncio
 async def test_e2e_find_notes(e2e_client):
-    """Create notes and search for them."""
+    """Create a note and search for it via find_notes."""
     from joplin_mcp.tools.notebooks import create_notebook
     from joplin_mcp.tools.notes import create_note, find_notes
 
     await _call(create_notebook, title="E2E Search NB")
-    await _call(
+    create_result = await _call(
         create_note,
         title="Unique Searchable Note Alpha",
         notebook_name="E2E Search NB",
         body="cantaloupe watermelon",
     )
+    note_id = _extract_id(create_result)
 
-    result = await _call(find_notes, query="Unique Searchable Note Alpha")
-    assert "Unique Searchable Note Alpha" in result
+    # Poll on the note id, not the title. Joplin's FTS index lags creation
+    # by several seconds, and the no-results template echoes the query
+    # back in its CONTEXT line — so a title substring would pass on an
+    # empty result. The note id only appears when a real row is returned.
+    await _wait_for_search(
+        find_notes, expected=note_id, query="Unique Searchable Note Alpha"
+    )
 
 
 # ---------------------------------------------------------------------------

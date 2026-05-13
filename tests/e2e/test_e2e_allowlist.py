@@ -621,8 +621,9 @@ class TestTagsWithAllowlist:
             assert "e2e-al-tag" in tags
 
     @pytest.mark.asyncio
-    async def test_tag_note_in_blocked_notebook_raises(self, hierarchy):
-        """Tagging a note in a blocked notebook should be denied."""
+    async def test_tag_note_in_blocked_notebook_reports_denial(self, hierarchy):
+        """Tagging a note in a blocked notebook is recorded as a failed op in
+        the bulk report (tag_note does not raise — see 96ace20)."""
         from joplin_mcp.tools.notes import create_note
         from joplin_mcp.tools.tags import create_tag, tag_note
 
@@ -631,8 +632,10 @@ class TestTagsWithAllowlist:
         await _call(create_tag, title="e2e-al-blocked-tag")
 
         with _allowlist_config(["E2ETest_AI"]):
-            with pytest.raises(Exception):
-                await _call(tag_note, note_id=nid, tag_name="e2e-al-blocked-tag")
+            result = await _call(tag_note, note_id=nid, tag_name="e2e-al-blocked-tag")
+            assert "STATUS: PARTIAL" in result
+            assert "FAILED: 1" in result
+            assert "not accessible" in result.lower()
 
     @pytest.mark.asyncio
     async def test_untag_note_in_allowed_notebook(self, hierarchy, e2e_client):
@@ -650,8 +653,9 @@ class TestTagsWithAllowlist:
             assert "success" in result.lower()
 
     @pytest.mark.asyncio
-    async def test_untag_note_in_blocked_notebook_raises(self, hierarchy):
-        """Untagging a note in a blocked notebook should be denied."""
+    async def test_untag_note_in_blocked_notebook_reports_denial(self, hierarchy):
+        """Untagging a note in a blocked notebook is recorded as a failed op
+        in the bulk report (untag_note does not raise — see 96ace20)."""
         from joplin_mcp.tools.notes import create_note
         from joplin_mcp.tools.tags import create_tag, tag_note, untag_note
 
@@ -661,8 +665,10 @@ class TestTagsWithAllowlist:
         await _call(tag_note, note_id=nid, tag_name="e2e-al-untag-blocked")
 
         with _allowlist_config(["E2ETest_AI"]):
-            with pytest.raises(Exception):
-                await _call(untag_note, note_id=nid, tag_name="e2e-al-untag-blocked")
+            result = await _call(untag_note, note_id=nid, tag_name="e2e-al-untag-blocked")
+            assert "STATUS: PARTIAL" in result
+            assert "FAILED: 1" in result
+            assert "not accessible" in result.lower()
 
     @pytest.mark.asyncio
     async def test_get_tags_by_note_in_blocked_notebook_raises(self, hierarchy):
