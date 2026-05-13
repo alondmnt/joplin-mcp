@@ -475,30 +475,33 @@ def pytest_configure(config):
 
 
 def pytest_addoption(parser):
-    """Add the --run-e2e opt-in flag for live-Joplin tests.
+    """Register the --run-e2e opt-in flag for live-Joplin tests.
 
     The e2e suite creates and deletes real notes, notebooks, and tags on
-    the developer's local Joplin instance. It is opt-in so a routine
-    ``pytest`` run is non-destructive; pass ``--run-e2e`` (or set
-    ``RUN_E2E=1``) before releases or when changes touch code paths the
-    unit tests don't exercise.
+    the developer's local Joplin instance, so a routine ``pytest`` run is
+    non-destructive by default; pass ``--run-e2e`` before releases or
+    when changes touch code paths the unit tests don't exercise.
     """
     parser.addoption(
         "--run-e2e",
         action="store_true",
-        default=False,
-        help="Run e2e tests against a live Joplin instance (mutates real data)",
+        help=(
+            "Run e2e tests against a live Joplin instance. "
+            "Creates/deletes real notes, notebooks, and tags — don't run "
+            "routinely; use before releases or when changes touch code "
+            "paths unit tests don't exercise (notebook allowlist, FTS "
+            "search, joppy client). Without this flag, e2e-marked tests "
+            "are skipped."
+        ),
     )
 
 
 def pytest_collection_modifyitems(config, items):
-    """Skip e2e-marked tests unless --run-e2e (or RUN_E2E=1) is set."""
-    import os
-
-    if config.getoption("--run-e2e") or os.getenv("RUN_E2E") == "1":
+    """Skip e2e-marked tests unless --run-e2e is set."""
+    if config.getoption("--run-e2e"):
         return
     skip_e2e = pytest.mark.skip(
-        reason="opt-in: pass --run-e2e or set RUN_E2E=1 (mutates live Joplin data)"
+        reason="opt-in: pass --run-e2e (mutates live Joplin data)"
     )
     for item in items:
         if "e2e" in item.keywords:
