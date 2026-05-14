@@ -1,7 +1,7 @@
 """Notebook tools for Joplin MCP."""
 from typing import Annotated, Optional
 
-from pydantic import Field
+from pydantic import AfterValidator, Field, StringConstraints
 
 from joplin_mcp.fastmcp_server import (
     ItemType,
@@ -23,14 +23,14 @@ from joplin_mcp.notebook_utils import (
 )
 
 
-PARENT_ID_ERROR = "parent_id must be null or a valid notebook ID"
+PARENT_ID_ERROR = (
+    "parent_id must be omitted for a top-level notebook, or be a "
+    "32-character lowercase hex parent notebook ID"
+)
 
 
-def _normalize_parent_id(parent_id: Optional[str]) -> Optional[str]:
-    """Validate optional notebook parent IDs for top-level/sub-notebook creation."""
-    if parent_id is None:
-        return None
-
+def _validate_parent_notebook_id(parent_id: str) -> str:
+    """Validate parent notebook IDs after Pydantic has normalized them."""
     normalized = parent_id.strip()
     if not normalized:
         raise ValueError(PARENT_ID_ERROR)
@@ -39,6 +39,13 @@ def _normalize_parent_id(parent_id: Optional[str]) -> Optional[str]:
         return validate_joplin_id(normalized)
     except ValueError as exc:
         raise ValueError(PARENT_ID_ERROR) from exc
+
+
+ParentNotebookIdType = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=32, max_length=32),
+    AfterValidator(_validate_parent_notebook_id),
+]
 
 
 # === NOTEBOOK TOOLS ===
@@ -67,7 +74,8 @@ async def list_notebooks() -> str:
 async def create_notebook(
     title: Annotated[RequiredStringType, Field(description="Notebook title")],
     parent_id: Annotated[
-        Optional[JoplinIdType], Field(description="Parent notebook ID (optional)")
+        Optional[ParentNotebookIdType],
+        Field(description="Parent notebook ID (optional)"),
     ] = None,
 ) -> str:
     """Create a new notebook (folder) in Joplin to organize your notes.
@@ -80,10 +88,10 @@ async def create_notebook(
 
     Examples:
         - create_notebook("Work Projects") - Create a top-level notebook
-        - create_notebook("2024 Projects", "work_notebook_id") - Create a sub-notebook
+        - create_notebook("2024 Projects", "0123456789abcdef0123456789abcdef") - Create a sub-notebook
     """
 
-    normalized_parent_id = _normalize_parent_id(parent_id)
+    normalized_parent_id = parent_id.strip() if parent_id is not None else None
 
     if _module_config.has_notebook_allowlist:
         if normalized_parent_id:

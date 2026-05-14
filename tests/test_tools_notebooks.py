@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 
 def _get_tool_fn(tool):
@@ -122,8 +123,9 @@ class TestCreateNotebookTool:
         mock_client.add_notebook.return_value = "nb_id"
         mock_get_client.return_value = mock_client
 
-        fn = _get_tool_fn(create_notebook)
-        await fn(title="Test", parent_id=" 12345678901234567890123456789012 ")
+        await create_notebook.run(
+            {"title": "Test", "parent_id": " 12345678901234567890123456789012 "}
+        )
 
         call_kwargs = mock_client.add_notebook.call_args[1]
         assert call_kwargs["parent_id"] == "12345678901234567890123456789012"
@@ -133,20 +135,49 @@ class TestCreateNotebookTool:
         """Should reject the literal string 'null' as parent_id."""
         from joplin_mcp.tools.notebooks import create_notebook
 
-        fn = _get_tool_fn(create_notebook)
-
-        with pytest.raises(ValueError):
-            await fn(title="Bad Notebook", parent_id="null")
+        with pytest.raises(ValidationError, match="at least 32 characters"):
+            await create_notebook.run({"title": "Bad Notebook", "parent_id": "null"})
 
     @pytest.mark.asyncio
     async def test_rejects_blank_parent_id(self):
         """Should reject blank parent_id values instead of treating them as valid."""
         from joplin_mcp.tools.notebooks import create_notebook
 
-        fn = _get_tool_fn(create_notebook)
+        with pytest.raises(ValidationError, match="at least 32 characters"):
+            await create_notebook.run({"title": "Bad Notebook", "parent_id": "   "})
 
-        with pytest.raises(ValueError, match="parent_id must be null or a valid notebook ID"):
-            await fn(title="Bad Notebook", parent_id="   ")
+    @pytest.mark.asyncio
+    async def test_rejects_non_hex_parent_id(self):
+        """Should reject 32-char parent IDs that are not valid hex."""
+        from joplin_mcp.tools.notebooks import create_notebook
+
+        with pytest.raises(
+            ValidationError,
+            match="parent_id must be omitted for a top-level notebook",
+        ):
+            await create_notebook.run(
+                {
+                    "title": "Bad Notebook",
+                    "parent_id": "g2345678901234567890123456789012",
+                }
+            )
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.invalidate_notebook_map_cache")
+    @patch("joplin_mcp.tools.notebooks.get_joplin_client")
+    async def test_accepts_explicit_null_parent_id(
+        self, mock_get_client, mock_invalidate
+    ):
+        """Should allow explicit null parent_id values via the MCP tool path."""
+        from joplin_mcp.tools.notebooks import create_notebook
+
+        mock_client = MagicMock()
+        mock_client.add_notebook.return_value = "nb_id"
+        mock_get_client.return_value = mock_client
+
+        await create_notebook.run({"title": "Top Level Notebook", "parent_id": None})
+
+        mock_client.add_notebook.assert_called_once_with(title="Top Level Notebook")
 
 
 # === Tests for update_notebook tool ===
