@@ -1,7 +1,7 @@
 """Notebook tools for Joplin MCP."""
 from typing import Annotated, Optional
 
-from pydantic import Field
+from pydantic import AfterValidator, Field, StringConstraints
 
 from joplin_mcp.fastmcp_server import (
     ItemType,
@@ -15,11 +15,38 @@ from joplin_mcp.fastmcp_server import (
     format_update_success,
     get_joplin_client,
     invalidate_notebook_map_cache,
+    validate_joplin_id,
 )
 from joplin_mcp.notebook_utils import (
     filter_accessible_notebooks,
     validate_notebook_access,
 )
+
+
+PARENT_ID_ERROR = (
+    "parent_id must be omitted for a top-level notebook, or be a "
+    "32-character lowercase hex parent notebook ID"
+)
+
+
+def _validate_parent_notebook_id(parent_id: str) -> str:
+    """Validate parent notebook IDs after Pydantic has normalized them."""
+    normalized = parent_id.strip()
+    if not normalized:
+        raise ValueError(PARENT_ID_ERROR)
+
+    try:
+        return validate_joplin_id(normalized)
+    except ValueError as exc:
+        raise ValueError(PARENT_ID_ERROR) from exc
+
+
+ParentNotebookIdType = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=32, max_length=32),
+    AfterValidator(_validate_parent_notebook_id),
+]
+
 
 # === NOTEBOOK TOOLS ===
 
@@ -47,7 +74,8 @@ async def list_notebooks() -> str:
 async def create_notebook(
     title: Annotated[RequiredStringType, Field(description="Notebook title")],
     parent_id: Annotated[
-        Optional[str], Field(description="Parent notebook ID (optional)")
+        Optional[ParentNotebookIdType],
+        Field(description="Parent notebook ID (optional)"),
     ] = None,
 ) -> str:
     """Create a new notebook (folder) in Joplin to organize your notes.
@@ -60,13 +88,15 @@ async def create_notebook(
 
     Examples:
         - create_notebook("Work Projects") - Create a top-level notebook
-        - create_notebook("2024 Projects", "work_notebook_id") - Create a sub-notebook
+        - create_notebook("2024 Projects", "0123456789abcdef0123456789abcdef") - Create a sub-notebook
     """
 
+    normalized_parent_id = parent_id.strip() if parent_id is not None else None
+
     if _module_config.has_notebook_allowlist:
-        if parent_id:
+        if normalized_parent_id:
             validate_notebook_access(
-                parent_id.strip(),
+                normalized_parent_id,
                 allowlist_entries=_module_config.notebook_allowlist,
             )
         else:
@@ -74,8 +104,8 @@ async def create_notebook(
 
     client = get_joplin_client()
     notebook_kwargs = {"title": title}
-    if parent_id:
-        notebook_kwargs["parent_id"] = parent_id.strip()
+    if normalized_parent_id:
+        notebook_kwargs["parent_id"] = normalized_parent_id
 
     notebook = client.add_notebook(**notebook_kwargs)
     # Invalidate notebook path cache to reflect new structure immediately
