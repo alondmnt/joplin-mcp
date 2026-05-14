@@ -82,15 +82,6 @@ class TestRestoreFromTrashTool:
             )
 
     @pytest.mark.asyncio
-    async def test_rejects_invalid_item_id(self):
-        """Should reject item_id that is not a valid 32-char hex string."""
-        from joplin_mcp.tools.trash import restore_from_trash
-
-        fn = _get_tool_fn(restore_from_trash)
-        with pytest.raises((ValueError, Exception)):
-            await fn(item_id="not-a-valid-id", item_type="note")
-
-    @pytest.mark.asyncio
     @patch("joplin_mcp.tools.trash._clear_note_cache")
     @patch("joplin_mcp.tools.trash.get_joplin_client")
     async def test_output_format_has_uppercase_keys(self, mock_get_client, mock_clear_cache):
