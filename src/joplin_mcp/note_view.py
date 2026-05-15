@@ -168,13 +168,21 @@ def format_note_details(
     context: str = "individual_notes",
     original_body: Optional[str] = None,
     *,
+    body_override: Optional[str] = None,
     config: Any,
 ) -> str:
-    """Format a note for detailed display optimized for LLM comprehension."""
+    """Format a note for detailed display optimized for LLM comprehension.
+
+    ``body_override`` substitutes for ``note.body`` in the displayed content
+    (section extracts, line ranges, truncated views). ``original_body``
+    feeds content stats off the un-truncated body when the display shows
+    only a slice; if omitted, stats are computed off the displayed body.
+    """
     should_show_content = config.should_show_content(context)
     should_show_full_content = config.should_show_full_content(context)
 
-    stats_body = original_body if original_body is not None else getattr(note, "body", "")
+    body = body_override if body_override is not None else getattr(note, "body", "")
+    stats_body = original_body if original_body is not None else body
     metadata = _collect_note_metadata(
         note,
         include_timestamps=True,
@@ -185,7 +193,6 @@ def format_note_details(
     result_parts = format_note_metadata_lines(metadata, style="upper")
 
     if include_body:
-        body = getattr(note, "body", "")
         if should_show_content:
             if body:
                 if should_show_full_content:
@@ -342,34 +349,6 @@ def format_search_results_with_pagination(
 # === RENDERING ===
 
 
-def _create_note_object(note: Any, body_override: str = None) -> Any:
-    """Return a shallow copy of ``note`` with an optional body override.
-
-    Used by the rendering helpers to feed a modified note (different body) to
-    ``format_note_details`` without mutating the cached original.
-    """
-
-    class ModifiedNote:
-        def __init__(self, original_note, body_override=None):
-            for attr in [
-                "id",
-                "title",
-                "created_time",
-                "updated_time",
-                "parent_id",
-                "is_todo",
-                "todo_completed",
-            ]:
-                setattr(self, attr, getattr(original_note, attr, None))
-            self.body = (
-                body_override
-                if body_override is not None
-                else getattr(original_note, "body", "")
-            )
-
-    return ModifiedNote(note, body_override)
-
-
 def _render_section(
     note: Any, section: str, note_id: str, include_body: bool, *, config: Any
 ) -> Optional[str]:
@@ -383,8 +362,13 @@ def _render_section(
 
     section_content, section_title = extract_section_content(body, section)
     if section_content:
-        modified_note = _create_note_object(note, section_content)
-        result = format_note_details(modified_note, include_body, "individual_notes", config=config)
+        result = format_note_details(
+            note,
+            include_body,
+            "individual_notes",
+            body_override=section_content,
+            config=config,
+        )
         return f"EXTRACTED_SECTION: {section_title}\nSECTION_QUERY: {section}\n{result}"
 
     # Section not found - show available sections with line numbers so the
@@ -419,12 +403,12 @@ def _render_toc(
     if not toc:
         return None
 
-    toc_note = _create_note_object(note, "")
     metadata_result = format_note_details(
-        toc_note,
+        note,
         include_body=False,
         context="individual_notes",
         original_body=original_body,
+        body_override="",
         config=config,
     )
 
@@ -486,12 +470,12 @@ ERROR: line_count must be >= 1"""
     extracted_lines = lines[start_idx:end_idx]
     extracted_content = "\n".join(extracted_lines)
 
-    modified_note = _create_note_object(note, extracted_content)
     result = format_note_details(
-        modified_note,
+        note,
         include_body,
         "individual_notes",
         original_body=body,
+        body_override=extracted_content,
         config=config,
     )
 
@@ -538,12 +522,12 @@ def _render_smart_toc(note: Any, note_id: str, config: Any) -> Optional[str]:
     truncated_content = body[:toc_threshold] + (
         "..." if body_length > toc_threshold else ""
     )
-    truncated_note = _create_note_object(note, truncated_content)
     result = format_note_details(
-        truncated_note,
+        note,
         True,
         "individual_notes",
         original_body=body,
+        body_override=truncated_content,
         config=config,
     )
 

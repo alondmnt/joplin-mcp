@@ -53,57 +53,6 @@ class TestNoteCache:
         assert note_view.get_cached_note("note1") is None
 
 
-# === _create_note_object (internal but worth covering) ===
-
-
-class TestCreateNoteObject:
-    """Shallow-copy helper used by every render mode that needs a body override."""
-
-    def test_copies_original_note_attributes(self):
-        original = MagicMock()
-        original.id = "note123"
-        original.title = "Test Note"
-        original.created_time = 1609459200000
-        original.updated_time = 1609545600000
-        original.parent_id = "nb456"
-        original.is_todo = 1
-        original.todo_completed = 0
-        original.body = "Original body"
-
-        result = note_view._create_note_object(original)
-
-        assert result.id == "note123"
-        assert result.title == "Test Note"
-        assert result.created_time == 1609459200000
-        assert result.updated_time == 1609545600000
-        assert result.parent_id == "nb456"
-        assert result.is_todo == 1
-        assert result.todo_completed == 0
-        assert result.body == "Original body"
-
-    def test_overrides_body_when_provided(self):
-        original = MagicMock()
-        original.body = "Original body content"
-        original.id = "note123"
-        original.title = "Test"
-
-        result = note_view._create_note_object(original, body_override="New body content")
-        assert result.body == "New body content"
-
-    def test_handles_missing_attributes(self):
-        original = MagicMock()
-        original.configure_mock(id="note123", title="Test", body="Body")
-        del original.created_time
-        del original.updated_time
-        del original.parent_id
-        del original.is_todo
-        del original.todo_completed
-
-        result = note_view._create_note_object(original)
-        assert result.id == "note123"
-        assert result.body == "Body"
-
-
 # === render_note: shared fixtures ===
 
 
