@@ -54,8 +54,8 @@ class TestRestoreFromTrashTool:
             item_type="notebook",
         )
 
-        mock_resolver.restore_notebook.assert_called_once_with(
-            "12345678901234567890123456789012"
+        mock_resolver.modify_notebook.assert_called_once_with(
+            "12345678901234567890123456789012", deleted_time=0
         )
         assert "RESTORE_NOTEBOOK" in result
         assert "SUCCESS" in result

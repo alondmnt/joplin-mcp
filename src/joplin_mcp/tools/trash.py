@@ -47,7 +47,7 @@ async def restore_from_trash(
         _clear_note_cache()
         return format_restore_success(ItemType.note, item_id)
     elif item_type == "notebook":
-        notebook_resolver.restore_notebook(item_id)
+        notebook_resolver.modify_notebook(item_id, deleted_time=0)
         return format_restore_success(ItemType.notebook, item_id)
     else:
         raise ValueError(

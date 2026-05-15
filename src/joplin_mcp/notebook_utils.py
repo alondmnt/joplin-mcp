@@ -313,12 +313,6 @@ class NotebookResolver:
         self._map_built_at = now
         return nb_map
 
-    def compute_path(
-        self, notebook_id: Optional[str], sep: str = " / "
-    ) -> Optional[str]:
-        """Compute a notebook's full path using the cached map."""
-        return _compute_notebook_path(notebook_id, self.get_map(), sep=sep)
-
     def _get_allowlist_specs(
         self,
         allowlist_entries: List[str],
@@ -565,12 +559,6 @@ class NotebookResolver:
         """Soft-delete a notebook via the client and invalidate caches."""
         client = self._client_factory()
         client.delete_notebook(notebook_id)
-        self.invalidate()
-
-    def restore_notebook(self, notebook_id: str) -> None:
-        """Restore a notebook from trash via the client and invalidate caches."""
-        client = self._client_factory()
-        client.modify_notebook(notebook_id, deleted_time=0)
         self.invalidate()
 
     # === Startup ===
