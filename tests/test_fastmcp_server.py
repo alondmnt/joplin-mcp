@@ -625,6 +625,84 @@ def test_get_notebook_cache_ttl_from_env():
     del os.environ["JOPLIN_MCP_NOTEBOOK_CACHE_TTL"]
 
 
+# === Tests for register_tools (config-driven tool gating) ===
+
+
+def _all_enabled_config():
+    """Build a JoplinMCPConfig with an empty tools dict so every registry
+    entry resolves to ``True`` via ``config.tools.get(name, True)``."""
+    from joplin_mcp.config import JoplinMCPConfig
+
+    cfg = JoplinMCPConfig()
+    cfg.tools = {}
+    return cfg
+
+
+@pytest.fixture
+def _restore_all_tools():
+    """Re-register every tool after a gating test mutates ``mcp``.
+
+    Uses an all-enabled config so subsequent tests (including ones that
+    don't touch register_tools at all) see the full tool surface that
+    eager decoration originally produced.
+    """
+    yield
+    from joplin_mcp.fastmcp_server import mcp, register_tools
+
+    register_tools(mcp, _all_enabled_config())
+
+
+@pytest.mark.asyncio
+async def test_register_tools_enables_all_by_default(_restore_all_tools):
+    """An empty tools dict means every registry entry resolves True; the
+    public MCP client surface lists every one."""
+    from joplin_mcp.fastmcp_server import _tool_registry, mcp, register_tools
+
+    enabled = register_tools(mcp, _all_enabled_config())
+    assert set(enabled) == {name for name, _ in _tool_registry}
+
+    async with Client(mcp) as client:
+        listed = {tool.name for tool in await client.list_tools()}
+    assert listed == set(enabled)
+
+
+@pytest.mark.asyncio
+async def test_register_tools_removes_disabled(_restore_all_tools):
+    """A tool flagged False in config disappears from both the internal
+    manager and the public MCP client surface."""
+    from joplin_mcp.fastmcp_server import mcp, register_tools
+
+    cfg = _all_enabled_config()
+    cfg.tools["get_note"] = False
+    enabled = register_tools(mcp, cfg)
+
+    assert "get_note" not in enabled
+    async with Client(mcp) as client:
+        listed = {tool.name for tool in await client.list_tools()}
+    assert "get_note" not in listed
+    # Sanity: another tool that's not disabled is still present.
+    assert "list_notebooks" in listed
+
+
+@pytest.mark.asyncio
+async def test_register_tools_is_idempotent_under_recall(_restore_all_tools):
+    """Disabling then re-enabling restores the tool; register_tools is the
+    only state machine, no leftover state from prior calls."""
+    from joplin_mcp.fastmcp_server import mcp, register_tools
+
+    cfg_off = _all_enabled_config()
+    cfg_off.tools["get_note"] = False
+    register_tools(mcp, cfg_off)
+    async with Client(mcp) as client:
+        listed_off = {tool.name for tool in await client.list_tools()}
+    assert "get_note" not in listed_off
+
+    register_tools(mcp, _all_enabled_config())
+    async with Client(mcp) as client:
+        listed_on = {tool.name for tool in await client.list_tools()}
+    assert "get_note" in listed_on
+
+
 def main():
     """Main test runner."""
     print("FastMCP Joplin Server Test Suite")

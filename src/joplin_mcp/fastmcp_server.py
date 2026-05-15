@@ -510,25 +510,36 @@ def with_client_error_handling(operation_name: str):
     return decorator
 
 
-def conditional_tool(tool_name: str):
-    """Decorator to conditionally register tools based on configuration."""
+# Tool registry: every @create_tool decoration appends here at import time.
+# All tools are eagerly registered with the module ``mcp`` so test paths
+# (.fn / .run) work without an explicit registration step. The gating
+# decision lives in register_tools(), which reshapes ``mcp``'s tool manager
+# to reflect a given config -- so main() can honour the runtime config
+# (e.g. --config-file) instead of being frozen at import time.
+_tool_registry: List[tuple] = []  # list of (tool_name, tool_obj)
 
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        # Check if tool is enabled in configuration
-        if _module_config.tools.get(
-            tool_name, True
-        ):  # Default to True if not specified
-            # Tool is enabled - register it with FastMCP
-            logger.debug("Registering tool: %s", tool_name)
-            return mcp.tool()(func)
+
+def register_tools(target_mcp: FastMCP, config: "JoplinMCPConfig") -> List[str]:
+    """Reshape ``target_mcp``'s tool manager so only tools enabled in
+    ``config.tools`` are exposed. Tools missing from ``config.tools`` default
+    to enabled.
+
+    Decoration eagerly registers every tool; this function is the one place
+    where runtime config takes effect, so it owns both adding (for tools
+    that came back after a previous filter) and removing (for tools the
+    config disables). Returns the resulting list of enabled tool names.
+    """
+    enabled: List[str] = []
+    target_mcp._tool_manager._tools.clear()
+    for tool_name, tool_obj in _tool_registry:
+        if config.tools.get(tool_name, True):
+            target_mcp._tool_manager._tools[tool_name] = tool_obj
+            enabled.append(tool_name)
         else:
-            # Tool is disabled - return function without registering
             logger.info(
-                f"Tool '{tool_name}' disabled in configuration - not registering"
+                "Tool '%s' disabled in configuration", tool_name,
             )
-            return func
-
-    return decorator
+    return enabled
 
 
 def _get_item_id_by_name(
@@ -1059,12 +1070,20 @@ def format_tag_list_with_counts(tags: List[Any], client: Any) -> str:
 
 
 def create_tool(tool_name: str, operation_name: str):
-    """Create a tool decorator with consistent error handling."""
+    """Wrap a tool function with error handling and register it eagerly
+    with the module ``mcp``.
+
+    The returned object is the FastMCP tool wrapper, so callers get the
+    usual ``.fn`` and ``.run`` attributes. The tool is also added to the
+    module registry so register_tools() can later filter the active set
+    based on a runtime config.
+    """
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        return conditional_tool(tool_name)(
-            with_client_error_handling(operation_name)(func)
-        )
+        wrapped = with_client_error_handling(operation_name)(func)
+        tool_obj = mcp.tool()(wrapped)
+        _tool_registry.append((tool_name, tool_obj))
+        return tool_obj
 
     return decorator
 
@@ -1226,7 +1245,7 @@ def main(
             _config = _module_config
             logger.info("Using module-level configuration for runtime")
 
-        registered_tools = list(mcp._tool_manager._tools.keys())
+        registered_tools = register_tools(mcp, _config)
         logger.info(f"FastMCP server has {len(registered_tools)} tools registered")
         logger.info(f"Registered tools: {sorted(registered_tools)}")
 

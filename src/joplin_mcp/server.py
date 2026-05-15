@@ -4,7 +4,6 @@
 This can be run as: python -m joplin_mcp.server
 """
 
-import os
 import sys
 import logging
 from pathlib import Path
@@ -96,11 +95,9 @@ def main():
             handlers=handlers,
         )
 
-        # Ensure config path is honored during import-time tool registration
-        if args.config:
-            os.environ["JOPLIN_MCP_CONFIG"] = args.config
-
-        # Import and run the FastMCP server
+        # Import and run the FastMCP server. Registration is now deferred to
+        # main() so the --config-file path is honoured directly; no env-var
+        # mutation needed here.
         from .fastmcp_server import main as server_main
 
         return server_main(
