@@ -14,13 +14,9 @@ from joplin_mcp.fastmcp_server import (
     format_item_list,
     format_update_success,
     get_joplin_client,
-    invalidate_notebook_map_cache,
     validate_joplin_id,
 )
-from joplin_mcp.notebook_utils import (
-    filter_accessible_notebooks,
-    validate_notebook_access,
-)
+from joplin_mcp.notebook_utils import notebook_resolver
 
 
 PARENT_ID_ERROR = (
@@ -64,7 +60,7 @@ async def list_notebooks() -> str:
     fields_list = "id,title,created_time,updated_time,parent_id"
     notebooks = client.get_all_notebooks(fields=fields_list)
     if _module_config.has_notebook_allowlist:
-        notebooks = filter_accessible_notebooks(
+        notebooks = notebook_resolver.filter_accessible(
             notebooks, allowlist_entries=_module_config.notebook_allowlist
         )
     return format_item_list(notebooks, ItemType.notebook)
@@ -95,21 +91,18 @@ async def create_notebook(
 
     if _module_config.has_notebook_allowlist:
         if normalized_parent_id:
-            validate_notebook_access(
+            notebook_resolver.validate_access(
                 normalized_parent_id,
                 allowlist_entries=_module_config.notebook_allowlist,
             )
         else:
             raise ValueError("Notebook not accessible")
 
-    client = get_joplin_client()
     notebook_kwargs = {"title": title}
     if normalized_parent_id:
         notebook_kwargs["parent_id"] = normalized_parent_id
 
-    notebook = client.add_notebook(**notebook_kwargs)
-    # Invalidate notebook path cache to reflect new structure immediately
-    invalidate_notebook_map_cache()
+    notebook = notebook_resolver.add_notebook(**notebook_kwargs)
     return format_creation_success(ItemType.notebook, title, str(notebook))
 
 
@@ -126,14 +119,11 @@ async def update_notebook(
         str: Success message confirming the notebook was updated.
     """
     if _module_config.has_notebook_allowlist:
-        validate_notebook_access(
+        notebook_resolver.validate_access(
             notebook_id, allowlist_entries=_module_config.notebook_allowlist
         )
 
-    client = get_joplin_client()
-    client.modify_notebook(notebook_id, title=title)
-    # Invalidate cache in case the notebook moved/renamed
-    invalidate_notebook_map_cache()
+    notebook_resolver.modify_notebook(notebook_id, title=title)
     return format_update_success(ItemType.notebook, notebook_id)
 
 
@@ -151,12 +141,9 @@ async def delete_notebook(
         str: Success message confirming the notebook was moved to trash.
     """
     if _module_config.has_notebook_allowlist:
-        validate_notebook_access(
+        notebook_resolver.validate_access(
             notebook_id, allowlist_entries=_module_config.notebook_allowlist
         )
 
-    client = get_joplin_client()
-    client.delete_notebook(notebook_id)
-    # Invalidate cache since structure changed
-    invalidate_notebook_map_cache()
+    notebook_resolver.delete_notebook(notebook_id)
     return format_delete_success(ItemType.notebook, notebook_id)

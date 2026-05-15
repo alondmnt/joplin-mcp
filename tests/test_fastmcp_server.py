@@ -237,7 +237,7 @@ def test_resolve_notebook_by_path_simple():
         "nb2": {"title": "Personal", "parent_id": None},
     }
 
-    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.notebook_resolver.get_map", return_value=mock_map):
         result = _resolve_notebook_by_path("Work")
         assert result == "nb1"
 
@@ -254,7 +254,7 @@ def test_resolve_notebook_by_path_nested():
         "child2": {"title": "tasks", "parent_id": "parent2"},
     }
 
-    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.notebook_resolver.get_map", return_value=mock_map):
         # Should find the correct 'tasks' notebook under 'Project A'
         result = _resolve_notebook_by_path("Project A/tasks")
         assert result == "child1"
@@ -275,7 +275,7 @@ def test_resolve_notebook_by_path_deeply_nested():
         "leaf": {"title": "Tasks", "parent_id": "mid"},
     }
 
-    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.notebook_resolver.get_map", return_value=mock_map):
         result = _resolve_notebook_by_path("Projects/Work/Tasks")
         assert result == "leaf"
 
@@ -289,7 +289,7 @@ def test_resolve_notebook_by_path_case_insensitive():
         "nb1": {"title": "Work Projects", "parent_id": None},
     }
 
-    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.notebook_resolver.get_map", return_value=mock_map):
         result = _resolve_notebook_by_path("work projects")
         assert result == "nb1"
         result = _resolve_notebook_by_path("WORK PROJECTS")
@@ -305,7 +305,7 @@ def test_resolve_notebook_by_path_not_found():
         "nb1": {"title": "Work", "parent_id": None},
     }
 
-    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.notebook_resolver.get_map", return_value=mock_map):
         with pytest.raises(ValueError) as exc_info:
             _resolve_notebook_by_path("NonExistent/tasks")
         assert "NonExistent" in str(exc_info.value)
@@ -335,7 +335,7 @@ def test_resolve_notebook_by_path_handles_whitespace():
         "nb2": {"title": "Tasks", "parent_id": "nb1"},
     }
 
-    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.notebook_resolver.get_map", return_value=mock_map):
         # Extra whitespace around components should be handled
         result = _resolve_notebook_by_path("  Work  /  Tasks  ")
         assert result == "nb2"
@@ -351,7 +351,7 @@ def test_get_notebook_id_by_name_uses_path_for_slash():
         "child": {"title": "Work", "parent_id": "parent"},
     }
 
-    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.notebook_resolver.get_map", return_value=mock_map):
         result = get_notebook_id_by_name("Projects/Work")
         assert result == "child"
 
@@ -433,7 +433,7 @@ def test_get_notebook_id_by_name_flat_hides_denied_notebooks():
     mock_cfg.notebook_allowlist = ["Work"]
 
     with patch(
-        "joplin_mcp.notebook_utils.get_notebook_map_cached",
+        "joplin_mcp.notebook_utils.notebook_resolver.get_map",
         return_value=full_map,
     ), patch("joplin_mcp.fastmcp_server._module_config", mock_cfg):
         with pytest.raises(ValueError) as exc_info:
@@ -458,7 +458,7 @@ def test_get_notebook_id_by_name_flat_resolves_allowlisted():
     mock_cfg.notebook_allowlist = ["Work"]
 
     with patch(
-        "joplin_mcp.notebook_utils.get_notebook_map_cached",
+        "joplin_mcp.notebook_utils.notebook_resolver.get_map",
         return_value=full_map,
     ), patch("joplin_mcp.fastmcp_server._module_config", mock_cfg):
         assert get_notebook_id_by_name("Work") == "work_id"
@@ -482,7 +482,7 @@ def test_get_notebook_id_by_name_flat_multi_match_only_lists_accessible():
     mock_cfg.notebook_allowlist = ["Work", "Work/**"]
 
     with patch(
-        "joplin_mcp.notebook_utils.get_notebook_map_cached",
+        "joplin_mcp.notebook_utils.notebook_resolver.get_map",
         return_value=full_map,
     ), patch("joplin_mcp.fastmcp_server._module_config", mock_cfg):
         # Only Work/Inbox is accessible — single match, should resolve cleanly.
@@ -508,7 +508,7 @@ def test_get_notebook_id_by_name_flat_multi_match_disambiguation_filtered():
     mock_cfg.notebook_allowlist = ["Work", "Work/**", "AI", "AI/**"]
 
     with patch(
-        "joplin_mcp.notebook_utils.get_notebook_map_cached",
+        "joplin_mcp.notebook_utils.notebook_resolver.get_map",
         return_value=full_map,
     ), patch("joplin_mcp.fastmcp_server._module_config", mock_cfg):
         with pytest.raises(ValueError) as exc_info:
@@ -530,7 +530,7 @@ def test_resolve_notebook_by_path_suggests_on_not_found():
         "projects": {"title": "projects", "parent_id": "gtd"},
     }
 
-    with patch("joplin_mcp.notebook_utils.get_notebook_map_cached", return_value=mock_map):
+    with patch("joplin_mcp.notebook_utils.notebook_resolver.get_map", return_value=mock_map):
         with pytest.raises(ValueError) as exc_info:
             _resolve_notebook_by_path("projects/personal")
         error_msg = str(exc_info.value)
@@ -582,21 +582,22 @@ def test_compute_notebook_path_returns_none_for_empty():
     assert _compute_notebook_path("", {}) is None
 
 
-def test_invalidate_notebook_map_cache():
-    """Test invalidate_notebook_map_cache resets cache."""
-    from joplin_mcp.notebook_utils import (
-        invalidate_notebook_map_cache,
-        _NOTEBOOK_MAP_CACHE,
-    )
+def test_invalidate_resets_resolver_cache():
+    """NotebookResolver.invalidate clears the cached map and allowlist specs."""
+    from joplin_mcp.notebook_utils import notebook_resolver
 
-    # Set some cache values
-    _NOTEBOOK_MAP_CACHE["built_at"] = 999.0
-    _NOTEBOOK_MAP_CACHE["map"] = {"test": "value"}
+    # Seed cache state via the resolver's instance attrs
+    notebook_resolver._map = {"test": "value"}
+    notebook_resolver._map_built_at = 999.0
+    notebook_resolver._allowlist_entries = ["Work"]
+    notebook_resolver._allowlist_built_at = 999.0
 
-    invalidate_notebook_map_cache()
+    notebook_resolver.invalidate()
 
-    assert _NOTEBOOK_MAP_CACHE["built_at"] == 0.0
-    assert _NOTEBOOK_MAP_CACHE["map"] is None
+    assert notebook_resolver._map is None
+    assert notebook_resolver._map_built_at == 0.0
+    assert notebook_resolver._allowlist_entries is None
+    assert notebook_resolver._allowlist_built_at == 0.0
 
 
 def test_get_notebook_cache_ttl_from_env():

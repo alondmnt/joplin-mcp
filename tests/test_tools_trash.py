@@ -43,14 +43,10 @@ class TestRestoreFromTrashTool:
         assert "12345678901234567890123456789012" in result
 
     @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.trash.invalidate_notebook_map_cache")
-    @patch("joplin_mcp.tools.trash.get_joplin_client")
-    async def test_restores_notebook(self, mock_get_client, mock_invalidate_cache):
-        """Should restore a notebook by setting deleted_time to 0."""
+    @patch("joplin_mcp.tools.trash.notebook_resolver")
+    async def test_restores_notebook(self, mock_resolver):
+        """Should restore a notebook via the resolver, which invalidates the cache."""
         from joplin_mcp.tools.trash import restore_from_trash
-
-        mock_client = MagicMock()
-        mock_get_client.return_value = mock_client
 
         fn = _get_tool_fn(restore_from_trash)
         result = await fn(
@@ -58,10 +54,9 @@ class TestRestoreFromTrashTool:
             item_type="notebook",
         )
 
-        mock_client.modify_notebook.assert_called_once_with(
-            "12345678901234567890123456789012", deleted_time=0
+        mock_resolver.restore_notebook.assert_called_once_with(
+            "12345678901234567890123456789012"
         )
-        mock_invalidate_cache.assert_called_once()
         assert "RESTORE_NOTEBOOK" in result
         assert "SUCCESS" in result
         assert "12345678901234567890123456789012" in result

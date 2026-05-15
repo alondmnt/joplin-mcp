@@ -52,7 +52,6 @@ from joplin_mcp.fastmcp_server import (
     RequiredStringType,
     SortBy,
     SortOrder,
-    _compute_notebook_path,
     _module_config,
     apply_pagination,
     build_pagination_summary,
@@ -68,8 +67,6 @@ from joplin_mcp.fastmcp_server import (
     format_search_results_with_pagination,
     format_update_success,
     get_joplin_client,
-    get_notebook_id_by_name,
-    get_notebook_map_cached,
     optional_int_converter,
     process_search_results,
     resolve_sort_params,
@@ -82,6 +79,9 @@ from joplin_mcp.formatting import (
     format_note_metadata_lines,
 )
 from joplin_mcp.notebook_utils import (
+    _compute_notebook_path,
+    get_notebook_id_by_name,
+    get_notebook_map_cached,
     is_notebook_accessible,
     validate_notebook_access,
 )

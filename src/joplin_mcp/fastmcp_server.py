@@ -365,18 +365,20 @@ def get_joplin_client() -> ClientApi:
     return ClientApi(token=token, url=url)
 
 
-# === NOTEBOOK PATH UTILITIES ===
-# Moved to joplin_mcp/notebook_utils.py - re-exported for backwards compatibility
+# === NOTEBOOK RESOLVER ===
+# All notebook cache, path resolution, and invalidation live in
+# joplin_mcp.notebook_utils. Tools import the resolver directly from there.
+# init_resolver binds the Joplin client factory to the default resolver so it
+# can refresh its cache and perform mutations.
 
 from joplin_mcp.notebook_utils import (
     _build_notebook_map,
     _compute_notebook_path,
-    _resolve_notebook_by_path,
-    get_notebook_id_by_name,
-    get_notebook_map_cached,
-    invalidate_notebook_map_cache,
-    validate_allowlist_at_startup,
+    init_resolver,
+    notebook_resolver,
 )
+
+init_resolver(get_joplin_client)
 
 
 def apply_pagination(
@@ -709,7 +711,7 @@ def format_item_details(item: Any, item_type: ItemType) -> str:
         metadata.append(f"Parent: {parent_id}")
     if item_type == ItemType.notebook:
         try:
-            nb_map = get_notebook_map_cached()
+            nb_map = notebook_resolver.get_map()
             path = _compute_notebook_path(getattr(item, "id", None), nb_map)
             if path:
                 metadata.append(f"Path: {path}")
@@ -867,7 +869,7 @@ def _collect_note_metadata(
             map_to_use = notebooks_map
             if map_to_use is None:
                 try:
-                    map_to_use = get_notebook_map_cached()
+                    map_to_use = notebook_resolver.get_map()
                 except Exception:
                     map_to_use = None
             if map_to_use is not None:
@@ -975,7 +977,7 @@ def format_search_results_with_pagination(
     # Build notebook map once for efficient path resolution
     notebooks_map: Optional[Dict[str, Dict[str, Optional[str]]]] = None
     try:
-        notebooks_map = get_notebook_map_cached()
+        notebooks_map = notebook_resolver.get_map()
     except Exception:
         notebooks_map = None  # Best-effort only
 
@@ -1231,7 +1233,7 @@ def main(
 
         # Validate and log notebook allowlist at startup (D3, D6, D9)
         runtime_config = _config or _module_config
-        validate_allowlist_at_startup(runtime_config, client)
+        notebook_resolver.validate_allowlist_at_startup(runtime_config, client)
 
         # ---- Non-breaking compat toggle via env ----
         compat_env = os.getenv("MCP_HTTP_COMPAT", "").strip().lower() in {"1","true","yes","on"}

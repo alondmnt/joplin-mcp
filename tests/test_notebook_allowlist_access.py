@@ -292,26 +292,26 @@ class TestCacheInvalidation:
 
     def test_cache_invalidation(self):
         """invalidate_notebook_map_cache clears both notebook map and allowlist spec caches."""
-        from joplin_mcp.notebook_utils import _NOTEBOOK_MAP_CACHE, _ALLOWLIST_SPEC_CACHE
+        from joplin_mcp.notebook_utils import notebook_resolver
 
-        # Populate caches with dummy data
-        _NOTEBOOK_MAP_CACHE["built_at"] = 999999.0
-        _NOTEBOOK_MAP_CACHE["map"] = {"fake": "data"}
-        _ALLOWLIST_SPEC_CACHE["built_at"] = 999999.0
-        _ALLOWLIST_SPEC_CACHE["positive_spec"] = "fake_spec"
-        _ALLOWLIST_SPEC_CACHE["negation_spec"] = "fake_neg"
-        _ALLOWLIST_SPEC_CACHE["entries"] = ["fake"]
-        _ALLOWLIST_SPEC_CACHE["hex_ids"] = {"fake"}
+        # Populate caches with dummy data through the resolver's instance attrs
+        notebook_resolver._map = {"fake": "data"}
+        notebook_resolver._map_built_at = 999999.0
+        notebook_resolver._allowlist_positive = "fake_spec"
+        notebook_resolver._allowlist_negation = "fake_neg"
+        notebook_resolver._allowlist_entries = ["fake"]
+        notebook_resolver._allowlist_hex_ids = {"fake"}
+        notebook_resolver._allowlist_built_at = 999999.0
 
         invalidate_notebook_map_cache()
 
-        assert _NOTEBOOK_MAP_CACHE["built_at"] == 0.0
-        assert _NOTEBOOK_MAP_CACHE["map"] is None
-        assert _ALLOWLIST_SPEC_CACHE["built_at"] == 0.0
-        assert _ALLOWLIST_SPEC_CACHE["positive_spec"] is None
-        assert _ALLOWLIST_SPEC_CACHE["negation_spec"] is None
-        assert _ALLOWLIST_SPEC_CACHE["entries"] is None
-        assert _ALLOWLIST_SPEC_CACHE["hex_ids"] is None
+        assert notebook_resolver._map is None
+        assert notebook_resolver._map_built_at == 0.0
+        assert notebook_resolver._allowlist_positive is None
+        assert notebook_resolver._allowlist_negation is None
+        assert notebook_resolver._allowlist_entries is None
+        assert notebook_resolver._allowlist_hex_ids is None
+        assert notebook_resolver._allowlist_built_at == 0.0
 
 
 class TestStartupValidationNoAutoCreate:

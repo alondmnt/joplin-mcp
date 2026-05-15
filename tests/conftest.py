@@ -300,6 +300,22 @@ def reset_mocks():
     # This runs after each test to ensure clean state
 
 
+@pytest.fixture(autouse=True)
+def _reset_notebook_resolver_cache():
+    """Reset the default notebook resolver's cache between tests.
+
+    The resolver is module-level state, so tests that warm its cache (whether
+    through a real call or by writing directly) would otherwise leak data into
+    later tests. Clearing before and after each test gives every test a cold
+    cache.
+    """
+    from joplin_mcp.notebook_utils import notebook_resolver
+
+    notebook_resolver.invalidate()
+    yield
+    notebook_resolver.invalidate()
+
+
 # === ALLOWLIST TEST HELPERS ===
 # Shared by test_pathspec_patterns.py, test_notebook_allowlist_access.py,
 # and test_integration_allowlist.py.

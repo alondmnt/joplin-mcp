@@ -13,7 +13,7 @@ from joplin_mcp.fastmcp_server import (
     get_joplin_client,
     validate_joplin_id,
 )
-from joplin_mcp.notebook_utils import invalidate_notebook_map_cache
+from joplin_mcp.notebook_utils import notebook_resolver
 from joplin_mcp.tools.notes import _clear_note_cache
 
 logger = logging.getLogger(__name__)
@@ -40,15 +40,14 @@ async def restore_from_trash(
         str: Success message confirming the item was restored.
     """
     item_id = validate_joplin_id(item_id)
-    client = get_joplin_client()
 
     if item_type == "note":
+        client = get_joplin_client()
         client.modify_note(item_id, deleted_time=0)
         _clear_note_cache()
         return format_restore_success(ItemType.note, item_id)
     elif item_type == "notebook":
-        client.modify_notebook(item_id, deleted_time=0)
-        invalidate_notebook_map_cache()
+        notebook_resolver.restore_notebook(item_id)
         return format_restore_success(ItemType.notebook, item_id)
     else:
         raise ValueError(
