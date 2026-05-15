@@ -158,17 +158,18 @@ class TestRenderNoteSection:
         mock_format.return_value = "DEFAULT_OUTPUT"
         note = MagicMock()
         note.body = "# Heading\nContent"
+        cfg = _config()
 
         result = note_view.render_note(
             note,
             note_id="note123",
             section="Heading",
             include_body=False,
-            config=_config(),
+            config=cfg,
         )
 
         assert result == "DEFAULT_OUTPUT"
-        mock_format.assert_called_once_with(note, False, "individual_notes")
+        mock_format.assert_called_once_with(note, False, "individual_notes", config=cfg)
 
     @patch("joplin_mcp.note_view.format_note_details")
     def test_section_ignored_when_no_body(self, mock_format):
@@ -425,21 +426,23 @@ class TestRenderNoteDefault:
         mock_format.return_value = "FULL_OUTPUT"
         note = MagicMock()
         note.body = "Short body"
+        cfg = _config()
 
-        result = note_view.render_note(note, note_id="note123", config=_config())
+        result = note_view.render_note(note, note_id="note123", config=cfg)
 
         assert result == "FULL_OUTPUT"
-        mock_format.assert_called_once_with(note, True, "individual_notes")
+        mock_format.assert_called_once_with(note, True, "individual_notes", config=cfg)
 
     @patch("joplin_mcp.note_view.format_note_details")
     def test_metadata_only(self, mock_format):
         mock_format.return_value = "METADATA_OUTPUT"
         note = MagicMock()
         note.body = "Body"
+        cfg = _config()
 
         result = note_view.render_note(
-            note, note_id="note123", include_body=False, config=_config()
+            note, note_id="note123", include_body=False, config=cfg
         )
 
         assert result == "METADATA_OUTPUT"
-        mock_format.assert_called_once_with(note, False, "individual_notes")
+        mock_format.assert_called_once_with(note, False, "individual_notes", config=cfg)

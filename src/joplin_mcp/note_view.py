@@ -25,7 +25,6 @@ from joplin_mcp.content_utils import (
     format_timestamp,
     parse_markdown_headings,
 )
-from joplin_mcp.fastmcp_server import _module_config
 from joplin_mcp.formatting import (
     build_pagination_header,
     build_pagination_summary,
@@ -168,9 +167,10 @@ def format_note_details(
     include_body: bool = True,
     context: str = "individual_notes",
     original_body: Optional[str] = None,
+    *,
+    config: Any,
 ) -> str:
     """Format a note for detailed display optimized for LLM comprehension."""
-    config = _module_config
     should_show_content = config.should_show_content(context)
     should_show_full_content = config.should_show_full_content(context)
 
@@ -312,10 +312,10 @@ def format_search_results_with_pagination(
     original_query: Optional[str] = None,
     order_by: Optional[str] = None,
     order_dir: Optional[str] = None,
+    *,
+    config: Any,
 ) -> str:
     """Format search results with pagination information for display optimized for LLM comprehension."""
-    config = _module_config
-
     notebooks_map: Optional[Dict[str, Dict[str, Optional[str]]]] = None
     try:
         notebooks_map = notebook_resolver.get_map()
@@ -371,7 +371,7 @@ def _create_note_object(note: Any, body_override: str = None) -> Any:
 
 
 def _render_section(
-    note: Any, section: str, note_id: str, include_body: bool
+    note: Any, section: str, note_id: str, include_body: bool, *, config: Any
 ) -> Optional[str]:
     """Render a single section by heading text, slug, or number."""
     if not (section and include_body):
@@ -384,7 +384,7 @@ def _render_section(
     section_content, section_title = extract_section_content(body, section)
     if section_content:
         modified_note = _create_note_object(note, section_content)
-        result = format_note_details(modified_note, include_body, "individual_notes")
+        result = format_note_details(modified_note, include_body, "individual_notes", config=config)
         return f"EXTRACTED_SECTION: {section_title}\nSECTION_QUERY: {section}\n{result}"
 
     # Section not found - show available sections with line numbers so the
@@ -407,7 +407,12 @@ ERROR: Section '{section}' not found in note"""
 
 
 def _render_toc(
-    note: Any, note_id: str, display_mode: str, original_body: str = None
+    note: Any,
+    note_id: str,
+    display_mode: str,
+    original_body: str = None,
+    *,
+    config: Any,
 ) -> Optional[str]:
     """Render a TOC view with metadata header and navigation hints."""
     toc = create_toc_only(original_body or getattr(note, "body", ""))
@@ -420,6 +425,7 @@ def _render_toc(
         include_body=False,
         context="individual_notes",
         original_body=original_body,
+        config=config,
     )
 
     if display_mode == "explicit":
@@ -443,6 +449,8 @@ def _render_line_range(
     line_count: Optional[int],
     note_id: str,
     include_body: bool,
+    *,
+    config: Any,
 ) -> Optional[str]:
     """Render a contiguous line range for sequential reading."""
     if not include_body:
@@ -480,7 +488,11 @@ ERROR: line_count must be >= 1"""
 
     modified_note = _create_note_object(note, extracted_content)
     result = format_note_details(
-        modified_note, include_body, "individual_notes", original_body=body
+        modified_note,
+        include_body,
+        "individual_notes",
+        original_body=body,
+        config=config,
     )
 
     lines_extracted = len(extracted_lines)
@@ -519,7 +531,7 @@ def _render_smart_toc(note: Any, note_id: str, config: Any) -> Optional[str]:
     if body_length <= toc_threshold:
         return None
 
-    toc_result = _render_toc(note, note_id, "smart_toc_auto", body)
+    toc_result = _render_toc(note, note_id, "smart_toc_auto", body, config=config)
     if toc_result:
         return toc_result
 
@@ -528,7 +540,11 @@ def _render_smart_toc(note: Any, note_id: str, config: Any) -> Optional[str]:
     )
     truncated_note = _create_note_object(note, truncated_content)
     result = format_note_details(
-        truncated_note, True, "individual_notes", original_body=body
+        truncated_note,
+        True,
+        "individual_notes",
+        original_body=body,
+        config=config,
     )
 
     truncation_info = f'CONTENT_TRUNCATED: Note is long ({body_length} chars) but has no headings for navigation\nNEXT_STEPS: To force full content: get_note("{note_id}", force_full=True) or start sequential reading: get_note("{note_id}", start_line=1)\n'
@@ -556,19 +572,23 @@ def render_note(
     """
     if start_line is not None:
         line_result = _render_line_range(
-            note, start_line, line_count, note_id, include_body
+            note, start_line, line_count, note_id, include_body, config=config
         )
         if line_result is not None:
             return line_result
 
-    section_result = _render_section(note, section, note_id, include_body)
+    section_result = _render_section(
+        note, section, note_id, include_body, config=config
+    )
     if section_result is not None:
         return section_result
 
     if toc_only and include_body:
         body = getattr(note, "body", "")
         if body:
-            toc_result = _render_toc(note, note_id, "toc_only", body)
+            toc_result = _render_toc(
+                note, note_id, "toc_only", body, config=config
+            )
             if toc_result is not None:
                 return toc_result
 
@@ -577,4 +597,6 @@ def render_note(
         if smart_toc_result is not None:
             return smart_toc_result
 
-    return format_note_details(note, include_body, "individual_notes")
+    return format_note_details(
+        note, include_body, "individual_notes", config=config
+    )

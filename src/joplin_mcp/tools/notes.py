@@ -858,6 +858,7 @@ async def find_notes(
         original_query=query,
         order_by=sort_kwargs_for_display.get("order_by"),
         order_dir=sort_kwargs_for_display.get("order_dir"),
+        config=_module_config,
     )
 
 
@@ -1177,6 +1178,7 @@ async def find_notes_with_tag(
         original_query=tag_name,
         order_by=sort_kwargs.get("order_by"),
         order_dir=sort_kwargs.get("order_dir"),
+        config=_module_config,
     )
 
 
@@ -1277,6 +1279,7 @@ async def find_notes_in_notebook(
         original_query=notebook_name,
         order_by=sort_kwargs.get("order_by"),
         order_dir=sort_kwargs.get("order_dir"),
+        config=_module_config,
     )
 
 
@@ -1332,4 +1335,5 @@ async def get_all_notes(
         "all notes", notes, len(notes), limit, 0, "search_results",
         order_by=sort_kwargs.get("order_by"),
         order_dir=sort_kwargs.get("order_dir"),
+        config=_module_config,
     )
