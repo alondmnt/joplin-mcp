@@ -99,6 +99,33 @@ class TestCreateNoteAllowlist:
         mock_client = mock_get_client.return_value
         mock_client.add_note.assert_not_called()
 
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.validate_notebook_access")
+    @patch("joplin_mcp.tools.notes.get_notebook_id_by_name")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_create_note_empty_allowlist_denies(
+        self,
+        mock_get_client,
+        mock_get_nb_id,
+        mock_validate,
+        override_config,
+    ):
+        """notebook_allowlist=[] means deny-all: create_note must raise (closes #46)."""
+        from joplin_mcp.tools.notes import create_note
+
+        mock_get_nb_id.return_value = "any_nb_id"
+        mock_validate.side_effect = ValueError("Notebook not accessible")
+
+        with override_config(notebook_allowlist=[]):
+            fn = _get_tool_fn(create_note)
+            with pytest.raises(ValueError, match="Notebook not accessible"):
+                await fn(title="Test", notebook_name="Anywhere", body="content")
+
+        # Validation was called with the empty allowlist.
+        mock_validate.assert_called_once_with("any_nb_id", allowlist_entries=[])
+        mock_client = mock_get_client.return_value
+        mock_client.add_note.assert_not_called()
+
 
 # === Tests for get_note with allowlist ===
 
@@ -166,6 +193,34 @@ class TestGetNoteAllowlist:
         fn = _get_tool_fn(get_note)
         with pytest.raises(ValueError, match="Notebook not accessible"):
             await fn(note_id="12345678901234567890123456789012")
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.validate_notebook_access")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_get_note_empty_allowlist_denies(
+        self,
+        mock_get_client,
+        mock_validate,
+        override_config,
+    ):
+        """notebook_allowlist=[] means deny-all: get_note must raise even for a notebook that exists (closes #46)."""
+        from joplin_mcp.tools.notes import get_note
+
+        mock_note = MagicMock()
+        mock_note.parent_id = "any_nb_id"
+
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = mock_note
+        mock_get_client.return_value = mock_client
+
+        mock_validate.side_effect = ValueError("Notebook not accessible")
+
+        with override_config(notebook_allowlist=[]):
+            fn = _get_tool_fn(get_note)
+            with pytest.raises(ValueError, match="Notebook not accessible"):
+                await fn(note_id="12345678901234567890123456789012")
+
+        mock_validate.assert_called_once_with("any_nb_id", allowlist_entries=[])
 
 
 # === Tests for update_note with allowlist ===

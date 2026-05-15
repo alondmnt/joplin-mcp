@@ -148,6 +148,40 @@ class TestListNotebooksAllowlist:
             mock_format.assert_called_once_with(mock_notebooks, ItemType.notebook)
             assert result == "ALL"
 
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    @patch("joplin_mcp.tools.notebooks.format_item_list")
+    @patch("joplin_mcp.tools.notebooks.get_joplin_client")
+    async def test_list_notebooks_empty_allowlist_returns_none(
+        self, mock_get_client, mock_format, mock_resolver, override_config
+    ):
+        """notebook_allowlist=[] means deny-all: no notebooks returned (closes #46)."""
+        with override_config(notebook_allowlist=[]):
+            from joplin_mcp.tools.notebooks import list_notebooks
+
+            all_notebooks = [
+                MagicMock(id="nb1", title="Work"),
+                MagicMock(id="nb2", title="Personal"),
+            ]
+            mock_client = MagicMock()
+            mock_client.get_all_notebooks.return_value = all_notebooks
+            mock_get_client.return_value = mock_client
+            mock_resolver.filter_accessible.return_value = []
+            mock_format.return_value = "EMPTY"
+
+            fn = _get_tool_fn(list_notebooks)
+            result = await fn()
+
+            # The resolver is asked to filter with an empty allowlist and
+            # returns [] (deny-all), which the tool then formats.
+            mock_resolver.filter_accessible.assert_called_once_with(
+                all_notebooks, allowlist_entries=[]
+            )
+            from joplin_mcp.fastmcp_server import ItemType
+
+            mock_format.assert_called_once_with([], ItemType.notebook)
+            assert result == "EMPTY"
+
 
 # === Tests for create_notebook with allowlist ===
 

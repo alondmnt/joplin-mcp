@@ -231,6 +231,18 @@ class TestValidateNotebookAccess:
             client_fn=client_fn,
         )
 
+    def test_validate_empty_allowlist_raises(self):
+        """validate_notebook_access with allowlist=[] raises (deny-all)."""
+        nb_map = make_notebook_map({"nb1": "Projects/Work"})
+        client_fn = mock_client_fn(nb_map)
+
+        with pytest.raises(AllowlistDeniedError, match="Notebook not accessible"):
+            validate_notebook_access(
+                "nb1",
+                allowlist_entries=[],
+                client_fn=client_fn,
+            )
+
 
 class TestFilterAccessibleNotebooks:
     """Test filter_accessible_notebooks functionality."""
