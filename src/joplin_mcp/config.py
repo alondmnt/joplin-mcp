@@ -1,6 +1,7 @@
 """Configuration management for Joplin MCP server."""
 
 import json
+import logging
 import os
 import warnings
 from pathlib import Path
@@ -1361,3 +1362,99 @@ class JoplinMCPConfig:
             json.dump(config_data, f, indent=2)
 
         return config_path
+
+
+# === Config resolver ===
+# See ADR-0001 (docs/adr/0001-config-resolver.md): one config identity at
+# a time. Tools read via get_config(); main() replaces wholesale via
+# set_config() when --config-file is supplied. set_config is a replace,
+# not a merge -- partial-blend semantics are intentionally absent.
+
+_resolver_logger = logging.getLogger(__name__)
+
+
+def _auto_discover_with_logging() -> "JoplinMCPConfig":
+    """Auto-discover configuration on import, with logging.
+
+    Honours JOPLIN_MCP_CONFIG / JOPLIN_CONFIG_FILE for an explicit path,
+    otherwise falls back to JoplinMCPConfig.auto_discover() (standard
+    locations + cwd). On any failure, returns a default config so import
+    never raises.
+    """
+    _resolver_logger.info("Auto-discovering Joplin MCP configuration...")
+
+    try:
+        loaded_from: Optional[Path] = None
+
+        explicit_config = os.getenv("JOPLIN_MCP_CONFIG") or os.getenv(
+            "JOPLIN_CONFIG_FILE"
+        )
+        if explicit_config:
+            cfg_path = Path(explicit_config)
+            if cfg_path.exists():
+                _resolver_logger.info(
+                    f"Using explicit configuration from: {cfg_path}"
+                )
+                config = JoplinMCPConfig.from_file(cfg_path)
+                loaded_from = cfg_path
+            else:
+                _resolver_logger.warning(
+                    f"Explicit config path set but not found: {cfg_path}. Falling back to discovery."
+                )
+                config = JoplinMCPConfig.auto_discover()
+        else:
+            config = JoplinMCPConfig.auto_discover()
+
+        if loaded_from is None:
+            for path in JoplinMCPConfig.get_default_config_paths():
+                if path.exists():
+                    loaded_from = path
+                    break
+            if loaded_from is None:
+                cwd = Path.cwd()
+                for path in [
+                    cwd / "joplin-mcp.json",
+                    cwd / "joplin-mcp.yaml",
+                    cwd / "joplin-mcp.yml",
+                ]:
+                    if path.exists():
+                        loaded_from = path
+                        break
+
+        if loaded_from is None:
+            _resolver_logger.warning(
+                "No configuration file found. Using environment variables and defaults."
+            )
+        else:
+            _resolver_logger.info(
+                f"Successfully loaded configuration from: {loaded_from}"
+            )
+
+        return config
+
+    except Exception as e:
+        _resolver_logger.error(f"Failed to load configuration: {e}")
+        _resolver_logger.warning("Falling back to default configuration.")
+        return JoplinMCPConfig()
+
+
+_current_config: "JoplinMCPConfig" = _auto_discover_with_logging()
+
+
+def get_config() -> "JoplinMCPConfig":
+    """Return the live JoplinMCPConfig.
+
+    Returns the most recently set_config() value, or the auto-discovered
+    config from import time if set_config() was never called.
+    """
+    return _current_config
+
+
+def set_config(cfg: "JoplinMCPConfig") -> None:
+    """Replace the live config wholesale.
+
+    Subsequent get_config() calls return ``cfg``. This is a replace, not
+    a merge: fields not present on ``cfg`` are gone. See ADR-0001.
+    """
+    global _current_config
+    _current_config = cfg

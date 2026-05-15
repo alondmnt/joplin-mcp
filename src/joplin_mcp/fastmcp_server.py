@@ -57,7 +57,7 @@ from typing_extensions import Annotated
 from joplin_mcp import __version__ as MCP_VERSION
 
 # Import our existing configuration for compatibility
-from joplin_mcp.config import JoplinMCPConfig
+from joplin_mcp.config import JoplinMCPConfig, get_config
 
 # Import content utilities
 from joplin_mcp.content_utils import (
@@ -97,69 +97,19 @@ _config: Optional[JoplinMCPConfig] = None
 
 # Load configuration at module level for tool filtering
 def _load_module_config() -> JoplinMCPConfig:
-    """Load configuration at module level for tool registration filtering."""
-    from pathlib import Path
+    """Return the live config from the resolver.
 
-    # Use the built-in auto-discovery that checks standard global config locations
-    # This includes: ~/.joplin-mcp.json, ~/.config/joplin-mcp/config.json, etc.
-    logger.info("Auto-discovering Joplin MCP configuration...")
-
-    try:
-        loaded_from: Optional[Path] = None
-
-        # Highest priority: explicit config path via environment
-        explicit_config = os.getenv("JOPLIN_MCP_CONFIG") or os.getenv(
-            "JOPLIN_CONFIG_FILE"
-        )
-        if explicit_config:
-            cfg_path = Path(explicit_config)
-            if cfg_path.exists():
-                logger.info(f"Using explicit configuration from: {cfg_path}")
-                config = JoplinMCPConfig.from_file(cfg_path)
-                loaded_from = cfg_path
-            else:
-                logger.warning(
-                    f"Explicit config path set but not found: {cfg_path}. Falling back to discovery."
-                )
-                config = JoplinMCPConfig.auto_discover()
-        else:
-            config = JoplinMCPConfig.auto_discover()
-
-        # Only emit the "not found" warning when we truly didn't load from any file
-        if loaded_from is None:
-            # See if auto-discovery found a file
-            for path in JoplinMCPConfig.get_default_config_paths():
-                if path.exists():
-                    loaded_from = path
-                    break
-            # Also check current directory (for development)
-            if loaded_from is None:
-                cwd = Path.cwd()
-                for path in [
-                    cwd / "joplin-mcp.json",
-                    cwd / "joplin-mcp.yaml",
-                    cwd / "joplin-mcp.yml",
-                ]:
-                    if path.exists():
-                        loaded_from = path
-                        break
-
-        if loaded_from is None:
-            logger.warning(
-                "No configuration file found. Using environment variables and defaults."
-            )
-        else:
-            logger.info(f"Successfully loaded configuration from: {loaded_from}")
-
-        return config
-
-    except Exception as e:
-        logger.error(f"Failed to load configuration: {e}")
-        logger.warning("Falling back to default configuration.")
-        return JoplinMCPConfig()
+    Kept as a thin delegate so existing call sites (and the `_module_config`
+    re-export below) continue to work while the migration to get_config()
+    is in flight. Auto-discovery + logging now live in joplin_mcp.config.
+    See ADR-0001.
+    """
+    return get_config()
 
 
-# Load config for tool registration filtering
+# Load config for tool registration filtering. Same object identity as
+# joplin_mcp.config._current_config; eventual callers should migrate to
+# get_config() directly so this re-export can be dropped (commit 3).
 _module_config = _load_module_config()
 try:
     enabled = sorted([k for k, v in _module_config.tools.items() if v])
