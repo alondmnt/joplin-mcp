@@ -40,7 +40,6 @@ from joplin_mcp.formatting import (
 )
 from joplin_mcp.note_view import (
     _build_find_in_note_header,
-    format_note_details,
     format_search_results_with_pagination,
 )
 from joplin_mcp.notebook_utils import (
