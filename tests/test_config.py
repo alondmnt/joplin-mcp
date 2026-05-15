@@ -1311,6 +1311,42 @@ class TestConfigToolConfiguration:
         assert not copied_config.is_tool_enabled("find_notes")
         assert copied_config.is_tool_enabled("create_note")
 
+    def test_config_copy_preserves_notebook_allowlist(self):
+        """copy() must round-trip notebook_allowlist (closes #45).
+
+        Earlier, copy() omitted the allowlist from current_values, so any
+        copy of a config with an allowlist silently fell back to ALLOW_ALL.
+        """
+        config = JoplinMCPConfig(
+            token="test-token", notebook_allowlist=["AI", "Projects/*"]
+        )
+
+        copied_config = config.copy()
+
+        assert copied_config.notebook_allowlist == ["AI", "Projects/*"]
+        assert copied_config.has_notebook_allowlist is True
+        # Defensive copy: mutating the source must not leak into the copy.
+        config.notebook_allowlist.append("Other")
+        assert copied_config.notebook_allowlist == ["AI", "Projects/*"]
+
+    def test_config_copy_preserves_allow_all_sentinel(self):
+        """copy() of a default config keeps notebook_allowlist as ALLOW_ALL."""
+        config = JoplinMCPConfig(token="test-token")
+
+        copied_config = config.copy()
+
+        assert copied_config.notebook_allowlist == JoplinMCPConfig.ALLOW_ALL
+        assert copied_config.has_notebook_allowlist is False
+
+    def test_config_copy_with_notebook_allowlist_override(self):
+        """copy(notebook_allowlist=...) replaces the existing allowlist."""
+        config = JoplinMCPConfig(token="test-token", notebook_allowlist=["AI"])
+
+        copied_config = config.copy(notebook_allowlist=["Projects"])
+
+        assert copied_config.notebook_allowlist == ["Projects"]
+        assert copied_config.has_notebook_allowlist is True
+
     def test_config_tools_to_dict_includes_tools(self):
         """Test that to_dict includes tools configuration."""
         config = JoplinMCPConfig(token="test-token")

@@ -1168,6 +1168,11 @@ class JoplinMCPConfig:
             "verify_ssl": self.verify_ssl,
             "tools": self.tools.copy(),
             "content_exposure": self.content_exposure.copy(),
+            "notebook_allowlist": (
+                list(self.notebook_allowlist)
+                if self.notebook_allowlist != self.ALLOW_ALL
+                else self.ALLOW_ALL
+            ),
         }
         current_values.update(overrides)
         return self.__class__(**current_values)
