@@ -632,6 +632,11 @@ class TestConfigValidationAndEdgeCases:
             with patch.dict(
                 os.environ, {"JOPLIN_HOST": "env-host", "JOPLIN_VERIFY_SSL": "true"}
             ):
+                # Isolate from ambient JOPLIN_* set by sibling tests under
+                # randomised order: from_file_and_environment lets env win, so
+                # a leaked JOPLIN_TOKEN would shadow the file value.
+                for var in ("JOPLIN_TOKEN", "JOPLIN_PORT", "JOPLIN_TIMEOUT"):
+                    os.environ.pop(var, None)
                 config = JoplinMCPConfig.from_file_and_environment(config_file)
 
                 # Environment should override
