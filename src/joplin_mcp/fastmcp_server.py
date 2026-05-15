@@ -377,68 +377,6 @@ from joplin_mcp.notebook_utils import (
 init_resolver(lambda: get_joplin_client())
 
 
-def apply_pagination(
-    notes: List[Any], limit: int, offset: int
-) -> tuple[List[Any], int]:
-    """Apply pagination to a list of notes and return paginated results with total count."""
-    total_count = len(notes)
-    start_index = offset
-    end_index = offset + limit
-    paginated_notes = notes[start_index:end_index]
-    return paginated_notes, total_count
-
-
-def build_search_filters(task: Optional[bool], completed: Optional[bool]) -> List[str]:
-    """Build search filter parts for task and completion status."""
-    search_parts = []
-
-    # Add task filter if specified
-    if task is not None:
-        if task:
-            search_parts.append("type:todo")
-        else:
-            search_parts.append("type:note")
-
-    # Add completion filter if specified (only relevant for tasks)
-    if completed is not None and task is True:
-        if completed:
-            search_parts.append("iscompleted:1")
-        else:
-            search_parts.append("iscompleted:0")
-
-    return search_parts
-
-
-def format_search_criteria(
-    base_criteria: str, task: Optional[bool], completed: Optional[bool]
-) -> str:
-    """Format search criteria description with filters."""
-    criteria_parts = [base_criteria]
-
-    if task is True:
-        criteria_parts.append("(tasks only)")
-    elif task is False:
-        criteria_parts.append("(regular notes only)")
-
-    if completed is True:
-        criteria_parts.append("(completed)")
-    elif completed is False:
-        criteria_parts.append("(uncompleted)")
-
-    return " ".join(criteria_parts)
-
-
-def format_no_results_with_pagination(
-    item_type: str, criteria: str, offset: int, limit: int
-) -> str:
-    """Format no results message with pagination info."""
-    if offset > 0:
-        page_info = f" - Page {(offset // limit) + 1} (offset {offset})"
-        return format_no_results_message(item_type, criteria + page_info)
-    else:
-        return format_no_results_message(item_type, criteria)
-
-
 # Common fields list for note operations
 # deleted_time included so the DELETED metadata line surfaces on every
 # note-returning path (get_note, find_notes_in_notebook, find_notes_with_tag),
@@ -456,20 +394,18 @@ COMMON_NOTE_FIELDS = (
 # format_timestamp, calculate_content_stats
 
 def process_search_results(results: Any) -> List[Any]:
-    """Process search results from joppy client into a consistent list format."""
+    """Normalise a joppy search/list response into a Python list.
+
+    Shared with ``tools/notes.py``, ``tools/tags.py``, and
+    ``format_tag_list_with_counts`` below -- belongs in fastmcp_server
+    while no neutral home exists for joppy adapters.
+    """
     if hasattr(results, "items"):
         return results.items or []
     elif isinstance(results, list):
         return results
     else:
         return [results] if results else []
-
-
-def filter_items_by_title(items: List[Any], query: str) -> List[Any]:
-    """Filter items by title using case-insensitive search."""
-    return [
-        item for item in items if query.lower() in getattr(item, "title", "").lower()
-    ]
 
 
 _TOKEN_QUERY_RE = re.compile(r"([?&]token=)[^&\s\"'`)\]]+", re.IGNORECASE)

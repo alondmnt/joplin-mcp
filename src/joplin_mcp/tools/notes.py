@@ -17,15 +17,12 @@ from joplin_mcp.fastmcp_server import (
     SortBy,
     SortOrder,
     _module_config,
-    apply_pagination,
-    build_search_filters,
     create_tool,
     flexible_bool_converter,
     flexible_enum_converter,
     format_creation_success,
     format_delete_success,
     format_no_results_message,
-    format_search_criteria,
     format_update_success,
     get_joplin_client,
     optional_int_converter,
@@ -49,6 +46,44 @@ from joplin_mcp.notebook_utils import (
     is_notebook_accessible,
     validate_notebook_access,
 )
+
+
+def build_search_filters(task: Optional[bool], completed: Optional[bool]) -> List[str]:
+    """Build search filter parts for task and completion status."""
+    search_parts = []
+
+    if task is not None:
+        if task:
+            search_parts.append("type:todo")
+        else:
+            search_parts.append("type:note")
+
+    if completed is not None and task is True:
+        if completed:
+            search_parts.append("iscompleted:1")
+        else:
+            search_parts.append("iscompleted:0")
+
+    return search_parts
+
+
+def format_search_criteria(
+    base_criteria: str, task: Optional[bool], completed: Optional[bool]
+) -> str:
+    """Format search criteria description with filters."""
+    criteria_parts = [base_criteria]
+
+    if task is True:
+        criteria_parts.append("(tasks only)")
+    elif task is False:
+        criteria_parts.append("(regular notes only)")
+
+    if completed is True:
+        criteria_parts.append("(completed)")
+    elif completed is False:
+        criteria_parts.append("(uncompleted)")
+
+    return " ".join(criteria_parts)
 
 
 def format_no_results_with_pagination(
@@ -826,7 +861,8 @@ async def find_notes(
         )]
 
     # Apply pagination
-    paginated_notes, total_count = apply_pagination(notes, limit, offset)
+    total_count = len(notes)
+    paginated_notes = notes[offset : offset + limit]
 
     if not paginated_notes:
         # Create descriptive message based on search criteria
@@ -1058,7 +1094,8 @@ async def find_in_note(
             }
         )
 
-    paginated_matches, total_count = apply_pagination(match_entries, limit, offset)
+    total_count = len(match_entries)
+    paginated_matches = match_entries[offset : offset + limit]
 
     result_parts = _build_find_in_note_header(
         note,
@@ -1161,7 +1198,8 @@ async def find_notes_with_tag(
         )]
 
     # Apply pagination
-    paginated_notes, total_count = apply_pagination(notes, limit, offset)
+    total_count = len(notes)
+    paginated_notes = notes[offset : offset + limit]
 
     if not paginated_notes:
         base_criteria = f'with tag "{tag_name}"'
@@ -1262,7 +1300,8 @@ async def find_notes_in_notebook(
     search_query = f'notebook:"{notebook_name}"'
 
     # Apply pagination
-    paginated_notes, total_count = apply_pagination(notes, limit, offset)
+    total_count = len(notes)
+    paginated_notes = notes[offset : offset + limit]
 
     if not paginated_notes:
         base_criteria = f'in notebook "{notebook_name}"'
