@@ -61,9 +61,6 @@ from joplin_mcp.config import JoplinMCPConfig
 
 # Import content utilities
 from joplin_mcp.content_utils import (
-    calculate_content_stats,
-    create_content_preview,
-    create_content_preview_with_search,
     create_matching_lines_preview,
     create_toc_only,
     extract_frontmatter,
@@ -76,14 +73,10 @@ from joplin_mcp.content_utils import (
 # Import formatting utilities
 from joplin_mcp.formatting import (
     ItemType,
-    build_pagination_header,
-    build_pagination_summary,
     format_creation_success,
     format_delete_success,
-    format_find_in_note_summary,
     format_restore_success,
     format_no_results_message,
-    format_note_metadata_lines,
     format_relation_success,
     format_update_success,
     get_item_emoji,
@@ -623,9 +616,13 @@ def get_tag_id_by_name(name: str) -> str:
 # === FORMATTING UTILITIES ===
 # Pure formatting functions imported from joplin_mcp.formatting:
 # ItemType, get_item_emoji, format_creation_success, format_update_success,
-# format_delete_success, format_relation_success, format_no_results_message,
-# build_pagination_header, build_pagination_summary, format_find_in_note_summary,
-# format_note_metadata_lines
+# format_delete_success, format_relation_success, format_no_results_message
+#
+# Note rendering (format_note_details, _collect_note_metadata,
+# _format_note_entry, _build_find_in_note_header,
+# format_search_results_with_pagination, plus build_pagination_header,
+# build_pagination_summary, format_find_in_note_summary,
+# format_note_metadata_lines) lives in joplin_mcp.note_view.
 #
 # Functions below depend on notebook path utilities or config:
 
@@ -735,282 +732,6 @@ def format_item_details(item: Any, item_type: ItemType) -> str:
     if metadata:
         result_parts.append("**Metadata:**")
         result_parts.extend(f"- {m}" for m in metadata)
-
-    return "\n".join(result_parts)
-
-
-def format_note_details(
-    note: Any,
-    include_body: bool = True,
-    context: str = "individual_notes",
-    original_body: Optional[str] = None,
-) -> str:
-    """Format a note for detailed display optimized for LLM comprehension."""
-    # Check content exposure settings
-    config = _module_config
-    should_show_content = config.should_show_content(context)
-    should_show_full_content = config.should_show_full_content(context)
-
-    stats_body = original_body if original_body is not None else getattr(note, "body", "")
-    metadata = _collect_note_metadata(
-        note,
-        include_timestamps=True,
-        include_todo=True,
-        include_content_stats=True,
-        content_stats_body=stats_body,
-    )
-    result_parts = format_note_metadata_lines(metadata, style="upper")
-
-    # Add content last to avoid breaking metadata flow
-    if include_body:
-        body = getattr(note, "body", "")
-        if should_show_content:
-            if body:
-                if should_show_full_content:
-                    # Standard full content display
-                    result_parts.append(f"CONTENT: {body}")
-                else:
-                    # Show preview only (for search results context)
-                    max_length = config.get_max_preview_length()
-                    preview = create_content_preview(body, max_length)
-                    result_parts.append(f"CONTENT_PREVIEW: {preview}")
-            else:
-                result_parts.append("CONTENT: (empty)")
-        else:
-            # Content hidden due to privacy settings, but show status
-            if body:
-                result_parts.append("CONTENT: (hidden by privacy settings)")
-            else:
-                result_parts.append("CONTENT: (empty)")
-
-    return "\n".join(result_parts)
-
-
-def _format_note_entry(
-    note: Any,
-    index: int,
-    config: Any,
-    context: str,
-    original_query: Optional[str],
-    query: str,
-    notebooks_map: Optional[Dict[str, Dict[str, Optional[str]]]] = None,
-) -> List[str]:
-    """Format a single note entry for search results."""
-    body = getattr(note, "body", "")
-
-    entry = [f"RESULT_{index}:"]
-
-    metadata = _collect_note_metadata(
-        note,
-        include_timestamps=True,
-        include_todo=True,
-        include_content_stats=True,
-        content_stats_body=body,
-        notebooks_map=notebooks_map,
-        timestamp_format="%Y-%m-%d %H:%M",
-    )
-    entry.extend(
-        format_note_metadata_lines(metadata, style="lower", indent="  ")
-    )
-
-    # Add content based on privacy settings
-    should_show_content = config.should_show_content(context)
-    if should_show_content and body:
-        if config.should_show_full_content(context):
-            entry.append(f"  content: {body}")
-        else:
-            search_query_for_terms = (
-                original_query if original_query is not None else query
-            )
-            preview = create_content_preview_with_search(
-                body, config.get_max_preview_length(), search_query_for_terms
-            )
-            entry.append(f"  content_preview: {preview}")
-    elif should_show_content:
-        entry.append("  content: (empty)")
-    else:
-        content_status = "(hidden by privacy settings)" if body else "(empty)"
-        entry.append(f"  content: {content_status}")
-
-    entry.append("")  # Empty line separator
-    return entry
-
-
-def _collect_note_metadata(
-    note: Any,
-    *,
-    include_timestamps: bool = True,
-    include_todo: bool = True,
-    include_content_stats: bool = True,
-    content_stats_body: Optional[str] = None,
-    notebooks_map: Optional[Dict[str, Dict[str, Optional[str]]]] = None,
-    notebook_path_override: Optional[str] = None,
-    timestamp_format: Optional[str] = None,
-    default_notebook_id_if_missing: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Collect note metadata fields with configurable sections."""
-
-    metadata: Dict[str, Any] = {}
-    metadata["note_id"] = getattr(note, "id", "unknown")
-    metadata["title"] = getattr(note, "title", "Untitled")
-
-    if include_timestamps:
-        created_time = getattr(note, "created_time", None)
-        if created_time:
-            created_date = (
-                format_timestamp(created_time, timestamp_format)
-                if timestamp_format
-                else format_timestamp(created_time)
-            )
-            if created_date:
-                metadata["created"] = created_date
-
-        updated_time = getattr(note, "updated_time", None)
-        if updated_time:
-            updated_date = (
-                format_timestamp(updated_time, timestamp_format)
-                if timestamp_format
-                else format_timestamp(updated_time)
-            )
-            if updated_date:
-                metadata["updated"] = updated_date
-
-    parent_id = getattr(note, "parent_id", None)
-    if parent_id:
-        metadata["notebook_id"] = parent_id
-        notebook_path = notebook_path_override
-        if notebook_path is None:
-            map_to_use = notebooks_map
-            if map_to_use is None:
-                try:
-                    map_to_use = notebook_resolver.get_map()
-                except Exception:
-                    map_to_use = None
-            if map_to_use is not None:
-                try:
-                    notebook_path = _compute_notebook_path(parent_id, map_to_use)
-                except Exception:
-                    notebook_path = None
-        if notebook_path:
-            metadata["notebook_path"] = notebook_path
-    elif default_notebook_id_if_missing is not None:
-        metadata["notebook_id"] = default_notebook_id_if_missing
-
-    # joppy converts deleted_time=0 to None, so truthy check is sufficient
-    deleted_time = getattr(note, "deleted_time", None)
-    if deleted_time:
-        deleted_date = (
-            format_timestamp(deleted_time, timestamp_format)
-            if timestamp_format
-            else format_timestamp(deleted_time)
-        )
-        if deleted_date:
-            metadata["deleted"] = deleted_date
-
-    if include_todo:
-        is_todo = bool(getattr(note, "is_todo", 0))
-        metadata["is_todo"] = is_todo
-        if is_todo:
-            todo_completed = bool(getattr(note, "todo_completed", 0))
-            metadata["todo_completed"] = todo_completed
-
-    if include_content_stats:
-        stats_source = (
-            content_stats_body
-            if content_stats_body is not None
-            else getattr(note, "body", "")
-        )
-        metadata["content_stats"] = calculate_content_stats(stats_source or "")
-
-    return metadata
-
-
-def _build_find_in_note_header(
-    note: Any,
-    pattern: str,
-    flags_str: str,
-    limit: int,
-    offset: int,
-    total_count: int,
-    showing_count: int,
-    *,
-    notebook_path_override: Optional[str] = None,
-    status: Optional[str] = None,
-) -> List[str]:
-    """Build the standardized header for find_in_note output."""
-
-    metadata = _collect_note_metadata(
-        note,
-        include_timestamps=False,
-        include_todo=False,
-        include_content_stats=False,
-        notebook_path_override=notebook_path_override,
-        default_notebook_id_if_missing="unknown",
-    )
-
-    parts = ["ITEM_TYPE: note_match"]
-    parts.extend(format_note_metadata_lines(metadata, style="upper"))
-
-    parts.extend(
-        [
-            f"PATTERN: {pattern}",
-            f"FLAGS: {flags_str}",
-            f"TOTAL_MATCHES: {total_count}",
-        ]
-    )
-
-    if status:
-        parts.append(status)
-
-    parts.extend(
-        [
-            "",
-            format_find_in_note_summary(
-                limit, offset, total_count, showing_count
-            ),
-        ]
-    )
-
-    return parts
-
-
-def format_search_results_with_pagination(
-    query: str,
-    results: List[Any],
-    total_count: int,
-    limit: int,
-    offset: int,
-    context: str = "search_results",
-    original_query: Optional[str] = None,
-    order_by: Optional[str] = None,
-    order_dir: Optional[str] = None,
-) -> str:
-    """Format search results with pagination information for display optimized for LLM comprehension."""
-    config = _module_config
-
-    # Build notebook map once for efficient path resolution
-    notebooks_map: Optional[Dict[str, Dict[str, Optional[str]]]] = None
-    try:
-        notebooks_map = notebook_resolver.get_map()
-    except Exception:
-        notebooks_map = None  # Best-effort only
-
-    # Build all parts
-    result_parts = build_pagination_header(
-        query, total_count, limit, offset,
-        order_by=order_by, order_dir=order_dir,
-    )
-
-    # Add note entries
-    for i, note in enumerate(results, 1):
-        result_parts.extend(
-            _format_note_entry(
-                note, i, config, context, original_query, query, notebooks_map
-            )
-        )
-
-    # Add pagination summary
-    result_parts.extend(build_pagination_summary(total_count, limit, offset))
 
     return "\n".join(result_parts)
 

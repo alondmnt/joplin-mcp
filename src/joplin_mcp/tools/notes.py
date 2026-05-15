@@ -18,7 +18,6 @@ from joplin_mcp.fastmcp_server import (
     SortOrder,
     _module_config,
     apply_pagination,
-    build_pagination_summary,
     build_search_filters,
     create_tool,
     flexible_bool_converter,
@@ -26,9 +25,7 @@ from joplin_mcp.fastmcp_server import (
     format_creation_success,
     format_delete_success,
     format_no_results_message,
-    format_note_details,
     format_search_criteria,
-    format_search_results_with_pagination,
     format_update_success,
     get_joplin_client,
     optional_int_converter,
@@ -39,8 +36,12 @@ from joplin_mcp.fastmcp_server import (
 )
 from joplin_mcp.formatting import (
     build_pagination_header,
-    format_find_in_note_summary,
-    format_note_metadata_lines,
+    build_pagination_summary,
+)
+from joplin_mcp.note_view import (
+    _build_find_in_note_header,
+    format_note_details,
+    format_search_results_with_pagination,
 )
 from joplin_mcp.notebook_utils import (
     _compute_notebook_path,
@@ -49,57 +50,6 @@ from joplin_mcp.notebook_utils import (
     is_notebook_accessible,
     validate_notebook_access,
 )
-
-
-
-def _build_find_in_note_header(
-    note: Any,
-    pattern: str,
-    flags_str: str,
-    limit: int,
-    offset: int,
-    total_count: int,
-    showing_count: int,
-    *,
-    notebook_path_override: Optional[str] = None,
-    status: Optional[str] = None,
-) -> List[str]:
-    """Build the standardized header for find_in_note output."""
-    from joplin_mcp.fastmcp_server import _collect_note_metadata
-
-    metadata = _collect_note_metadata(
-        note,
-        include_timestamps=False,
-        include_todo=False,
-        include_content_stats=False,
-        notebook_path_override=notebook_path_override,
-        default_notebook_id_if_missing="unknown",
-    )
-
-    parts = ["ITEM_TYPE: note_match"]
-    parts.extend(format_note_metadata_lines(metadata, style="upper"))
-
-    parts.extend(
-        [
-            f"PATTERN: {pattern}",
-            f"FLAGS: {flags_str}",
-            f"TOTAL_MATCHES: {total_count}",
-        ]
-    )
-
-    if status:
-        parts.append(status)
-
-    parts.extend(
-        [
-            "",
-            format_find_in_note_summary(
-                limit, offset, total_count, showing_count
-            ),
-        ]
-    )
-
-    return parts
 
 
 def format_no_results_with_pagination(
