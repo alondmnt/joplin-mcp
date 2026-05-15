@@ -27,14 +27,25 @@ async def restore_from_trash(
     ],
     item_type: Annotated[
         str,
-        Field(description="Item type: 'note' or 'notebook'"),
+        Field(description="Item type: 'note' or 'notebook'. Restoring a notebook does not restore the items inside it."),
     ] = "note",
 ) -> str:
     """Restore a note or notebook from Joplin's trash.
 
     Restores a previously deleted item by setting its deleted_time back to 0.
-    The item reappears in its original notebook.  If the original notebook was
-    also trashed, restore it first or the note may not be visible.
+    The item reappears in its original notebook.
+
+    Scope of restore (important):
+    - Only the single item identified by item_id is restored. When restoring
+      a notebook, its sub-notebooks and the notes inside stay trashed and
+      must each be restored individually. Joplin sets deleted_time on every
+      descendant when a notebook is trashed, and this tool clears it on one
+      item per call.
+    - If the original parent notebook is also trashed, restore the parent
+      first or the restored item may not be visible.
+
+    To find descendants to restore after restoring a notebook, use
+    find_notes(query="*", trash=True) and filter to the relevant subtree.
 
     Returns:
         str: Success message confirming the item was restored.
