@@ -1,17 +1,16 @@
-"""Render a Joplin note for the get_note tool's display modes.
+"""Note rendering: cache, formatters, and the get_note display dispatch.
 
-This module owns the single-note cache (used to support sequential reading
-without re-fetching) and all rendering logic for get_note's display modes:
-section extraction, line-range extraction, explicit TOC, smart TOC, and
-default full-note formatting.
+The module owns three concerns:
 
-The public surface is small on purpose:
-
-- ``get_cached_note`` / ``set_cached_note`` / ``clear_note_cache`` manage the
-  cache. Mutation tools (update, edit, delete, restore) call
-  ``clear_note_cache`` to invalidate after writes.
-- ``render_note`` is the single entry point for all display modes; the tool
-  layer passes options through and gets back a formatted string.
+- Single-note cache for sequential reading (``get_cached_note`` /
+  ``set_cached_note`` / ``clear_note_cache``; mutation tools call
+  ``clear_note_cache`` to invalidate after writes).
+- Formatters shared across get_note, find_notes, and find_in_note:
+  ``format_note_details``, ``format_search_results_with_pagination``,
+  and ``_build_find_in_note_header``.
+- get_note display dispatch (``render_note``) across section extraction,
+  line-range extraction, explicit TOC, smart TOC, and default full-note
+  formatting.
 """
 
 import time
