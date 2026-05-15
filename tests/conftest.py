@@ -6,10 +6,39 @@ including mock Joplin server responses, test data, and testing utilities.
 """
 
 import json
+from contextlib import contextmanager
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+from joplin_mcp.config import get_config, set_config
+
+
+@contextmanager
+def override_config(**fields):
+    """Swap the live config for the with-block; restore on exit.
+
+    Usable in two styles:
+
+        # As a direct import (for inline use):
+        from conftest import override_config
+        with override_config(notebook_allowlist=["AI"]):
+            ...
+
+        # As a pytest fixture parameter:
+        def test_foo(override_config):
+            with override_config(notebook_allowlist=["AI"]):
+                ...
+
+    Mutates a module global; not safe under pytest-xdist.
+    """
+    snapshot = get_config()
+    set_config(snapshot.copy(**fields))
+    try:
+        yield get_config()
+    finally:
+        set_config(snapshot)
 
 # Test data constants
 TEST_TOKEN = "test_token_123456789"
@@ -440,13 +469,11 @@ def _no_notebook_allowlist():
     """Disable notebook allowlist for all tests by default.
 
     Prevents real allowlist configuration from leaking into tests. Tests
-    that need an allowlist should use the override_config fixture or the
-    per-file mock_allowlist_config fixture.
+    that need an allowlist should call override_config (as fixture or
+    direct import) or use the per-file mock_allowlist_config fixture.
 
     Snapshots the live config by identity and restores on exit.
     """
-    from joplin_mcp.config import get_config, set_config
-
     snapshot = get_config()
     set_config(snapshot.copy(notebook_allowlist=None))
     try:
@@ -455,31 +482,10 @@ def _no_notebook_allowlist():
         set_config(snapshot)
 
 
-@pytest.fixture
-def override_config():
-    """Context manager that swaps the live config for the with-block.
-
-    Usage:
-        def test_foo(override_config):
-            with override_config(notebook_allowlist=["AI"]):
-                ...  # tools see the override here
-
-    Mutates a module global; not safe under pytest-xdist.
-    """
-    from contextlib import contextmanager
-
-    from joplin_mcp.config import get_config, set_config
-
-    @contextmanager
-    def _override(**fields):
-        snapshot = get_config()
-        set_config(snapshot.copy(**fields))
-        try:
-            yield get_config()
-        finally:
-            set_config(snapshot)
-
-    return _override
+@pytest.fixture(name="override_config")
+def _override_config_fixture():
+    """Pytest-fixture form of override_config; returns the callable itself."""
+    return override_config
 
 
 @pytest.fixture

@@ -7,13 +7,13 @@ through tools, with only the Joplin API mocked. They verify:
 - D4: All enforcement points (full tool chain exercised)
 """
 
-from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from joplin_mcp.config import JoplinMCPConfig, get_config, set_config
+from conftest import override_config
+from joplin_mcp.config import JoplinMCPConfig
 from joplin_mcp.notebook_utils import (
     filter_accessible_notebooks,
     invalidate_notebook_map_cache,
@@ -21,21 +21,6 @@ from joplin_mcp.notebook_utils import (
     validate_notebook_access,
     validate_allowlist_at_startup,
 )
-
-
-@contextmanager
-def _override_config(**fields):
-    """Inline override of the live config; restores on exit.
-
-    Same shape as the override_config fixture in conftest, but usable
-    without adding a fixture parameter to every test signature.
-    """
-    snapshot = get_config()
-    set_config(snapshot.copy(**fields))
-    try:
-        yield get_config()
-    finally:
-        set_config(snapshot)
 
 
 def _get_tool_fn(tool):
@@ -134,7 +119,7 @@ class TestEndToEndAllowlistWorkflow:
         allowlist = ["Projects"]
 
         with (
-            _override_config(notebook_allowlist=allowlist),
+            override_config(notebook_allowlist=allowlist),
             patch("joplin_mcp.tools.notes.get_joplin_client", return_value=client),
             patch(
                 "joplin_mcp.tools.notes.validate_notebook_access",
@@ -171,7 +156,7 @@ class TestEndToEndAllowlistWorkflow:
         allowlist = ["Projects"]
 
         with (
-            _override_config(notebook_allowlist=allowlist),
+            override_config(notebook_allowlist=allowlist),
             patch("joplin_mcp.tools.notes.get_joplin_client", return_value=client),
             patch(
                 "joplin_mcp.tools.notes.validate_notebook_access",
@@ -263,7 +248,7 @@ class TestHierarchicalAccessIntegration:
         allowlist = ["Projects"]
 
         with (
-            _override_config(notebook_allowlist=allowlist),
+            override_config(notebook_allowlist=allowlist),
             patch("joplin_mcp.tools.notes.get_joplin_client", return_value=client),
             patch(
                 "joplin_mcp.tools.notes.get_notebook_id_by_name",
@@ -297,7 +282,7 @@ class TestHierarchicalAccessIntegration:
         allowlist = ["Projects"]
 
         with (
-            _override_config(notebook_allowlist=allowlist),
+            override_config(notebook_allowlist=allowlist),
             patch("joplin_mcp.tools.notes.get_joplin_client", return_value=client),
             patch(
                 "joplin_mcp.tools.notes.get_notebook_id_by_name",
@@ -574,7 +559,7 @@ class TestMixedPatternTypesIntegration:
         allowlist = ["AI", "Projects/*"]
 
         with (
-            _override_config(notebook_allowlist=allowlist),
+            override_config(notebook_allowlist=allowlist),
             patch("joplin_mcp.tools.notes.get_joplin_client", return_value=client),
             patch(
                 "joplin_mcp.tools.notes.is_notebook_accessible",
