@@ -378,7 +378,10 @@ from joplin_mcp.notebook_utils import (
     notebook_resolver,
 )
 
-init_resolver(get_joplin_client)
+# Bind via a thunk so the resolver looks up get_joplin_client in this module's
+# namespace on every call. Tests that patch the module attribute (e.g. the e2e
+# fixture) need their patches to flow through to the resolver.
+init_resolver(lambda: get_joplin_client())
 
 
 def apply_pagination(
