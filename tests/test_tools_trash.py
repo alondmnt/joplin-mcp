@@ -19,7 +19,7 @@ class TestRestoreFromTrashTool:
     """Tests for restore_from_trash tool."""
 
     @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.trash._clear_note_cache")
+    @patch("joplin_mcp.tools.trash.clear_note_cache")
     @patch("joplin_mcp.tools.trash.get_joplin_client")
     async def test_restores_note(self, mock_get_client, mock_clear_cache):
         """Should restore a note by setting deleted_time to 0."""
@@ -77,7 +77,7 @@ class TestRestoreFromTrashTool:
             )
 
     @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.trash._clear_note_cache")
+    @patch("joplin_mcp.tools.trash.clear_note_cache")
     @patch("joplin_mcp.tools.trash.get_joplin_client")
     async def test_output_format_has_uppercase_keys(self, mock_get_client, mock_clear_cache):
         """Output should use uppercase keys matching project conventions."""

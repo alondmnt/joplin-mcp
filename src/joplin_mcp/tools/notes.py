@@ -1,45 +1,9 @@
 """Note tools for Joplin MCP."""
-import time
 from typing import Annotated, Any, Dict, List, Optional, Union
 
 from pydantic import Field
 
-# === NOTE CACHE FOR SEQUENTIAL READING ===
-# Caches one note to avoid re-fetching when reading in chunks.
-
-_cached_note: Any = None
-_cached_note_id: Optional[str] = None
-_cached_at: float = 0.0
-
-
-def _get_cached_note(note_id: str) -> Any:
-    """Return cached note if it matches and is fresh (30s), else None."""
-    if _cached_note_id == note_id and (time.monotonic() - _cached_at) < 30:
-        return _cached_note
-    return None
-
-
-def _set_cached_note(note_id: str, note: Any) -> None:
-    """Cache a note (replaces any previous)."""
-    global _cached_note, _cached_note_id, _cached_at
-    _cached_note = note
-    _cached_note_id = note_id
-    _cached_at = time.monotonic()
-
-
-def _clear_note_cache() -> None:
-    """Clear the note cache."""
-    global _cached_note, _cached_note_id, _cached_at
-    _cached_note = None
-    _cached_note_id = None
-    _cached_at = 0.0
-
-from joplin_mcp.content_utils import (
-    create_content_preview,
-    create_toc_only,
-    extract_section_content,
-    parse_markdown_headings,
-)
+from joplin_mcp import note_view
 from joplin_mcp.fastmcp_server import (
     COMMON_NOTE_FIELDS,
     ItemType,
@@ -86,199 +50,6 @@ from joplin_mcp.notebook_utils import (
     validate_notebook_access,
 )
 
-# === NOTE HELPER FUNCTIONS ===
-
-
-def _create_note_object(note: Any, body_override: str = None) -> Any:
-    """Create a note object with optional body override."""
-
-    class ModifiedNote:
-        def __init__(self, original_note, body_override=None):
-            for attr in [
-                "id",
-                "title",
-                "created_time",
-                "updated_time",
-                "parent_id",
-                "is_todo",
-                "todo_completed",
-            ]:
-                setattr(self, attr, getattr(original_note, attr, None))
-            self.body = (
-                body_override
-                if body_override is not None
-                else getattr(original_note, "body", "")
-            )
-
-    return ModifiedNote(note, body_override)
-
-
-def _handle_section_extraction(
-    note: Any, section: str, note_id: str, include_body: bool
-) -> Optional[str]:
-    """Handle section extraction logic, returning formatted result or None if no section handling needed."""
-    if not (section and include_body):
-        return None
-
-    body = getattr(note, "body", "")
-    if not body:
-        return None
-
-    section_content, section_title = extract_section_content(body, section)
-    if section_content:
-        modified_note = _create_note_object(note, section_content)
-        result = format_note_details(modified_note, include_body, "individual_notes")
-        return f"EXTRACTED_SECTION: {section_title}\nSECTION_QUERY: {section}\n{result}"
-
-    # Section not found - show available sections with line numbers
-    headings = parse_markdown_headings(body)
-    section_list = [
-        f"{'  ' * (heading['level'] - 1)}{i}. {heading['title']} (line {heading['line_idx']})"
-        for i, heading in enumerate(headings, 1)
-    ]
-    available_sections = (
-        "\n".join(section_list) if section_list else "No sections found"
-    )
-
-    return f"""SECTION_NOT_FOUND: {section}
-NOTE_ID: {note_id}
-NOTE_TITLE: {getattr(note, 'title', 'Untitled')}
-AVAILABLE_SECTIONS:
-{available_sections}
-ERROR: Section '{section}' not found in note"""
-
-
-def _handle_toc_display(
-    note: Any, note_id: str, display_mode: str, original_body: str = None
-) -> str:
-    """Handle TOC display with metadata and navigation info."""
-    toc = create_toc_only(original_body or getattr(note, "body", ""))
-    if not toc:
-        return None
-
-    # Create note with empty body for metadata-only display
-    toc_note = _create_note_object(note, "")
-    metadata_result = format_note_details(
-        toc_note,
-        include_body=False,
-        context="individual_notes",
-        original_body=original_body,
-    )
-
-    # Build navigation steps based on display mode
-    if display_mode == "explicit":
-        steps = f"""NEXT_STEPS:
-- To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="Introduction")
-- To jump to line number: get_note("{note_id}", start_line=45) (using line numbers from TOC above)
-- To get full content: get_note("{note_id}", force_full=True)"""
-    else:  # smart_toc_auto
-        steps = f"""NEXT_STEPS:
-- To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="Introduction")
-- To jump to line number: get_note("{note_id}", start_line=45) (using line numbers from TOC above)
-- To force full content: get_note("{note_id}", force_full=True)"""
-
-    toc_info = f"DISPLAY_MODE: {display_mode}\n\n{toc}\n\n{steps}"
-    return f"{metadata_result}\n\n{toc_info}"
-
-
-def _handle_line_extraction(
-    note: Any,
-    start_line: int,
-    line_count: Optional[int],
-    note_id: str,
-    include_body: bool,
-) -> Optional[str]:
-    """Handle line-based extraction for sequential reading."""
-    if not include_body:
-        return None
-
-    body = getattr(note, "body", "")
-    if not body:
-        return None
-
-    lines = body.split("\n")
-    total_lines = len(lines)
-
-    # Validate start_line (1-based)
-    if start_line < 1 or start_line > total_lines:
-        return f"""LINE_EXTRACTION_ERROR: Invalid start_line
-NOTE_ID: {note_id}
-NOTE_TITLE: {getattr(note, 'title', 'Untitled')}
-START_LINE: {start_line}
-TOTAL_LINES: {total_lines}
-ERROR: start_line must be between 1 and {total_lines}"""
-
-    # Determine end line
-    if line_count is not None:
-        if line_count < 1:
-            return f"""LINE_EXTRACTION_ERROR: Invalid line_count
-NOTE_ID: {note_id}
-LINE_COUNT: {line_count}
-ERROR: line_count must be >= 1"""
-        actual_end_line = min(start_line + line_count - 1, total_lines)
-    else:
-        # Default to 50 lines if line_count not specified
-        actual_end_line = min(start_line + 49, total_lines)
-
-    # Extract lines (convert to 0-based indexing)
-    start_idx = start_line - 1
-    end_idx = actual_end_line  # end_line is inclusive, so we don't subtract 1
-    extracted_lines = lines[start_idx:end_idx]
-    extracted_content = "\n".join(extracted_lines)
-
-    # Create modified note with extracted content
-    modified_note = _create_note_object(note, extracted_content)
-    result = format_note_details(
-        modified_note, include_body, "individual_notes", original_body=body
-    )
-
-    # Add extraction metadata
-    lines_extracted = len(extracted_lines)
-    next_line = actual_end_line + 1 if actual_end_line < total_lines else None
-
-    extraction_info = f"""EXTRACTED_LINES: {start_line}-{actual_end_line} ({lines_extracted} lines)
-TOTAL_LINES: {total_lines}
-EXTRACTION_TYPE: sequential_reading"""
-
-    if next_line:
-        extraction_info += f'\nNEXT_CHUNK: get_note("{note_id}", start_line={next_line}) for continuation'
-    else:
-        extraction_info += "\nSTATUS: End of note reached"
-
-    return f"{extraction_info}\n\n{result}"
-
-
-def _handle_smart_toc_behavior(note: Any, note_id: str, config: Any) -> Optional[str]:
-    """Handle smart TOC behavior for long notes."""
-    if not config.is_smart_toc_enabled():
-        return None
-
-    body = getattr(note, "body", "")
-    if not body:
-        return None
-
-    body_length = len(body)
-    toc_threshold = config.get_smart_toc_threshold()
-
-    if body_length <= toc_threshold:
-        return None  # Not long enough for smart TOC
-
-    # Try TOC first
-    toc_result = _handle_toc_display(note, note_id, "smart_toc_auto", body)
-    if toc_result:
-        return toc_result
-
-    # No headings found - show truncated content with warning
-    truncated_content = body[:toc_threshold] + (
-        "..." if body_length > toc_threshold else ""
-    )
-    truncated_note = _create_note_object(note, truncated_content)
-    result = format_note_details(
-        truncated_note, True, "individual_notes", original_body=body
-    )
-
-    truncation_info = f'CONTENT_TRUNCATED: Note is long ({body_length} chars) but has no headings for navigation\nNEXT_STEPS: To force full content: get_note("{note_id}", force_full=True) or start sequential reading: get_note("{note_id}", start_line=1)\n'
-    return f"{truncation_info}{result}"
 
 
 def _build_find_in_note_header(
@@ -422,49 +193,30 @@ async def get_note(
 
     client = get_joplin_client()
 
-    # For sequential reading, use cache to avoid re-fetching
+    # For sequential reading, use the view-module cache to avoid re-fetching.
     if start_line is not None and include_body:
-        note = _get_cached_note(note_id)
+        note = note_view.get_cached_note(note_id)
         if note is None:
             note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
-            _set_cached_note(note_id, note)
+            note_view.set_cached_note(note_id, note)
     else:
         note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
 
-    # Allowlist validation: ensure note is in an accessible notebook
     if _module_config.has_notebook_allowlist:
         parent_id = getattr(note, 'parent_id', '')
         validate_notebook_access(parent_id, allowlist_entries=_module_config.notebook_allowlist)
 
-    # Handle line extraction first (for sequential reading)
-    if start_line is not None:
-        line_result = _handle_line_extraction(
-            note, start_line, line_count, note_id, include_body
-        )
-        if line_result:
-            return line_result
-
-    # Handle section extraction second
-    section_result = _handle_section_extraction(note, section, note_id, include_body)
-    if section_result:
-        return section_result
-
-    # Handle explicit TOC-only mode
-    if toc_only and include_body:
-        body = getattr(note, "body", "")
-        if body:
-            toc_result = _handle_toc_display(note, note_id, "toc_only", body)
-            if toc_result:
-                return toc_result
-
-    # Handle smart TOC behavior (only if not forcing full content)
-    if include_body and not force_full:
-        smart_toc_result = _handle_smart_toc_behavior(note, note_id, _module_config)
-        if smart_toc_result:
-            return smart_toc_result
-
-    # Default: return full note details
-    return format_note_details(note, include_body, "individual_notes")
+    return note_view.render_note(
+        note,
+        note_id=note_id,
+        section=section,
+        start_line=start_line,
+        line_count=line_count,
+        toc_only=toc_only,
+        force_full=force_full,
+        include_body=include_body,
+        config=_module_config,
+    )
 
 
 @create_tool("get_links", "Get links")
@@ -836,7 +588,7 @@ async def update_note(
             )
 
     client.modify_note(note_id, **update_data)
-    _clear_note_cache()
+    note_view.clear_note_cache()
 
     return format_update_success(ItemType.note, note_id)
 
@@ -947,7 +699,7 @@ async def edit_note(
             replacements = 1
 
         client.modify_note(note_id, body=new_body)
-        _clear_note_cache()
+        note_view.clear_note_cache()
 
         if new_string == "":
             return f"EDIT_NOTE: Deleted {replacements} occurrence(s) of the specified text."
@@ -963,7 +715,7 @@ async def edit_note(
             action = "Prepended"
 
         client.modify_note(note_id, body=new_body)
-        _clear_note_cache()
+        note_view.clear_note_cache()
 
         return f"EDIT_NOTE: {action} {len(new_string)} characters."
 
@@ -994,7 +746,7 @@ async def delete_note(
     client.delete_note(note_id)
 
     # Invalidate cache for deleted note
-    _clear_note_cache()
+    note_view.clear_note_cache()
 
     return format_delete_success(ItemType.note, note_id)
 
