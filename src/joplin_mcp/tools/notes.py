@@ -58,6 +58,7 @@ def build_search_filters(task: Optional[bool], completed: Optional[bool]) -> Lis
         else:
             search_parts.append("type:note")
 
+    # completion is a tasks-only concept; ignore the filter on regular notes
     if completed is not None and task is True:
         if completed:
             search_parts.append("iscompleted:1")
