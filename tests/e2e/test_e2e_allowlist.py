@@ -66,24 +66,18 @@ async def _wait_for_search(tool, *, expected: str, timeout: float = 15.0, **kwar
 
 @contextmanager
 def _allowlist_config(allowlist, token="e2e_test_token"):
-    """Patch _module_config everywhere with the given allowlist."""
+    """Swap the live config so allowlist gating sees the given list."""
+    from joplin_mcp.config import get_config, set_config
     from joplin_mcp.notebook_utils import invalidate_notebook_map_cache
 
     cfg = JoplinMCPConfig(token=token, notebook_allowlist=allowlist)
-    targets = [
-        "joplin_mcp.tools.notes._module_config",
-        "joplin_mcp.tools.notebooks._module_config",
-        "joplin_mcp.tools.tags._module_config",
-    ]
-    patches = [patch(t, cfg) for t in targets]
+    snapshot = get_config()
+    set_config(cfg)
     invalidate_notebook_map_cache()
-    for p in patches:
-        p.start()
     try:
         yield cfg
     finally:
-        for p in patches:
-            p.stop()
+        set_config(snapshot)
         invalidate_notebook_map_cache()
 
 

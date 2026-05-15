@@ -16,7 +16,6 @@ from joplin_mcp.fastmcp_server import (
     RequiredStringType,
     SortBy,
     SortOrder,
-    _module_config,
     create_tool,
     flexible_bool_converter,
     flexible_enum_converter,
@@ -39,6 +38,7 @@ from joplin_mcp.note_view import (
     _build_find_in_note_header,
     format_search_results_with_pagination,
 )
+from joplin_mcp.config import get_config
 from joplin_mcp.notebook_utils import (
     _compute_notebook_path,
     get_notebook_id_by_name,
@@ -187,9 +187,9 @@ async def get_note(
     else:
         note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
 
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         parent_id = getattr(note, 'parent_id', '')
-        validate_notebook_access(parent_id, allowlist_entries=_module_config.notebook_allowlist)
+        validate_notebook_access(parent_id, allowlist_entries=get_config().notebook_allowlist)
 
     return note_view.render_note(
         note,
@@ -200,7 +200,7 @@ async def get_note(
         toc_only=toc_only,
         force_full=force_full,
         include_body=include_body,
-        config=_module_config,
+        config=get_config(),
     )
 
 
@@ -234,9 +234,9 @@ async def get_links(
     note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
 
     # Allowlist validation: ensure source note is in an accessible notebook
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         source_parent_id = getattr(note, 'parent_id', '')
-        validate_notebook_access(source_parent_id, allowlist_entries=_module_config.notebook_allowlist)
+        validate_notebook_access(source_parent_id, allowlist_entries=get_config().notebook_allowlist)
 
     note_title = getattr(note, "title", "Untitled")
     body = getattr(note, "body", "")
@@ -265,11 +265,11 @@ async def get_links(
                     target_note = None
 
                 # Allowlist filtering: skip linked notes in non-accessible notebooks
-                if _module_config.has_notebook_allowlist and target_note is not None:
+                if get_config().has_notebook_allowlist and target_note is not None:
                     target_parent_id = getattr(target_note, 'parent_id', '')
                     if not is_notebook_accessible(
                         target_parent_id,
-                        allowlist_entries=_module_config.notebook_allowlist
+                        allowlist_entries=get_config().notebook_allowlist
                     ):
                         continue
 
@@ -302,10 +302,10 @@ async def get_links(
         backlink_notes = process_search_results(backlink_results)
 
         # Allowlist filtering: only include backlinks from accessible notebooks
-        if _module_config.has_notebook_allowlist:
+        if get_config().has_notebook_allowlist:
             backlink_notes = [n for n in backlink_notes if is_notebook_accessible(
                 getattr(n, 'parent_id', ''),
-                allowlist_entries=_module_config.notebook_allowlist
+                allowlist_entries=get_config().notebook_allowlist
             )]
 
         # Filter out the current note and parse backlinks
@@ -477,8 +477,8 @@ async def create_note(
     parent_id = get_notebook_id_by_name(notebook_name)
 
     # Allowlist validation: ensure target notebook is accessible
-    if _module_config.has_notebook_allowlist:
-        validate_notebook_access(parent_id, allowlist_entries=_module_config.notebook_allowlist)
+    if get_config().has_notebook_allowlist:
+        validate_notebook_access(parent_id, allowlist_entries=get_config().notebook_allowlist)
 
     client = get_joplin_client()
     note_kwargs = {
@@ -562,14 +562,14 @@ async def update_note(
     client = get_joplin_client()
 
     # Allowlist validation: source must be accessible, and if moving, destination too.
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         note = client.get_note(note_id, fields="id,parent_id")
         parent_id_check = getattr(note, 'parent_id', '')
-        validate_notebook_access(parent_id_check, allowlist_entries=_module_config.notebook_allowlist)
+        validate_notebook_access(parent_id_check, allowlist_entries=get_config().notebook_allowlist)
         if "parent_id" in update_data:
             validate_notebook_access(
                 update_data["parent_id"],
-                allowlist_entries=_module_config.notebook_allowlist,
+                allowlist_entries=get_config().notebook_allowlist,
             )
 
     client.modify_note(note_id, **update_data)
@@ -651,9 +651,9 @@ async def edit_note(
     note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
 
     # Allowlist validation: ensure note is in an accessible notebook
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         parent_id = getattr(note, 'parent_id', '')
-        validate_notebook_access(parent_id, allowlist_entries=_module_config.notebook_allowlist)
+        validate_notebook_access(parent_id, allowlist_entries=get_config().notebook_allowlist)
 
     body = getattr(note, "body", "") or ""
 
@@ -723,10 +723,10 @@ async def delete_note(
     client = get_joplin_client()
 
     # Allowlist validation: ensure note is in an accessible notebook
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         note = client.get_note(note_id, fields="id,parent_id")
         parent_id = getattr(note, 'parent_id', '')
-        validate_notebook_access(parent_id, allowlist_entries=_module_config.notebook_allowlist)
+        validate_notebook_access(parent_id, allowlist_entries=get_config().notebook_allowlist)
 
     client.delete_note(note_id)
 
@@ -855,10 +855,10 @@ async def find_notes(
         notes = [n for n in notes if getattr(n, "deleted_time", None)]
 
     # Allowlist filtering: only include notes in accessible notebooks
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         notes = [n for n in notes if is_notebook_accessible(
             getattr(n, 'parent_id', ''),
-            allowlist_entries=_module_config.notebook_allowlist
+            allowlist_entries=get_config().notebook_allowlist
         )]
 
     # Apply pagination
@@ -895,7 +895,7 @@ async def find_notes(
         original_query=query,
         order_by=sort_kwargs_for_display.get("order_by"),
         order_dir=sort_kwargs_for_display.get("order_dir"),
-        config=_module_config,
+        config=get_config(),
     )
 
 
@@ -965,9 +965,9 @@ async def find_in_note(
     note = client.get_note(note_id, fields=COMMON_NOTE_FIELDS)
 
     # Allowlist validation: ensure note is in an accessible notebook
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         parent_id = getattr(note, 'parent_id', '')
-        validate_notebook_access(parent_id, allowlist_entries=_module_config.notebook_allowlist)
+        validate_notebook_access(parent_id, allowlist_entries=get_config().notebook_allowlist)
 
     body = getattr(note, "body", "") or ""
 
@@ -1192,10 +1192,10 @@ async def find_notes_with_tag(
     notes = process_search_results(results)
 
     # Allowlist filtering: only include notes in accessible notebooks
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         notes = [n for n in notes if is_notebook_accessible(
             getattr(n, 'parent_id', ''),
-            allowlist_entries=_module_config.notebook_allowlist
+            allowlist_entries=get_config().notebook_allowlist
         )]
 
     # Apply pagination
@@ -1217,7 +1217,7 @@ async def find_notes_with_tag(
         original_query=tag_name,
         order_by=sort_kwargs.get("order_by"),
         order_dir=sort_kwargs.get("order_dir"),
-        config=_module_config,
+        config=get_config(),
     )
 
 
@@ -1281,8 +1281,8 @@ async def find_notes_in_notebook(
     notebook_id = get_notebook_id_by_name(notebook_name)
 
     # Allowlist validation: ensure notebook is accessible
-    if _module_config.has_notebook_allowlist:
-        validate_notebook_access(notebook_id, allowlist_entries=_module_config.notebook_allowlist)
+    if get_config().has_notebook_allowlist:
+        validate_notebook_access(notebook_id, allowlist_entries=get_config().notebook_allowlist)
 
     # Fetch notes by notebook_id for precision (search API can't distinguish same-named notebooks)
     client = get_joplin_client()
@@ -1319,7 +1319,7 @@ async def find_notes_in_notebook(
         original_query=notebook_name,
         order_by=sort_kwargs.get("order_by"),
         order_dir=sort_kwargs.get("order_dir"),
-        config=_module_config,
+        config=get_config(),
     )
 
 
@@ -1359,10 +1359,10 @@ async def get_all_notes(
     notes = process_search_results(results)
 
     # Allowlist filtering: only include notes in accessible notebooks
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         notes = [n for n in notes if is_notebook_accessible(
             getattr(n, 'parent_id', ''),
-            allowlist_entries=_module_config.notebook_allowlist
+            allowlist_entries=get_config().notebook_allowlist
         )]
 
     # Apply limit (using consistent pattern but keeping simple offset=0)
@@ -1375,5 +1375,5 @@ async def get_all_notes(
         "all notes", notes, len(notes), limit, 0, "search_results",
         order_by=sort_kwargs.get("order_by"),
         order_dir=sort_kwargs.get("order_dir"),
-        config=_module_config,
+        config=get_config(),
     )

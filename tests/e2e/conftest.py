@@ -87,26 +87,17 @@ def _patch_joplin_client(e2e_config, e2e_client):
         except Exception as exc:
             pytest.fail(f"Failed to patch {target} in _patch_joplin_client: {exc}")
 
-    # Also patch _module_config so allowlist tests can work
-    config_targets = [
-        "joplin_mcp.tools.notes._module_config",
-        "joplin_mcp.tools.notebooks._module_config",
-        "joplin_mcp.tools.tags._module_config",
-    ]
-    for target in config_targets:
-        try:
-            p = patch(target, e2e_config)
-            p.start()
-            patches.append(p)
-        except ModuleNotFoundError:
-            continue
-        except Exception as exc:
-            pytest.fail(f"Failed to patch {target} in _patch_joplin_client: {exc}")
+    # Also swap the live config so allowlist tests see the e2e config.
+    from joplin_mcp.config import get_config, set_config
+
+    config_snapshot = get_config()
+    set_config(e2e_config)
 
     yield
 
     for p in patches:
         p.stop()
+    set_config(config_snapshot)
 
 
 @pytest.fixture(autouse=True)

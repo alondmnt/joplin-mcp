@@ -17,33 +17,27 @@ def _get_tool_fn(tool):
 
 @pytest.fixture
 def mock_allowlist_config():
-    """Enable allowlist in _module_config for note tools."""
-    with patch("joplin_mcp.tools.notes._module_config") as mock_cfg:
-        mock_cfg.has_notebook_allowlist = True
-        mock_cfg.notebook_allowlist = ["AI", "Projects/*"]
-        # Preserve other config attributes that note tools may need
-        mock_cfg.should_show_content.return_value = True
-        mock_cfg.should_show_full_content.return_value = True
-        mock_cfg.get_max_preview_length.return_value = 300
-        mock_cfg.is_smart_toc_enabled.return_value = False
-        mock_cfg.get_smart_toc_threshold.return_value = 2000
-        mock_cfg.tools = {}
-        yield mock_cfg
+    """Enable an allowlist on the live config for the test body."""
+    from joplin_mcp.config import get_config, set_config
+
+    snapshot = get_config()
+    set_config(snapshot.copy(notebook_allowlist=["AI", "Projects/*"]))
+    try:
+        yield get_config()
+    finally:
+        set_config(snapshot)
 
 
 @pytest.fixture
 def mock_no_allowlist_config():
-    """Explicitly disable allowlist in _module_config for backward compat tests."""
-    with patch("joplin_mcp.tools.notes._module_config") as mock_cfg:
-        mock_cfg.has_notebook_allowlist = False
-        mock_cfg.notebook_allowlist = None
-        mock_cfg.should_show_content.return_value = True
-        mock_cfg.should_show_full_content.return_value = True
-        mock_cfg.get_max_preview_length.return_value = 300
-        mock_cfg.is_smart_toc_enabled.return_value = False
-        mock_cfg.get_smart_toc_threshold.return_value = 2000
-        mock_cfg.tools = {}
-        yield mock_cfg
+    """Explicit no-allowlist fixture for backward-compat tests.
+
+    The autouse _no_notebook_allowlist already gives this state; this
+    fixture exists so tests can request it by name for readability.
+    """
+    from joplin_mcp.config import get_config
+
+    yield get_config()
 
 
 # === Tests for create_note with allowlist ===
@@ -741,34 +735,16 @@ class TestNoteAllowlistErrorMessages:
         assert "Notebook not accessible" in error_msg
 
     @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.notes._module_config")
-    @patch(
-        "joplin_mcp.notebook_utils._module_config",
-        create=True,
-    )
-    @patch("joplin_mcp.fastmcp_server._module_config")
     @patch("joplin_mcp.notebook_utils.get_notebook_map_cached")
     @patch("joplin_mcp.tools.notes.get_joplin_client")
     async def test_create_note_flat_unknown_name_does_not_leak_titles(
         self,
         mock_get_client,
         mock_get_map,
-        mock_server_cfg,
-        mock_utils_cfg,
-        mock_notes_cfg,
+        override_config,
     ):
         """create_note(notebook_name='X-not-real') under allowlist must not enumerate denied notebooks."""
         from joplin_mcp.tools.notes import create_note
-
-        for cfg in (mock_server_cfg, mock_utils_cfg, mock_notes_cfg):
-            cfg.has_notebook_allowlist = True
-            cfg.notebook_allowlist = ["Work"]
-            cfg.should_show_content.return_value = True
-            cfg.should_show_full_content.return_value = True
-            cfg.get_max_preview_length.return_value = 300
-            cfg.is_smart_toc_enabled.return_value = False
-            cfg.get_smart_toc_threshold.return_value = 2000
-            cfg.tools = {}
 
         mock_get_map.return_value = {
             "work_id": {"title": "Work", "parent_id": None},
@@ -778,12 +754,13 @@ class TestNoteAllowlistErrorMessages:
         }
 
         fn = _get_tool_fn(create_note)
-        with pytest.raises(ValueError) as exc_info:
-            await fn(
-                title="Test",
-                notebook_name="anything-not-real",
-                body="content",
-            )
+        with override_config(notebook_allowlist=["Work"]):
+            with pytest.raises(ValueError) as exc_info:
+                await fn(
+                    title="Test",
+                    notebook_name="anything-not-real",
+                    body="content",
+                )
 
         msg = str(exc_info.value)
         for denied in ("Secrets", "Diary", "Tax"):

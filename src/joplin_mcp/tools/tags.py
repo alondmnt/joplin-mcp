@@ -3,12 +3,12 @@ from typing import Annotated, Dict, List, Tuple, Union
 
 from pydantic import Field
 
+from joplin_mcp.config import get_config
 from joplin_mcp.fastmcp_server import (
     COMMON_NOTE_FIELDS,
     ItemType,
     JoplinIdType,
     RequiredStringType,
-    _module_config,
     _redact_token,
     create_tool,
     format_creation_success,
@@ -195,11 +195,11 @@ async def get_tags_by_note(
     client = get_joplin_client()
 
     # Allowlist validation: ensure note is in an accessible notebook
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         note = client.get_note(note_id, fields="id,parent_id")
         parent_id = getattr(note, "parent_id", "")
         validate_notebook_access(
-            parent_id, allowlist_entries=_module_config.notebook_allowlist
+            parent_id, allowlist_entries=get_config().notebook_allowlist
         )
 
     fields_list = "id,title,created_time,updated_time"
@@ -259,12 +259,12 @@ async def tag_note(
     results: List[Tuple[str, str, bool, str]] = []
     for nid in note_ids:
         # Allowlist validation per note in bulk path
-        if _module_config.has_notebook_allowlist:
+        if get_config().has_notebook_allowlist:
             try:
                 note = client.get_note(nid, fields="id,parent_id")
                 parent_id = getattr(note, "parent_id", "")
                 validate_notebook_access(
-                    parent_id, allowlist_entries=_module_config.notebook_allowlist
+                    parent_id, allowlist_entries=get_config().notebook_allowlist
                 )
             except AllowlistDeniedError as e:
                 for tname in tag_names:
@@ -325,12 +325,12 @@ async def untag_note(
     results: List[Tuple[str, str, bool, str]] = []
     for nid in note_ids:
         # Allowlist validation per note in bulk path
-        if _module_config.has_notebook_allowlist:
+        if get_config().has_notebook_allowlist:
             try:
                 note = client.get_note(nid, fields="id,parent_id")
                 parent_id = getattr(note, "parent_id", "")
                 validate_notebook_access(
-                    parent_id, allowlist_entries=_module_config.notebook_allowlist
+                    parent_id, allowlist_entries=get_config().notebook_allowlist
                 )
             except AllowlistDeniedError as e:
                 for tname in tag_names:

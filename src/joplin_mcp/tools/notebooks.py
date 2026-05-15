@@ -3,11 +3,11 @@ from typing import Annotated, Optional
 
 from pydantic import AfterValidator, Field, StringConstraints
 
+from joplin_mcp.config import get_config
 from joplin_mcp.fastmcp_server import (
     ItemType,
     JoplinIdType,
     RequiredStringType,
-    _module_config,
     create_tool,
     format_creation_success,
     format_delete_success,
@@ -59,9 +59,9 @@ async def list_notebooks() -> str:
     client = get_joplin_client()
     fields_list = "id,title,created_time,updated_time,parent_id"
     notebooks = client.get_all_notebooks(fields=fields_list)
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         notebooks = notebook_resolver.filter_accessible(
-            notebooks, allowlist_entries=_module_config.notebook_allowlist
+            notebooks, allowlist_entries=get_config().notebook_allowlist
         )
     return format_item_list(notebooks, ItemType.notebook)
 
@@ -89,11 +89,11 @@ async def create_notebook(
 
     normalized_parent_id = parent_id.strip() if parent_id is not None else None
 
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         if normalized_parent_id:
             notebook_resolver.validate_access(
                 normalized_parent_id,
-                allowlist_entries=_module_config.notebook_allowlist,
+                allowlist_entries=get_config().notebook_allowlist,
             )
         else:
             raise ValueError("Notebook not accessible")
@@ -118,9 +118,9 @@ async def update_notebook(
     Returns:
         str: Success message confirming the notebook was updated.
     """
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         notebook_resolver.validate_access(
-            notebook_id, allowlist_entries=_module_config.notebook_allowlist
+            notebook_id, allowlist_entries=get_config().notebook_allowlist
         )
 
     notebook_resolver.modify_notebook(notebook_id, title=title)
@@ -140,9 +140,9 @@ async def delete_notebook(
     Returns:
         str: Success message confirming the notebook was moved to trash.
     """
-    if _module_config.has_notebook_allowlist:
+    if get_config().has_notebook_allowlist:
         notebook_resolver.validate_access(
-            notebook_id, allowlist_entries=_module_config.notebook_allowlist
+            notebook_id, allowlist_entries=get_config().notebook_allowlist
         )
 
     notebook_resolver.delete_notebook(notebook_id)

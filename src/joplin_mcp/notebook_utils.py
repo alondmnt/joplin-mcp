@@ -32,6 +32,8 @@ if TYPE_CHECKING:
 
 import pathspec
 
+from joplin_mcp.config import get_config
+
 logger = logging.getLogger(__name__)
 
 
@@ -846,32 +848,22 @@ def get_accessible_notebook_map(
 def _resolve_notebook_by_path(path: str) -> str:
     """Resolve a notebook ID from a slash-delimited path.
 
-    Reads the configured allowlist from ``fastmcp_server._module_config`` so
-    suggestions and errors can't leak denied notebook names.
+    Reads the configured allowlist via the resolver so suggestions and
+    errors can't leak denied notebook names.
     """
-    from joplin_mcp.fastmcp_server import _module_config
-
-    allowlist = (
-        _module_config.notebook_allowlist
-        if _module_config.has_notebook_allowlist
-        else None
-    )
+    cfg = get_config()
+    allowlist = cfg.notebook_allowlist if cfg.has_notebook_allowlist else None
     return notebook_resolver.resolve_by_path(path, allowlist_entries=allowlist)
 
 
 def get_notebook_id_by_name(name: str) -> str:
     """Resolve a notebook ID by name or path with helpful error messages.
 
-    Reads the configured allowlist from ``fastmcp_server._module_config`` so
-    suggestions and errors can't leak denied notebook names.
+    Reads the configured allowlist via the resolver so suggestions and
+    errors can't leak denied notebook names.
     """
-    from joplin_mcp.fastmcp_server import _module_config
-
-    allowlist = (
-        _module_config.notebook_allowlist
-        if _module_config.has_notebook_allowlist
-        else None
-    )
+    cfg = get_config()
+    allowlist = cfg.notebook_allowlist if cfg.has_notebook_allowlist else None
     return notebook_resolver.resolve_by_name(name, allowlist_entries=allowlist)
 
 

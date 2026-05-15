@@ -57,7 +57,7 @@ from typing_extensions import Annotated
 from joplin_mcp import __version__ as MCP_VERSION
 
 # Import our existing configuration for compatibility
-from joplin_mcp.config import JoplinMCPConfig, get_config
+from joplin_mcp.config import JoplinMCPConfig, get_config, set_config
 
 # Import content utilities
 from joplin_mcp.content_utils import (
@@ -91,32 +91,13 @@ mcp = FastMCP(name="Joplin MCP Server", version=MCP_VERSION)
 # Type for generic functions
 T = TypeVar("T")
 
-# Global config instance for tool registration
-_config: Optional[JoplinMCPConfig] = None
 
-
-# Load configuration at module level for tool filtering
-def _load_module_config() -> JoplinMCPConfig:
-    """Return the live config from the resolver.
-
-    Kept as a thin delegate so existing call sites (and the `_module_config`
-    re-export below) continue to work while the migration to get_config()
-    is in flight. Auto-discovery + logging now live in joplin_mcp.config.
-    See ADR-0001.
-    """
-    return get_config()
-
-
-# Load config for tool registration filtering. Same object identity as
-# joplin_mcp.config._current_config; eventual callers should migrate to
-# get_config() directly so this re-export can be dropped (commit 3).
-_module_config = _load_module_config()
+# Log the enabled-tool count from the auto-discovered config. Auto-discovery
+# itself (and its file/path logging) lives in joplin_mcp.config -- see ADR-0001.
 try:
-    enabled = sorted([k for k, v in _module_config.tools.items() if v])
-    logger.info(
-        "Module config loaded; enabled tools count=%d", len(enabled)
-    )
-    logger.debug("Enabled tools: %s", enabled)
+    _enabled = sorted([k for k, v in get_config().tools.items() if v])
+    logger.info("Module config loaded; enabled tools count=%d", len(_enabled))
+    logger.debug("Enabled tools: %s", _enabled)
 except Exception:
     pass
 
@@ -278,22 +259,12 @@ OptionalBoolType = Optional[
 def get_joplin_client() -> ClientApi:
     """Get a configured joppy client instance.
 
-    Priority:
-    1) Use runtime config if set (server --config)
-    2) Else use module config (auto-discovered on import, honors JOPLIN_MCP_CONFIG)
-    3) Else fall back to environment variables
+    Reads the live config via the resolver (see ADR-0001). Falls back to
+    the JOPLIN_TOKEN env var if the config has no token.
     """
-    # Prefer the runtime config if available, else the module-level config
-    config = _config or _module_config
+    config = get_config()
 
-    # If for some reason neither exists (unlikely), try loader
-    if config is None:
-        try:
-            config = JoplinMCPConfig.load()
-        except Exception:
-            config = None
-
-    if config and getattr(config, "token", None):
+    if config.token:
         return ClientApi(token=config.token, url=config.base_url)
 
     # Fallback to environment variables
@@ -833,26 +804,18 @@ def main(
     log_level: str = "info",
 ):
     """Main entry point for the FastMCP Joplin server."""
-    global _config
-
     try:
         logger.info("🚀 Starting FastMCP Joplin server...")
 
-        # Config loading as before...
+        # Runtime config supersedes the auto-discovered one. See ADR-0001:
+        # one config identity at a time, wholesale replace.
         if config_file:
-            _config = JoplinMCPConfig.from_file(config_file)
+            set_config(JoplinMCPConfig.from_file(config_file))
             logger.info(f"Runtime configuration loaded from {config_file}")
-            # Tools read _module_config directly via `from ... import _module_config`
-            # and hold a reference to the original object. Mutate that object's
-            # allowlist in place so runtime config and tool enforcement stay aligned;
-            # otherwise the startup log would reflect the runtime config while the
-            # tools still enforce the auto-discovered module-level one.
-            _module_config.notebook_allowlist = _config.notebook_allowlist
         else:
-            _config = _module_config
-            logger.info("Using module-level configuration for runtime")
+            logger.info("Using auto-discovered configuration for runtime")
 
-        registered_tools = register_tools(mcp, _config)
+        registered_tools = register_tools(mcp, get_config())
         logger.info(f"FastMCP server has {len(registered_tools)} tools registered")
         logger.info(f"Registered tools: {sorted(registered_tools)}")
 
@@ -861,8 +824,7 @@ def main(
         logger.info("Joplin client initialized successfully")
 
         # Validate and log notebook allowlist at startup (D3, D6, D9)
-        runtime_config = _config or _module_config
-        notebook_resolver.validate_allowlist_at_startup(runtime_config, client)
+        notebook_resolver.validate_allowlist_at_startup(get_config(), client)
 
         # ---- Non-breaking compat toggle via env ----
         compat_env = os.getenv("MCP_HTTP_COMPAT", "").strip().lower() in {"1","true","yes","on"}

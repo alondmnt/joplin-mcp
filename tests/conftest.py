@@ -439,38 +439,47 @@ def mock_notebook_hierarchy():
 def _no_notebook_allowlist():
     """Disable notebook allowlist for all tests by default.
 
-    This prevents any real allowlist configuration from leaking into tests.
-    Tests that need an allowlist should patch _module_config themselves.
-    """
-    from unittest.mock import patch
+    Prevents real allowlist configuration from leaking into tests. Tests
+    that need an allowlist should use the override_config fixture or the
+    per-file mock_allowlist_config fixture.
 
-    targets = [
-        "joplin_mcp.tools.notes._module_config",
-        "joplin_mcp.tools.notebooks._module_config",
-        "joplin_mcp.tools.tags._module_config",
-    ]
-    patches = []
-    for target in targets:
+    Snapshots the live config by identity and restores on exit.
+    """
+    from joplin_mcp.config import get_config, set_config
+
+    snapshot = get_config()
+    set_config(snapshot.copy(notebook_allowlist=None))
+    try:
+        yield
+    finally:
+        set_config(snapshot)
+
+
+@pytest.fixture
+def override_config():
+    """Context manager that swaps the live config for the with-block.
+
+    Usage:
+        def test_foo(override_config):
+            with override_config(notebook_allowlist=["AI"]):
+                ...  # tools see the override here
+
+    Mutates a module global; not safe under pytest-xdist.
+    """
+    from contextlib import contextmanager
+
+    from joplin_mcp.config import get_config, set_config
+
+    @contextmanager
+    def _override(**fields):
+        snapshot = get_config()
+        set_config(snapshot.copy(**fields))
         try:
-            p = patch(target)
-            mock_cfg = p.start()
-            mock_cfg.has_notebook_allowlist = False
-            mock_cfg.notebook_allowlist = None
-            # Preserve other config attributes that tools may need
-            mock_cfg.should_show_content.return_value = True
-            mock_cfg.should_show_full_content.return_value = True
-            mock_cfg.get_max_preview_length.return_value = 300
-            mock_cfg.is_smart_toc_enabled.return_value = False
-            mock_cfg.get_smart_toc_threshold.return_value = 2000
-            mock_cfg.tools = {}
-            patches.append(p)
-        except ModuleNotFoundError:
-            continue
-        except Exception as exc:
-            pytest.fail(f"Failed to patch {target} in _no_notebook_allowlist: {exc}")
-    yield
-    for p in patches:
-        p.stop()
+            yield get_config()
+        finally:
+            set_config(snapshot)
+
+    return _override
 
 
 @pytest.fixture

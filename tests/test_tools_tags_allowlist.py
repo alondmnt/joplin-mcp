@@ -24,22 +24,27 @@ def _make_tag(tag_id: str, title: str):
 
 @pytest.fixture
 def mock_allowlist_config():
-    """Enable allowlist in _module_config for tag tools."""
-    with patch("joplin_mcp.tools.tags._module_config") as mock_cfg:
-        mock_cfg.has_notebook_allowlist = True
-        mock_cfg.notebook_allowlist = ["AI", "Projects/*"]
-        mock_cfg.tools = {}
-        yield mock_cfg
+    """Enable an allowlist on the live config for the test body."""
+    from joplin_mcp.config import get_config, set_config
+
+    snapshot = get_config()
+    set_config(snapshot.copy(notebook_allowlist=["AI", "Projects/*"]))
+    try:
+        yield get_config()
+    finally:
+        set_config(snapshot)
 
 
 @pytest.fixture
 def mock_no_allowlist_config():
-    """Explicitly disable allowlist in _module_config for backward compat tests."""
-    with patch("joplin_mcp.tools.tags._module_config") as mock_cfg:
-        mock_cfg.has_notebook_allowlist = False
-        mock_cfg.notebook_allowlist = None
-        mock_cfg.tools = {}
-        yield mock_cfg
+    """Explicit no-allowlist fixture for backward-compat tests.
+
+    The autouse _no_notebook_allowlist already gives this state; this
+    fixture exists so tests can request it by name for readability.
+    """
+    from joplin_mcp.config import get_config
+
+    yield get_config()
 
 
 # === Tests for tag_note with allowlist ===

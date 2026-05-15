@@ -23,20 +23,27 @@ def _get_tool_fn(tool):
 
 @pytest.fixture
 def mock_allowlist_config():
-    """Enable allowlist in _module_config for notebook tools."""
-    with patch("joplin_mcp.tools.notebooks._module_config") as mock_cfg:
-        mock_cfg.has_notebook_allowlist = True
-        mock_cfg.notebook_allowlist = ["AI", "Projects/*"]
-        yield mock_cfg
+    """Enable an allowlist on the live config for the test body."""
+    from joplin_mcp.config import get_config, set_config
+
+    snapshot = get_config()
+    set_config(snapshot.copy(notebook_allowlist=["AI", "Projects/*"]))
+    try:
+        yield get_config()
+    finally:
+        set_config(snapshot)
 
 
 @pytest.fixture
 def mock_no_allowlist_config():
-    """Explicitly disable allowlist in _module_config for backward compat tests."""
-    with patch("joplin_mcp.tools.notebooks._module_config") as mock_cfg:
-        mock_cfg.has_notebook_allowlist = False
-        mock_cfg.notebook_allowlist = None
-        yield mock_cfg
+    """Explicit no-allowlist fixture for backward-compat tests.
+
+    The autouse _no_notebook_allowlist already gives this state; this
+    fixture exists so tests can request it by name for readability.
+    """
+    from joplin_mcp.config import get_config
+
+    yield get_config()
 
 
 # === Tests for list_notebooks with allowlist ===
@@ -114,15 +121,17 @@ class TestListNotebooksAllowlist:
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.notebooks.format_item_list")
     @patch("joplin_mcp.tools.notebooks.get_joplin_client")
-    async def test_list_notebooks_empty_allowlist(
-        self, mock_get_client, mock_format
+    async def test_list_notebooks_no_allowlist_returns_all(
+        self, mock_get_client, mock_format, override_config
     ):
-        """All notebooks returned when allowlist is empty list (same as none)."""
-        # Empty allowlist = has_notebook_allowlist is False in config
-        with patch("joplin_mcp.tools.notebooks._module_config") as mock_cfg:
-            mock_cfg.has_notebook_allowlist = False
-            mock_cfg.notebook_allowlist = []
+        """All notebooks returned when no allowlist is configured.
 
+        Originally written as `notebook_allowlist=[]` ("same as none"), but
+        on a real config `[]` means deny-all. The MagicMock pattern hid
+        the divergence. Empty-list (deny-all) semantics are tracked in
+        issue #46 for separate coverage.
+        """
+        with override_config(notebook_allowlist=None):
             from joplin_mcp.tools.notebooks import list_notebooks
 
             mock_notebooks = [MagicMock(id="nb1", title="Work")]

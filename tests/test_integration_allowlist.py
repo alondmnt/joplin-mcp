@@ -7,12 +7,13 @@ through tools, with only the Joplin API mocked. They verify:
 - D4: All enforcement points (full tool chain exercised)
 """
 
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from joplin_mcp.config import JoplinMCPConfig
+from joplin_mcp.config import JoplinMCPConfig, get_config, set_config
 from joplin_mcp.notebook_utils import (
     filter_accessible_notebooks,
     invalidate_notebook_map_cache,
@@ -20,6 +21,21 @@ from joplin_mcp.notebook_utils import (
     validate_notebook_access,
     validate_allowlist_at_startup,
 )
+
+
+@contextmanager
+def _override_config(**fields):
+    """Inline override of the live config; restores on exit.
+
+    Same shape as the override_config fixture in conftest, but usable
+    without adding a fixture parameter to every test signature.
+    """
+    snapshot = get_config()
+    set_config(snapshot.copy(**fields))
+    try:
+        yield get_config()
+    finally:
+        set_config(snapshot)
 
 
 def _get_tool_fn(tool):
@@ -118,7 +134,7 @@ class TestEndToEndAllowlistWorkflow:
         allowlist = ["Projects"]
 
         with (
-            patch("joplin_mcp.tools.notes._module_config") as mock_cfg,
+            _override_config(notebook_allowlist=allowlist),
             patch("joplin_mcp.tools.notes.get_joplin_client", return_value=client),
             patch(
                 "joplin_mcp.tools.notes.validate_notebook_access",
@@ -132,15 +148,6 @@ class TestEndToEndAllowlistWorkflow:
                 ),
             ),
         ):
-            mock_cfg.has_notebook_allowlist = True
-            mock_cfg.notebook_allowlist = allowlist
-            mock_cfg.should_show_content.return_value = True
-            mock_cfg.should_show_full_content.return_value = True
-            mock_cfg.get_max_preview_length.return_value = 300
-            mock_cfg.is_smart_toc_enabled.return_value = False
-            mock_cfg.get_smart_toc_threshold.return_value = 2000
-            mock_cfg.tools = {}
-
             from joplin_mcp.tools.notes import get_note
 
             fn = _get_tool_fn(get_note)
@@ -164,7 +171,7 @@ class TestEndToEndAllowlistWorkflow:
         allowlist = ["Projects"]
 
         with (
-            patch("joplin_mcp.tools.notes._module_config") as mock_cfg,
+            _override_config(notebook_allowlist=allowlist),
             patch("joplin_mcp.tools.notes.get_joplin_client", return_value=client),
             patch(
                 "joplin_mcp.tools.notes.validate_notebook_access",
@@ -177,15 +184,6 @@ class TestEndToEndAllowlistWorkflow:
                 ),
             ),
         ):
-            mock_cfg.has_notebook_allowlist = True
-            mock_cfg.notebook_allowlist = allowlist
-            mock_cfg.should_show_content.return_value = True
-            mock_cfg.should_show_full_content.return_value = True
-            mock_cfg.get_max_preview_length.return_value = 300
-            mock_cfg.is_smart_toc_enabled.return_value = False
-            mock_cfg.get_smart_toc_threshold.return_value = 2000
-            mock_cfg.tools = {}
-
             from joplin_mcp.tools.notes import get_note
 
             fn = _get_tool_fn(get_note)
@@ -265,7 +263,7 @@ class TestHierarchicalAccessIntegration:
         allowlist = ["Projects"]
 
         with (
-            patch("joplin_mcp.tools.notes._module_config") as mock_cfg,
+            _override_config(notebook_allowlist=allowlist),
             patch("joplin_mcp.tools.notes.get_joplin_client", return_value=client),
             patch(
                 "joplin_mcp.tools.notes.get_notebook_id_by_name",
@@ -282,15 +280,6 @@ class TestHierarchicalAccessIntegration:
                 ),
             ),
         ):
-            mock_cfg.has_notebook_allowlist = True
-            mock_cfg.notebook_allowlist = allowlist
-            mock_cfg.should_show_content.return_value = True
-            mock_cfg.should_show_full_content.return_value = True
-            mock_cfg.get_max_preview_length.return_value = 300
-            mock_cfg.is_smart_toc_enabled.return_value = False
-            mock_cfg.get_smart_toc_threshold.return_value = 2000
-            mock_cfg.tools = {}
-
             from joplin_mcp.tools.notes import create_note
 
             fn = _get_tool_fn(create_note)
@@ -308,7 +297,7 @@ class TestHierarchicalAccessIntegration:
         allowlist = ["Projects"]
 
         with (
-            patch("joplin_mcp.tools.notes._module_config") as mock_cfg,
+            _override_config(notebook_allowlist=allowlist),
             patch("joplin_mcp.tools.notes.get_joplin_client", return_value=client),
             patch(
                 "joplin_mcp.tools.notes.get_notebook_id_by_name",
@@ -325,15 +314,6 @@ class TestHierarchicalAccessIntegration:
                 ),
             ),
         ):
-            mock_cfg.has_notebook_allowlist = True
-            mock_cfg.notebook_allowlist = allowlist
-            mock_cfg.should_show_content.return_value = True
-            mock_cfg.should_show_full_content.return_value = True
-            mock_cfg.get_max_preview_length.return_value = 300
-            mock_cfg.is_smart_toc_enabled.return_value = False
-            mock_cfg.get_smart_toc_threshold.return_value = 2000
-            mock_cfg.tools = {}
-
             from joplin_mcp.tools.notes import create_note
 
             fn = _get_tool_fn(create_note)
@@ -370,18 +350,8 @@ class TestBackwardCompatibilityIntegration:
         mock_client.get_note.return_value = mock_note
 
         with (
-            patch("joplin_mcp.tools.notes._module_config") as mock_cfg,
             patch("joplin_mcp.tools.notes.get_joplin_client", return_value=mock_client),
         ):
-            mock_cfg.has_notebook_allowlist = False
-            mock_cfg.notebook_allowlist = None
-            mock_cfg.should_show_content.return_value = True
-            mock_cfg.should_show_full_content.return_value = True
-            mock_cfg.get_max_preview_length.return_value = 300
-            mock_cfg.is_smart_toc_enabled.return_value = False
-            mock_cfg.get_smart_toc_threshold.return_value = 2000
-            mock_cfg.tools = {}
-
             from joplin_mcp.tools.notes import get_note
 
             fn = _get_tool_fn(get_note)
@@ -395,22 +365,12 @@ class TestBackwardCompatibilityIntegration:
         mock_client.add_note.return_value = "new_note_id"
 
         with (
-            patch("joplin_mcp.tools.notes._module_config") as mock_cfg,
             patch("joplin_mcp.tools.notes.get_joplin_client", return_value=mock_client),
             patch(
                 "joplin_mcp.tools.notes.get_notebook_id_by_name",
                 return_value="any_nb_id",
             ),
         ):
-            mock_cfg.has_notebook_allowlist = False
-            mock_cfg.notebook_allowlist = None
-            mock_cfg.should_show_content.return_value = True
-            mock_cfg.should_show_full_content.return_value = True
-            mock_cfg.get_max_preview_length.return_value = 300
-            mock_cfg.is_smart_toc_enabled.return_value = False
-            mock_cfg.get_smart_toc_threshold.return_value = 2000
-            mock_cfg.tools = {}
-
             from joplin_mcp.tools.notes import create_note
 
             fn = _get_tool_fn(create_note)
@@ -429,15 +389,12 @@ class TestBackwardCompatibilityIntegration:
         mock_client.get_all_notebooks.return_value = mock_notebooks
 
         with (
-            patch("joplin_mcp.tools.notebooks._module_config") as mock_cfg,
             patch(
                 "joplin_mcp.tools.notebooks.get_joplin_client",
                 return_value=mock_client,
             ),
             patch("joplin_mcp.tools.notebooks.format_item_list") as mock_format,
         ):
-            mock_cfg.has_notebook_allowlist = False
-            mock_cfg.notebook_allowlist = None
 
             mock_format.return_value = "ALL_NOTEBOOKS_LISTED"
 
@@ -458,18 +415,8 @@ class TestBackwardCompatibilityIntegration:
         mock_client = MagicMock()
 
         with (
-            patch("joplin_mcp.tools.notes._module_config") as mock_cfg,
             patch("joplin_mcp.tools.notes.get_joplin_client", return_value=mock_client),
         ):
-            mock_cfg.has_notebook_allowlist = False
-            mock_cfg.notebook_allowlist = None
-            mock_cfg.should_show_content.return_value = True
-            mock_cfg.should_show_full_content.return_value = True
-            mock_cfg.get_max_preview_length.return_value = 300
-            mock_cfg.is_smart_toc_enabled.return_value = False
-            mock_cfg.get_smart_toc_threshold.return_value = 2000
-            mock_cfg.tools = {}
-
             from joplin_mcp.tools.notes import delete_note
 
             fn = _get_tool_fn(delete_note)
@@ -627,7 +574,7 @@ class TestMixedPatternTypesIntegration:
         allowlist = ["AI", "Projects/*"]
 
         with (
-            patch("joplin_mcp.tools.notes._module_config") as mock_cfg,
+            _override_config(notebook_allowlist=allowlist),
             patch("joplin_mcp.tools.notes.get_joplin_client", return_value=client),
             patch(
                 "joplin_mcp.tools.notes.is_notebook_accessible",
@@ -640,15 +587,6 @@ class TestMixedPatternTypesIntegration:
                 ),
             ),
         ):
-            mock_cfg.has_notebook_allowlist = True
-            mock_cfg.notebook_allowlist = allowlist
-            mock_cfg.should_show_content.return_value = True
-            mock_cfg.should_show_full_content.return_value = True
-            mock_cfg.get_max_preview_length.return_value = 300
-            mock_cfg.is_smart_toc_enabled.return_value = False
-            mock_cfg.get_smart_toc_threshold.return_value = 2000
-            mock_cfg.tools = {}
-
             from joplin_mcp.tools.notes import find_notes
 
             fn = _get_tool_fn(find_notes)

@@ -417,7 +417,7 @@ def test_find_notebook_suggestions_exact_match_first():
     assert suggestions[0] == "personal"  # Exact match first
 
 
-def test_get_notebook_id_by_name_flat_hides_denied_notebooks():
+def test_get_notebook_id_by_name_flat_hides_denied_notebooks(override_config):
     """Flat-name not-found error must not leak titles of allowlist-denied notebooks."""
     from unittest.mock import patch
     from joplin_mcp.notebook_utils import get_notebook_id_by_name
@@ -428,14 +428,10 @@ def test_get_notebook_id_by_name_flat_hides_denied_notebooks():
         "secret_id": {"title": "Secrets", "parent_id": None},
     }
 
-    mock_cfg = type("C", (), {})()
-    mock_cfg.has_notebook_allowlist = True
-    mock_cfg.notebook_allowlist = ["Work"]
-
-    with patch(
+    with override_config(notebook_allowlist=["Work"]), patch(
         "joplin_mcp.notebook_utils.notebook_resolver.get_map",
         return_value=full_map,
-    ), patch("joplin_mcp.fastmcp_server._module_config", mock_cfg):
+    ):
         with pytest.raises(ValueError) as exc_info:
             get_notebook_id_by_name("NonExistent")
         msg = str(exc_info.value)
@@ -443,7 +439,7 @@ def test_get_notebook_id_by_name_flat_hides_denied_notebooks():
         assert "Available notebooks" not in msg
 
 
-def test_get_notebook_id_by_name_flat_resolves_allowlisted():
+def test_get_notebook_id_by_name_flat_resolves_allowlisted(override_config):
     """Flat name in the allowlisted set must still resolve."""
     from unittest.mock import patch
     from joplin_mcp.notebook_utils import get_notebook_id_by_name
@@ -453,18 +449,14 @@ def test_get_notebook_id_by_name_flat_resolves_allowlisted():
         "secret_id": {"title": "Secrets", "parent_id": None},
     }
 
-    mock_cfg = type("C", (), {})()
-    mock_cfg.has_notebook_allowlist = True
-    mock_cfg.notebook_allowlist = ["Work"]
-
-    with patch(
+    with override_config(notebook_allowlist=["Work"]), patch(
         "joplin_mcp.notebook_utils.notebook_resolver.get_map",
         return_value=full_map,
-    ), patch("joplin_mcp.fastmcp_server._module_config", mock_cfg):
+    ):
         assert get_notebook_id_by_name("Work") == "work_id"
 
 
-def test_get_notebook_id_by_name_flat_multi_match_only_lists_accessible():
+def test_get_notebook_id_by_name_flat_multi_match_only_lists_accessible(override_config):
     """Multi-match disambiguation must not surface denied notebook paths."""
     from unittest.mock import patch
     from joplin_mcp.notebook_utils import get_notebook_id_by_name
@@ -477,19 +469,15 @@ def test_get_notebook_id_by_name_flat_multi_match_only_lists_accessible():
         "personal_inbox_id": {"title": "Inbox", "parent_id": "personal_id"},
     }
 
-    mock_cfg = type("C", (), {})()
-    mock_cfg.has_notebook_allowlist = True
-    mock_cfg.notebook_allowlist = ["Work", "Work/**"]
-
-    with patch(
+    with override_config(notebook_allowlist=["Work", "Work/**"]), patch(
         "joplin_mcp.notebook_utils.notebook_resolver.get_map",
         return_value=full_map,
-    ), patch("joplin_mcp.fastmcp_server._module_config", mock_cfg):
+    ):
         # Only Work/Inbox is accessible — single match, should resolve cleanly.
         assert get_notebook_id_by_name("Inbox") == "work_inbox_id"
 
 
-def test_get_notebook_id_by_name_flat_multi_match_disambiguation_filtered():
+def test_get_notebook_id_by_name_flat_multi_match_disambiguation_filtered(override_config):
     """When multiple accessible notebooks share a name, paths come from the filtered map."""
     from unittest.mock import patch
     from joplin_mcp.notebook_utils import get_notebook_id_by_name
@@ -503,14 +491,12 @@ def test_get_notebook_id_by_name_flat_multi_match_disambiguation_filtered():
         "personal_inbox_id": {"title": "Inbox", "parent_id": "personal_id"},
     }
 
-    mock_cfg = type("C", (), {})()
-    mock_cfg.has_notebook_allowlist = True
-    mock_cfg.notebook_allowlist = ["Work", "Work/**", "AI", "AI/**"]
-
-    with patch(
+    with override_config(
+        notebook_allowlist=["Work", "Work/**", "AI", "AI/**"]
+    ), patch(
         "joplin_mcp.notebook_utils.notebook_resolver.get_map",
         return_value=full_map,
-    ), patch("joplin_mcp.fastmcp_server._module_config", mock_cfg):
+    ):
         with pytest.raises(ValueError) as exc_info:
             get_notebook_id_by_name("Inbox")
         msg = str(exc_info.value)
