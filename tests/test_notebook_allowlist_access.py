@@ -332,6 +332,42 @@ class TestFilterAccessibleNotebooks:
         assert result == []
 
 
+class TestAllowlistFunctionsRejectNone:
+    """is_accessible / filter_accessible reject None to make the contract
+    explicit. Production callers always guard with has_notebook_allowlist
+    and pass a real list, so this guards against future misuse rather
+    than active regressions.
+    """
+
+    def setup_method(self):
+        invalidate_notebook_map_cache()
+
+    def test_is_notebook_accessible_rejects_none(self):
+        """is_notebook_accessible raises TypeError when allowlist_entries is None."""
+        from joplin_mcp.notebook_utils import is_notebook_accessible
+
+        nb_map = make_notebook_map({"nb1": "Projects/Work"})
+        client_fn = mock_client_fn(nb_map)
+
+        with pytest.raises(TypeError, match="requires a list"):
+            is_notebook_accessible("nb1", allowlist_entries=None, client_fn=client_fn)
+
+    def test_filter_accessible_notebooks_rejects_none(self):
+        """filter_accessible_notebooks raises TypeError when allowlist_entries is None."""
+        notebooks = [SimpleNamespace(id="nb1", title="Work")]
+
+        with pytest.raises(TypeError, match="requires a list"):
+            filter_accessible_notebooks(notebooks, allowlist_entries=None)
+
+    def test_validate_notebook_access_rejects_none(self):
+        """validate_notebook_access propagates the TypeError from is_accessible."""
+        nb_map = make_notebook_map({"nb1": "Projects/Work"})
+        client_fn = mock_client_fn(nb_map)
+
+        with pytest.raises(TypeError, match="requires a list"):
+            validate_notebook_access("nb1", allowlist_entries=None, client_fn=client_fn)
+
+
 class TestCacheInvalidation:
     """Test cache invalidation clears allowlist spec."""
 

@@ -393,10 +393,20 @@ class NotebookResolver:
         allowlist_entries: List[str],
         force_refresh: bool = False,
     ) -> bool:
-        """Check if a notebook is accessible under the current allowlist.
+        """Check if a notebook is accessible under the configured allowlist.
 
-        Empty allowlist denies all.
+        The caller is expected to have decided that an allowlist is in
+        force (typically via ``cfg.has_notebook_allowlist``). An empty
+        list (``[]``) is a configured deny-all and returns False. Passing
+        ``None`` is a misuse: there is no "no allowlist" semantic here --
+        the caller would not be calling this function in that case.
+        Contrast ``get_accessible_map`` which accepts ``None`` to mean
+        "allow all" because it is the boundary the resolver reads.
         """
+        if allowlist_entries is None:
+            raise TypeError(
+                "is_accessible requires a list; pass [] for deny-all"
+            )
         if not allowlist_entries:
             return False
 
@@ -446,8 +456,13 @@ class NotebookResolver:
     ) -> List[Any]:
         """Filter a list of notebooks to only those accessible under the allowlist.
 
-        Empty allowlist denies all (returns empty list).
+        Empty list (``[]``) is a configured deny-all and returns ``[]``.
+        Passing ``None`` is a misuse (see ``is_accessible``).
         """
+        if allowlist_entries is None:
+            raise TypeError(
+                "filter_accessible requires a list; pass [] for deny-all"
+            )
         if not allowlist_entries:
             return []
 

@@ -1275,10 +1275,10 @@ class JoplinMCPConfig:
 # set_config() when --config-file is supplied. set_config is a replace,
 # not a merge -- partial-blend semantics are intentionally absent.
 
-_resolver_logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
-def _auto_discover_with_logging() -> "JoplinMCPConfig":
+def _auto_discover_with_logging() -> JoplinMCPConfig:
     """Auto-discover configuration on import, with logging.
 
     Honours JOPLIN_MCP_CONFIG / JOPLIN_CONFIG_FILE for an explicit path,
@@ -1286,7 +1286,7 @@ def _auto_discover_with_logging() -> "JoplinMCPConfig":
     locations + cwd). On any failure, returns a default config so import
     never raises.
     """
-    _resolver_logger.info("Auto-discovering Joplin MCP configuration...")
+    logger.info("Auto-discovering Joplin MCP configuration...")
 
     try:
         loaded_from: Optional[Path] = None
@@ -1297,13 +1297,13 @@ def _auto_discover_with_logging() -> "JoplinMCPConfig":
         if explicit_config:
             cfg_path = Path(explicit_config)
             if cfg_path.exists():
-                _resolver_logger.info(
+                logger.info(
                     f"Using explicit configuration from: {cfg_path}"
                 )
                 config = JoplinMCPConfig.from_file(cfg_path)
                 loaded_from = cfg_path
             else:
-                _resolver_logger.warning(
+                logger.warning(
                     f"Explicit config path set but not found: {cfg_path}. Falling back to discovery."
                 )
                 config = JoplinMCPConfig.auto_discover()
@@ -1327,26 +1327,26 @@ def _auto_discover_with_logging() -> "JoplinMCPConfig":
                         break
 
         if loaded_from is None:
-            _resolver_logger.warning(
+            logger.warning(
                 "No configuration file found. Using environment variables and defaults."
             )
         else:
-            _resolver_logger.info(
+            logger.info(
                 f"Successfully loaded configuration from: {loaded_from}"
             )
 
         return config
 
     except Exception as e:
-        _resolver_logger.error(f"Failed to load configuration: {e}")
-        _resolver_logger.warning("Falling back to default configuration.")
+        logger.error(f"Failed to load configuration: {e}")
+        logger.warning("Falling back to default configuration.")
         return JoplinMCPConfig()
 
 
-_current_config: "JoplinMCPConfig" = _auto_discover_with_logging()
+_current_config: JoplinMCPConfig = _auto_discover_with_logging()
 
 
-def get_config() -> "JoplinMCPConfig":
+def get_config() -> JoplinMCPConfig:
     """Return the live JoplinMCPConfig.
 
     Returns the most recently set_config() value, or the auto-discovered
@@ -1355,7 +1355,7 @@ def get_config() -> "JoplinMCPConfig":
     return _current_config
 
 
-def set_config(cfg: "JoplinMCPConfig") -> None:
+def set_config(cfg: JoplinMCPConfig) -> None:
     """Replace the live config wholesale.
 
     Subsequent get_config() calls return ``cfg``. This is a replace, not
