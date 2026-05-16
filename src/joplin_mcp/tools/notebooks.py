@@ -134,16 +134,26 @@ async def delete_notebook(
     """Delete a notebook from Joplin (moves to trash).
 
     Soft-deletes a notebook and its contained notes by moving them to
-    Joplin's trash.  Trashed items can be found with find_notes(trash=True)
+    Joplin's trash. Trashed items can be found with find_notes(trash=True)
     and restored with restore_from_trash().
 
     Returns:
         str: Success message confirming the notebook was moved to trash.
+
+    Raises:
+        ValueError: if the notebook ID does not exist.
     """
+    client = get_joplin_client()
+
     if get_config().has_notebook_allowlist:
         notebook_resolver.validate_access(
             notebook_id, allowlist_entries=get_config().notebook_allowlist
         )
+
+    # Joplin's API silently 200s on DELETE for a missing notebook, so the
+    # tool would otherwise report SUCCESS for a no-op. GET first to surface
+    # the 404 as a sanitised ValueError via with_client_error_handling.
+    client.get_notebook(notebook_id, fields="id")
 
     notebook_resolver.delete_notebook(notebook_id)
     return format_delete_success(ItemType.notebook, notebook_id)

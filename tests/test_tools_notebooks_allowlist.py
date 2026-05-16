@@ -329,13 +329,19 @@ class TestDeleteNotebookAllowlist:
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    @patch("joplin_mcp.tools.notebooks.get_joplin_client")
     async def test_delete_notebook_allowlisted(
         self,
+        mock_get_client,
         mock_resolver,
         mock_allowlist_config,
     ):
         """Should succeed when notebook is allowlisted."""
         from joplin_mcp.tools.notebooks import delete_notebook
+
+        mock_client = MagicMock()
+        mock_client.get_notebook.return_value = MagicMock(id="12345678901234567890123456789012")
+        mock_get_client.return_value = mock_client
 
         fn = _get_tool_fn(delete_notebook)
         result = await fn(notebook_id="12345678901234567890123456789012")
@@ -423,11 +429,16 @@ class TestNotebookAllowlistBackwardCompat:
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    @patch("joplin_mcp.tools.notebooks.get_joplin_client")
     async def test_delete_notebook_works_without_allowlist(
-        self, mock_resolver, mock_no_allowlist_config
+        self, mock_get_client, mock_resolver, mock_no_allowlist_config
     ):
         """delete_notebook succeeds without allowlist."""
         from joplin_mcp.tools.notebooks import delete_notebook
+
+        mock_client = MagicMock()
+        mock_client.get_notebook.return_value = MagicMock(id="12345678901234567890123456789012")
+        mock_get_client.return_value = mock_client
 
         fn = _get_tool_fn(delete_notebook)
         result = await fn(notebook_id="12345678901234567890123456789012")

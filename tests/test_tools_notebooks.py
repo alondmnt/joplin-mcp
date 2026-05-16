@@ -219,9 +219,14 @@ class TestDeleteNotebookTool:
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.notebooks.notebook_resolver")
-    async def test_deletes_notebook(self, mock_resolver):
+    @patch("joplin_mcp.tools.notebooks.get_joplin_client")
+    async def test_deletes_notebook(self, mock_get_client, mock_resolver):
         """Should delete a notebook through the resolver."""
         from joplin_mcp.tools.notebooks import delete_notebook
+
+        mock_client = MagicMock()
+        mock_client.get_notebook.return_value = MagicMock(id="12345678901234567890123456789012")
+        mock_get_client.return_value = mock_client
 
         fn = _get_tool_fn(delete_notebook)
         result = await fn(notebook_id="12345678901234567890123456789012")
@@ -234,12 +239,38 @@ class TestDeleteNotebookTool:
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.notebooks.notebook_resolver")
-    async def test_delete_routes_through_resolver(self, mock_resolver):
+    @patch("joplin_mcp.tools.notebooks.get_joplin_client")
+    async def test_delete_routes_through_resolver(self, mock_get_client, mock_resolver):
         """delete_notebook should route the write through the resolver so its
         mutation path can invalidate caches atomically."""
         from joplin_mcp.tools.notebooks import delete_notebook
+
+        mock_client = MagicMock()
+        mock_client.get_notebook.return_value = MagicMock(id="12345678901234567890123456789012")
+        mock_get_client.return_value = mock_client
 
         fn = _get_tool_fn(delete_notebook)
         await fn(notebook_id="12345678901234567890123456789012")
 
         mock_resolver.delete_notebook.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    @patch("joplin_mcp.tools.notebooks.get_joplin_client")
+    async def test_raises_when_notebook_missing(self, mock_get_client, mock_resolver):
+        """Joplin's DELETE is idempotent — silently 200s on a missing notebook.
+        delete_notebook must GET first and surface the 404 so a caller doesn't
+        see SUCCESS for a no-op. Regression for the smoke-test finding."""
+        from joplin_mcp.tools.notebooks import delete_notebook
+
+        mock_client = MagicMock()
+        mock_client.get_notebook.side_effect = RuntimeError(
+            "404 Client Error: Not Found for url: http://localhost:41184/folders/00000000000000000000000000000000?token=***"
+        )
+        mock_get_client.return_value = mock_client
+
+        fn = _get_tool_fn(delete_notebook)
+        with pytest.raises(ValueError, match="404"):
+            await fn(notebook_id="00000000000000000000000000000000")
+
+        mock_resolver.delete_notebook.assert_not_called()
