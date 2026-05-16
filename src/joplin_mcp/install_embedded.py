@@ -8,7 +8,14 @@ adapted to work when installed as a package.
 import sys
 from pathlib import Path
 
-from .ui_integration import print_step, print_success, run_installation_process
+from .config import JoplinMCPConfig
+from .ui_integration import (
+    create_config_interactively,
+    print_step,
+    print_success,
+    run_installation_process,
+    save_config_to_path,
+)
 
 
 def create_joplin_config(token: str) -> Path:
@@ -18,15 +25,11 @@ def create_joplin_config(token: str) -> Path:
     # Create config in user's home directory for global access
     config_path = Path.home() / ".joplin-mcp.json"
 
-    # Use centralized interactive config creation
-    from .config import JoplinMCPConfig
-
-    config = JoplinMCPConfig.create_interactively(
+    config = create_config_interactively(
         token=token, include_permissions=True, **JoplinMCPConfig.DEFAULT_CONNECTION
     )
 
-    # Save configuration
-    saved_path = config.save_interactively(config_path, include_token=True)
+    saved_path = save_config_to_path(config, config_path, include_token=True)
     print_success(f"Configuration saved to {saved_path}")
     return saved_path
 

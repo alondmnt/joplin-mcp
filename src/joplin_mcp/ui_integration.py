@@ -391,6 +391,95 @@ def get_content_privacy_settings() -> Dict[str, Union[str, int]]:
     return content_exposure
 
 
+# === INTERACTIVE CONFIG CONSTRUCTION ===
+#
+# These functions live alongside the prompt helpers above rather than as
+# classmethods on JoplinMCPConfig: config.py stays a pure data module, and
+# the data class doesn't have to reach up into the installer UI.
+
+
+def create_config_interactively(
+    token: Optional[str] = None,
+    include_permissions: bool = True,
+    include_content_privacy: bool = True,
+    **defaults: Any,
+) -> JoplinMCPConfig:
+    """Build a JoplinMCPConfig by prompting the user.
+
+    Args:
+        token: Pre-provided token (skip the token prompt if given).
+        include_permissions: Whether to prompt for tool permissions.
+        include_content_privacy: Whether to prompt for content privacy settings.
+        defaults: Default values for the connection-level fields
+            (``host``, ``port``, ``timeout``, ``verify_ssl``).
+
+    Returns:
+        A configured JoplinMCPConfig instance.
+    """
+    if not token:
+        token = get_token_interactively()
+
+    if include_permissions:
+        tool_permissions = get_permission_settings()
+    else:
+        tool_permissions = JoplinMCPConfig.DEFAULT_TOOLS.copy()
+
+    if include_content_privacy:
+        content_privacy = get_content_privacy_settings()
+    else:
+        content_privacy = JoplinMCPConfig.DEFAULT_CONTENT_EXPOSURE.copy()
+
+    config_kwargs = {
+        "host": defaults.get("host", JoplinMCPConfig.DEFAULT_CONNECTION["host"]),
+        "port": defaults.get("port", JoplinMCPConfig.DEFAULT_CONNECTION["port"]),
+        "token": token,
+        "timeout": defaults.get(
+            "timeout", JoplinMCPConfig.DEFAULT_CONNECTION["timeout"]
+        ),
+        "verify_ssl": defaults.get(
+            "verify_ssl", JoplinMCPConfig.DEFAULT_CONNECTION["verify_ssl"]
+        ),
+        "tools": tool_permissions,
+        "content_exposure": content_privacy,
+    }
+
+    return JoplinMCPConfig(**config_kwargs)
+
+
+def save_config_to_path(
+    config: JoplinMCPConfig,
+    suggested_path: Optional[Path] = None,
+    include_token: bool = True,
+) -> Path:
+    """Write ``config`` to ``suggested_path`` (or a default in CWD) as JSON.
+
+    No prompts run here -- the caller supplies the path. Lives alongside
+    ``create_config_interactively`` so the installer has one place to look.
+    """
+    if not suggested_path:
+        suggested_path = Path.cwd() / "joplin-mcp.json"
+
+    config_path = suggested_path
+
+    config_data: Dict[str, Any] = {
+        "host": config.host,
+        "port": config.port,
+        "timeout": config.timeout,
+        "verify_ssl": config.verify_ssl,
+        "tools": config.tools.copy(),
+        "content_exposure": config.content_exposure.copy(),
+    }
+
+    if include_token and config.token:
+        config_data["token"] = config.token
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(config_path, "w") as f:
+        json.dump(config_data, f, indent=2)
+
+    return config_path
+
+
 # === CHAT INTERFACE INTEGRATION ===
 
 
