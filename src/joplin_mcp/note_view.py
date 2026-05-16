@@ -399,9 +399,20 @@ def _render_toc(
     config: Any,
 ) -> Optional[str]:
     """Render a TOC view with metadata header and navigation hints."""
-    toc = create_toc_only(original_body or getattr(note, "body", ""))
+    body = original_body or getattr(note, "body", "")
+    toc = create_toc_only(body)
     if not toc:
         return None
+
+    # Ground the NEXT_STEPS examples in a real heading title and line number
+    # from this note's TOC, so an agent doesn't have to mentally substitute
+    # placeholder text. Headings is guaranteed non-empty here because
+    # create_toc_only returned a non-empty TOC above.
+    headings = parse_markdown_headings(body)
+    section_example = headings[0]["title"]
+    # Prefer a later heading's line for the start_line example — jumping into
+    # the body is more illustrative than landing on the first heading itself.
+    line_example = headings[1]["line_idx"] if len(headings) > 1 else headings[0]["line_idx"]
 
     metadata_result = format_note_details(
         note,
@@ -412,16 +423,13 @@ def _render_toc(
         config=config,
     )
 
-    if display_mode == "explicit":
-        steps = f"""NEXT_STEPS:
-- To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="Introduction")
-- To jump to line number: get_note("{note_id}", start_line=45) (using line numbers from TOC above)
-- To get full content: get_note("{note_id}", force_full=True)"""
-    else:  # smart_toc_auto
-        steps = f"""NEXT_STEPS:
-- To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="Introduction")
-- To jump to line number: get_note("{note_id}", start_line=45) (using line numbers from TOC above)
-- To force full content: get_note("{note_id}", force_full=True)"""
+    force_clause = (
+        "To get full content" if display_mode == "explicit" else "To force full content"
+    )
+    steps = f"""NEXT_STEPS:
+- To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="{section_example}")
+- To jump to line number: get_note("{note_id}", start_line={line_example}) (using line numbers from TOC above)
+- {force_clause}: get_note("{note_id}", force_full=True)"""
 
     toc_info = f"DISPLAY_MODE: {display_mode}\n\n{toc}\n\n{steps}"
     return f"{metadata_result}\n\n{toc_info}"
