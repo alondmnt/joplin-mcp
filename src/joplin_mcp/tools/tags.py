@@ -175,6 +175,9 @@ async def delete_tag(
     Returns:
         str: Success message confirming the tag was deleted.
 
+    Raises:
+        ValueError: if the tag ID does not exist.
+
     Warning: This action is permanent and cannot be undone.
     """
     client = get_joplin_client()
