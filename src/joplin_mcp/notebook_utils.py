@@ -355,13 +355,18 @@ class NotebookResolver:
     ) -> Dict[str, Dict[str, Optional[str]]]:
         """Return the notebook map filtered by allowlist (ancestors included).
 
-        When ``allowlist_entries`` is None or empty, returns the full cached map.
+        ``None`` means no allowlist is configured -- returns the full cached
+        map. ``[]`` means the allowlist is explicitly empty (deny all) and
+        returns ``{}`` -- the same falsy short-circuit would otherwise leak
+        every notebook title through name-resolution suggestions (closes #47).
         Ancestors of accessible notebooks are kept so nested allowlist entries
         (e.g. ``Personal/Work`` requires ``Personal`` in the map) resolve.
         """
         nb_map = self.get_map(force_refresh=force_refresh)
-        if not allowlist_entries:
+        if allowlist_entries is None:
             return nb_map
+        if not allowlist_entries:
+            return {}
 
         positive_spec, negation_spec, hex_ids = self._get_allowlist_specs(
             allowlist_entries

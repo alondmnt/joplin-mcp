@@ -822,6 +822,47 @@ class TestNoteAllowlistErrorMessages:
             assert denied not in msg
         assert "Available notebooks" not in msg
 
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.notebook_utils.get_notebook_map_cached")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_create_note_unknown_name_under_empty_allowlist_does_not_leak_titles(
+        self,
+        mock_get_client,
+        mock_get_map,
+        override_config,
+    ):
+        """Empty allowlist must NOT leak titles through resolution suggestions (closes #47).
+
+        Companion to the non-empty case above. Previously, get_accessible_map
+        short-circuited on any falsy allowlist and returned the full map, so
+        ``resolve_by_name("Diary", [])`` would surface every notebook title
+        in its "did you mean" suggestions before the validate-after-resolve
+        step refused the access.
+        """
+        from joplin_mcp.tools.notes import create_note
+
+        mock_get_map.return_value = {
+            "work_id": {"title": "Work", "parent_id": None},
+            "secret_id": {"title": "Secrets", "parent_id": None},
+            "diary_id": {"title": "Diary", "parent_id": None},
+            "tax_id": {"title": "Tax", "parent_id": None},
+        }
+
+        fn = _get_tool_fn(create_note)
+        with override_config(notebook_allowlist=[]):
+            with pytest.raises(ValueError) as exc_info:
+                await fn(
+                    title="Test",
+                    notebook_name="Diray",  # typo, near-matches "Diary"
+                    body="content",
+                )
+
+        msg = str(exc_info.value)
+        for denied in ("Work", "Secrets", "Diary", "Tax"):
+            assert denied not in msg
+        assert "Did you mean" not in msg
+        assert "Available notebooks" not in msg
+
 
 # === Tests for get_links with allowlist ===
 

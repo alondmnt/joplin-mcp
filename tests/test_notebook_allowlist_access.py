@@ -244,6 +244,42 @@ class TestValidateNotebookAccess:
             )
 
 
+class TestAccessibleMapEmptyAllowlist:
+    """get_accessible_map must distinguish None (allow all) from [] (deny all).
+
+    Regression coverage for #47 -- the falsy short-circuit used to return the
+    full map for both, leaking titles through resolution suggestions.
+    """
+
+    def setup_method(self):
+        invalidate_notebook_map_cache()
+
+    def test_empty_allowlist_returns_empty_map(self):
+        """get_accessible_map with allowlist=[] returns {} (deny-all)."""
+        from joplin_mcp.notebook_utils import get_accessible_notebook_map
+
+        nb_map = make_notebook_map({"nb1": "Projects/Work", "nb2": "Personal/Diary"})
+        client_fn = mock_client_fn(nb_map)
+
+        result = get_accessible_notebook_map(allowlist_entries=[], client_fn=client_fn)
+
+        assert result == {}
+
+    def test_none_allowlist_returns_full_map(self):
+        """get_accessible_map with allowlist=None returns the full map (no allowlist)."""
+        from joplin_mcp.notebook_utils import get_accessible_notebook_map
+
+        nb_map = make_notebook_map({"nb1": "Projects/Work", "nb2": "Personal/Diary"})
+        client_fn = mock_client_fn(nb_map)
+
+        result = get_accessible_notebook_map(allowlist_entries=None, client_fn=client_fn)
+
+        # make_notebook_map auto-creates parents, so the full map has more
+        # than just nb1/nb2. Just assert the input notebooks are present.
+        assert "nb1" in result
+        assert "nb2" in result
+
+
 class TestFilterAccessibleNotebooks:
     """Test filter_accessible_notebooks functionality."""
 
