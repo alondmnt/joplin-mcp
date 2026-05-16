@@ -253,6 +253,26 @@ class TestDeleteNoteTool:
         assert "DELETE_NOTE" in result
         assert "SUCCESS" in result
 
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_raises_when_note_missing(self, mock_get_client):
+        """Joplin's DELETE is idempotent — silently 200s on a missing note.
+        delete_note must GET first and surface the 404 so a caller doesn't
+        see SUCCESS for a no-op. Regression for the smoke-test finding."""
+        from joplin_mcp.tools.notes import delete_note
+
+        mock_client = MagicMock()
+        mock_client.get_note.side_effect = RuntimeError(
+            "404 Client Error: Not Found for url: http://localhost:41184/notes/00000000000000000000000000000000?token=***"
+        )
+        mock_get_client.return_value = mock_client
+
+        fn = _get_tool_fn(delete_note)
+        with pytest.raises(ValueError, match="404"):
+            await fn("00000000000000000000000000000000")
+
+        mock_client.delete_note.assert_not_called()
+
 
 class TestFindNotesTool:
     """Tests for find_notes tool."""

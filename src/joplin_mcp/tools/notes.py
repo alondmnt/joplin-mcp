@@ -718,15 +718,20 @@ async def delete_note(
 
     Returns:
         str: Success message confirming the note was moved to trash.
+
+    Raises:
+        ValueError: if the note ID does not exist.
     """
     # Runtime validation for Jan AI compatibility while preserving functionality
     note_id = validate_joplin_id(note_id)
 
     client = get_joplin_client()
 
-    # Allowlist validation: ensure note is in an accessible notebook
+    # GET first so a missing note ID 404s instead of silent-succeeding through
+    # Joplin's idempotent DELETE (same shape as delete_notebook). The fetch
+    # doubles as the allowlist check below when applicable.
+    note = client.get_note(note_id, fields="id,parent_id")
     if get_config().has_notebook_allowlist:
-        note = client.get_note(note_id, fields="id,parent_id")
         parent_id = getattr(note, 'parent_id', '')
         validate_notebook_access(parent_id, allowlist_entries=get_config().notebook_allowlist)
 
