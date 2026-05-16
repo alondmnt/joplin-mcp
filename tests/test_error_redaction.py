@@ -226,6 +226,34 @@ class TestSanitiseRealisticJoppyError:
         assert "404 Client Error" in result
         assert "token=***" in result
 
+    def test_json_embedded_stack_with_file_urls(self):
+        """The shape an agent smoke test surfaced after the first stopgap:
+        joppy wraps an HTTPError whose body is a JSON string with escaped
+        "\\n" between frames and file:// URLs pointing at the Joplin
+        Desktop install. Neither escaped newlines nor file:// URLs were
+        handled by the original sanitiser.
+        """
+        text = (
+            f"Get note failed: ('404 Client Error: Not Found for url: "
+            f"http://localhost:41184/notes/00000000000000000000000000000000?"
+            f"fields=id,title,body,deleted_time&token={FAKE_TOKEN}', "
+            r"""'{"error":"Not Found: \n\nError: Not Found\n"""
+            r"""    at getOneModel (file:///Applications/Joplin.app/Contents/Resources/lib/services/rest/utils/defaultAction.ts:18:21)\n"""
+            r"""    at Api.route (file:///Applications/Joplin.app/Contents/Resources/lib/services/rest/Api.ts:247:11)\n"""
+            r"""    at execRequest (file:///Applications/Joplin.app/Contents/Resources/lib/ClipperServer.ts:204:23)"}')"""
+        )
+        result = _sanitise_error(text)
+        assert FAKE_TOKEN not in result
+        assert "/Applications/Joplin.app" not in result
+        assert "file://" not in result
+        assert "defaultAction.ts" not in result
+        assert "ClipperServer.ts" not in result
+        assert "getOneModel" not in result
+        assert "Api.route" not in result
+        # Useful diagnostic info preserved:
+        assert "404 Client Error" in result
+        assert "token=***" in result
+
 
 class TestWithClientErrorHandlingRedaction:
     """End-to-end: errors flowing through the decorator are sanitised."""

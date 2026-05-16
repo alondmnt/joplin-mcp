@@ -330,13 +330,18 @@ def process_search_results(results: Any) -> List[Any]:
 
 
 _TOKEN_QUERY_RE = re.compile(r"([?&]token=)[^&\s\"'`)\]]+", re.IGNORECASE)
-# Drop entire lines that look like JS stack frames ("    at SomeFn (...)") or
-# Python frames ('  File "...", line N'). joppy stringifies HTTPError with the
-# Joplin response body inline, which Joplin populates with a TS stack trace.
-_STACK_FRAME_LINE_RE = re.compile(
-    r"^[ \t]+(?:at\s.*|File \"[^\"]*\", line \d+.*)$",
-    re.MULTILINE,
-)
+# file:// URLs leak the absolute install path. Match the whole URL and stop
+# at a delimiter, whitespace, or a backslash (so JSON-escape sequences like
+# "\\n" after a path don't get gobbled into the match).
+_FILE_URL_RE = re.compile(r"file://[^\s\"'`)\]<>\\]+")
+# Drop JS stack frames ("    at SomeFn (loc)") and Python frames
+# ('  File "...", line N'). joppy stringifies HTTPError with the Joplin
+# response body inline, which Joplin populates with a TS stack trace. The
+# response is often a JSON-encoded string with escaped "\\n" between frames,
+# so we don't use re.MULTILINE — we match the inline shape wherever it
+# appears, terminating at a real or escaped newline.
+_JS_FRAME_RE = re.compile(r"[ \t]+at\s\S+\s*\([^)]*\)")
+_PY_FRAME_RE = re.compile(r"[ \t]+File \"[^\"]*\",\s*line\s\d+[^\n\\]*")
 # Absolute filesystem paths leak the local install location and OS user.
 # Match any absolute path (Unix "/foo..." or Windows "C:\foo..."), terminating
 # at a quote, bracket, angle, or newline. Spaces inside the match are allowed
@@ -358,15 +363,20 @@ def _sanitise_error(text: str) -> str:
 
     joppy stringifies requests.HTTPError with the Joplin server response body
     inline. Joplin populates that body with TypeScript stack-trace lines and
-    absolute paths from its install location, and the request URL carries the
-    full API token. Strip all three before the message reaches MCP clients or
-    logs — information disclosure in a hostile-agent setting and confusing UX
-    in general.
+    absolute paths from its install location (frequently wrapped in file://
+    URLs and embedded in a JSON string with escaped newlines), and the
+    request URL carries the full API token. Strip all of those before the
+    message reaches MCP clients or logs — information disclosure in a
+    hostile-agent setting and confusing UX in general.
     """
     text = _TOKEN_QUERY_RE.sub(r"\1***", text)
-    text = _STACK_FRAME_LINE_RE.sub("", text)
+    text = _FILE_URL_RE.sub("<path>", text)
+    text = _JS_FRAME_RE.sub("", text)
+    text = _PY_FRAME_RE.sub("", text)
     text = _ABS_PATH_RE.sub("<path>", text)
-    # Collapse blank-line gaps left by stripped trace lines.
+    # Collapse blank-line gaps and runs of escaped newlines left by stripped
+    # frames so the message doesn't end up as "...\\n\\n\\n...".
+    text = re.sub(r"(?:\\n[ \t]*){2,}", r"\\n", text)
     text = re.sub(r"\n[ \t]*\n+", "\n", text)
     return text.strip()
 
