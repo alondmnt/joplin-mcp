@@ -1,20 +1,87 @@
-# v0.7.1
-*Released on 2026-03-09*
+# [v0.8.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.8.0)
+*Released on 2026-05-16*
 
-- added: **notebook allowlist** — pattern-based access control restricting AI to specific notebooks
+## What's New
+
+- **Notebook allowlist** — pattern-based access control restricting the AI to a chosen set of notebooks. Useful when you want an agent that can touch your work notes but not your personal ones, or any other slice of the tree.
   - gitignore-style patterns: exact names, `*` wildcards, `**` recursive, `!` negation
   - hierarchical access: allowing a parent grants access to all children
-  - enforced across all tools: read, write, search, list, tag operations
-  - generic error messages prevent leaking notebook details
+  - enforced across every tool that touches notebooks: read, write, search, list, tag
+  - generic refusal messages on denials, so the agent doesn't learn which notebooks exist behind the allowlist
   - configurable via JSON (`notebook_allowlist`) or env var (`JOPLIN_NOTEBOOK_ALLOWLIST`)
-  - startup validation with logging and auto-creation of default notebook when allowlist resolves to zero
-- added: E2E test suite (43 tests) running against a real Joplin instance in Docker
-- added: `notebook_utils.py` module for path resolution, allowlist matching, and notebook map caching
+  - startup validation with logging, and auto-creation of a default notebook when the allowlist resolves to zero accessible notebooks
+  - landed across #25, #26, #27 by @rubalo
+- **`restore_from_trash`** — recover soft-deleted notes from Joplin's trash. The MCP could already soft-delete via `delete_note` but had no way to undelete, so an accidental delete by an agent meant dropping into the Joplin UI to recover. That gap is now closed (#23 by @MatthewOGoodman).
+- **Move notes between notebooks** — `update_note` accepts a `notebook_name` argument that relocates the note in a single call. Previously the only way to move a note from inside the MCP was a delete-and-recreate dance (closes #21).
+- **Bulk tag operations** — `tag_note` and `untag_note` accept lists of note IDs and tag names. When either side is a list, the cartesian product runs in one call with a per-pair report, so tagging a batch of notes is one tool invocation instead of N (closes #22).
+
+## Fixes
+
+- **Information disclosure in error messages** — tool errors used to forward the Joplin API token via the request URL, the internal TypeScript stack-trace lines from Joplin Desktop, and absolute filesystem paths from the install location. The sanitiser now scrubs all three before the message reaches the MCP client. The leak was surfaced by an agent smoke test that flagged a leaky `get_note` error (#49).
+- **Stricter `create_notebook` parent ID validation** — malformed parent IDs are caught at the tool boundary now, instead of falling through to joppy with a less useful error (#28 by @iclem).
+- **Allowlist edge cases**:
+  - empty list now denies all access, instead of being treated as "no restriction" (#46, #47)
+  - the allowlist is preserved through `JoplinMCPConfig.copy`, so derived configs don't silently drop the restriction (#45)
+  - the notebook-resolver factory rebinds correctly when the client is patched, so tests using monkey-patched clients no longer see stale state (#38)
+- `DELETED` metadata is surfaced on every note-returning path, so trashed notes are always flagged regardless of which tool fetched them.
+- `delete_notebook` returns a corrected recovery hint.
+- The installer's update-tools prompt now offers `restore_from_trash` on upgrade.
+
+## Other Changes
+
+A fair amount of internal restructuring lands alongside the features, mostly aimed at making the codebase easier to navigate and the tests less coupled to import-time state:
+
+- **`NotebookResolver`** owns the notebook cache, path resolution, and invalidation in one place (previously scattered across the server module). Includes a thunk-bound factory so test patches of the joppy client propagate correctly (#38).
+- **Config resolver** in `joplin_mcp.config` centralises config reads through a single entry point and drops the module-global `_module_config` shim. Test patches now propagate predictably.
+- **Tool gating** deferred to `register_tools` so the runtime config (e.g. `--config-file`) takes effect at server start, rather than being frozen at decoration time (#40).
+- **Note rendering** moved into `note_view`; the `get_note` display dispatch collapsed into the same module, keeping formatting out of the tool layer (#39, #43).
+- **Search helpers** consolidated next to `find_notes` (#44).
+- **Interactive config construction** moved to `ui_integration`, so the installer no longer reaches into server-time code (#48).
+- **E2E suite for the notebook allowlist** (#27 by @rubalo), plus broader tightening of the existing e2e tests (#32, #33). `delete_note`'s soft-delete behaviour is asserted explicitly now (#34); `JoplinIdType` validation is exercised through the MCP `.run()` path (#37).
+- **Opt-in e2e** via `--run-e2e`, so the unit suite stays fast by default and e2e only runs when you have a live Joplin instance to point at (#35).
+- **Agent smoke tests** documented in `docs/agent-smoke-tests.md` for hand-driving an MCP-connected agent against the server: a broad first-time-user pass and a targeted allowlist-gating regression. The broad pass is what surfaced #49.
+
+## New Contributors
+
+- @MatthewOGoodman made their first contribution in #23
+- @rubalo made their first contribution in #25
+- @iclem made their first contribution in #28
+
+**Full Changelog**: https://github.com/alondmnt/joplin-mcp/compare/v0.7.1...v0.8.0
+
+---
+
+# [v0.7.1](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.7.1)
+*Released on 2026-03-01T11:37:05Z*
+
+## Fixes
+
+- **Installer permission prompts** — `edit_note` is now correctly toggled by the Update permission, and `import_from_file` by the Write permission during interactive setup
+- Remove redundant import tool note from README (already covered in Tool Permissions section)
+
+**Full Changelog**: https://github.com/alondmnt/joplin-mcp/compare/v0.7.0...v0.7.1
+
+---
+
+# [v0.7.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.7.0)
+*Released on 2026-02-27T03:16:07Z*
+
+## What's New
+
+- **Sorting support for find functions** — `find_notes`, `find_notes_with_tag`, and `find_notes_in_notebook` now accept `order_by` (`title`, `created_time`, `updated_time`) and `order_dir` (`asc`, `desc`) parameters
+- **Claude Code plugin** — Joplin orchestration skill for Claude Code with marketplace support
+
+## Other Changes
+
+- Remove dead code from `__init__.py`
+- Reorganise README with Supported Clients section
+
+**Full Changelog**: https://github.com/alondmnt/joplin-mcp/compare/v0.6.0...v0.7.0
 
 ---
 
 # [v0.6.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.6.0)
-*Released on 2026-02-10*
+*Released on 2026-02-10T00:44:21Z*
 
 - added: `edit_note` tool for precision text editing (find/replace, append, prepend) without full-body replacement
 - added: per-tool env var documentation (`JOPLIN_TOOL_<NAME>`)
@@ -30,7 +97,7 @@
 ---
 
 # [v0.5.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.5.0)
-*Released on 2026-01-31*
+*Released on 2026-01-30T14:16:03Z*
 
 - added: path-based notebook resolution (e.g., `Parent/Child/Notebook`)
 - added: notebook suggestions on path resolution errors
