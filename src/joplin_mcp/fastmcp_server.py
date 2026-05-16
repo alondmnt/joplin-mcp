@@ -399,7 +399,7 @@ _tool_registry: List[tuple] = []  # list of (tool_name, tool_obj)
 
 
 def register_tools(target_mcp: FastMCP, config: "JoplinMCPConfig") -> List[str]:
-    """Reshape ``target_mcp``'s tool manager so only tools enabled in
+    """Reshape ``target_mcp``'s tool registry so only tools enabled in
     ``config.tools`` are exposed. Tools missing from ``config.tools`` default
     to enabled.
 
@@ -407,12 +407,20 @@ def register_tools(target_mcp: FastMCP, config: "JoplinMCPConfig") -> List[str]:
     where runtime config takes effect, so it owns both adding (for tools
     that came back after a previous filter) and removing (for tools the
     config disables). Returns the resulting list of enabled tool names.
+
+    Uses fastmcp v3's ``local_provider.add_tool`` / ``remove_tool`` API:
+    do a remove-all round-trip then re-add the enabled set, so toggling
+    config across reconfigures works in both directions.
     """
     enabled: List[str] = []
-    target_mcp._tool_manager._tools.clear()
+    for tool_name, _ in _tool_registry:
+        try:
+            target_mcp.local_provider.remove_tool(tool_name)
+        except Exception:
+            pass  # already absent (first-run or previously filtered out)
     for tool_name, tool_obj in _tool_registry:
         if config.tools.get(tool_name, True):
-            target_mcp._tool_manager._tools[tool_name] = tool_obj
+            target_mcp.local_provider.add_tool(tool_obj)
             enabled.append(tool_name)
         else:
             logger.info(
@@ -678,17 +686,22 @@ def format_tag_list_with_counts(tags: List[Any], client: Any) -> str:
 
 def create_tool(tool_name: str, operation_name: str):
     """Wrap a tool function with error handling and register it eagerly
-    with the module ``mcp``.
+    with the module ``mcp``. Returns the FunctionTool so callers (including
+    tests) get the usual ``.fn`` (raw function) and ``.run({...})``
+    (MCP-validated path) attributes.
 
-    The returned object is the FastMCP tool wrapper, so callers get the
-    usual ``.fn`` and ``.run`` attributes. The tool is also added to the
-    module registry so register_tools() can later filter the active set
-    based on a runtime config.
+    Uses ``mcp.local_provider.add_tool`` rather than the ``@mcp.tool()``
+    decorator: v3's decorator returns the original function rather than
+    the Tool object, which would break ``.run({...})``-based tests.
+    ``add_tool`` returns the FunctionTool either way.
+
+    The tool is also added to ``_tool_registry`` so ``register_tools()``
+    can later filter the active set based on a runtime config.
     """
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         wrapped = with_client_error_handling(operation_name)(func)
-        tool_obj = mcp.tool()(wrapped)
+        tool_obj = mcp.local_provider.add_tool(wrapped)
         _tool_registry.append((tool_name, tool_obj))
         return tool_obj
 

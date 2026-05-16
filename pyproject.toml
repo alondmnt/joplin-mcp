@@ -33,7 +33,7 @@ requires-python = ">=3.10"
 dependencies = [
     "mcp>=1,<2",
     "joppy>=1.0.0",
-    "fastmcp>=2,<3",
+    "fastmcp>=3,<4,!=3.3.1",
     "pydantic>=2,<3",
     "httpx>=0.24,<1",
     "typing-extensions>=4.0.0",

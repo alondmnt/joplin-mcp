@@ -27,6 +27,10 @@
 - `delete_notebook` returns a corrected recovery hint.
 - The installer's update-tools prompt now offers `restore_from_trash` on upgrade.
 
+## Dependency Changes
+
+- **`fastmcp` upgraded to v3** (`>=3,<4`, with `3.3.1` excluded for an upstream import regression). `fastmcp` 3.x moved tool storage off `_tool_manager._tools` onto a provider model and made decorators return the wrapped function instead of a Tool object, so the internal registration path was rewritten against the v3 API. No surface-API change for users beyond the dependency bump itself.
+
 ## Other Changes
 
 A fair amount of internal restructuring lands alongside the features, mostly aimed at making the codebase easier to navigate and the tests less coupled to import-time state:
