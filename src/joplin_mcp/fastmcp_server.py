@@ -337,10 +337,19 @@ _STACK_FRAME_LINE_RE = re.compile(
     r"^[ \t]+(?:at\s.*|File \"[^\"]*\", line \d+.*)$",
     re.MULTILINE,
 )
-# Absolute filesystem paths under common roots — leak the local install
-# location and OS user. Match the path until whitespace or a closing delimiter.
+# Absolute filesystem paths leak the local install location and OS user.
+# Match any absolute path (Unix "/foo..." or Windows "C:\foo..."), terminating
+# at a quote, bracket, angle, or newline. Spaces inside the match are allowed
+# so "/Applications/Some App.app/..." and "C:\Program Files\Joplin\..." get
+# fully scrubbed. Distinguishing a filesystem path from a URL path is purely
+# contextual: in "http://host/foo" the "/foo" is preceded by an alphanumeric
+# (the host) or another "/" (the "//" after "http:"), whereas a real path
+# follows whitespace, a delimiter, or start-of-string. The Unix alternative
+# uses a negative lookbehind to enforce that; the Windows alternative uses
+# \b so it doesn't eat the "p:" in "http://".
 _ABS_PATH_RE = re.compile(
-    r"/(?:Applications|Users|home)(?:/[^\s\"'`)\]<>]*)?"
+    r"(?<![A-Za-z0-9/.])/[A-Za-z][^\"'`)\]<>\r\n]*"
+    r"|\b[A-Za-z]:[\\/][^\"'`)\]<>\r\n]*"
 )
 
 

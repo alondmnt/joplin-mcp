@@ -97,18 +97,22 @@ class TestStripStackFrames:
 
 
 class TestStripFilesystemPaths:
-    """Absolute paths under common roots leak install location and user."""
+    """Absolute paths leak install location and OS user. Match any abs path
+    (Unix / Windows) and replace with <path>, distinguishing from URL paths
+    by what precedes the leading slash.
+    """
 
-    def test_strips_applications_path(self):
-        """macOS install paths under /Applications get replaced."""
-        text = "at handler (/Applications/Joplin.app/Contents/Resources/lib/x.js:1:2)"
+    def test_strips_applications_path_with_spaces(self):
+        """macOS install paths get fully replaced, including embedded spaces."""
+        text = "at handler (/Applications/Some App.app/Contents/Resources/x.js:1:2)"
         result = _sanitise_error(text)
-        assert "/Applications/Joplin.app" not in result
-        assert "<path>" in result
+        assert "Some App.app" not in result
+        assert "Contents/Resources" not in result
+        assert "(<path>)" in result
 
     def test_strips_users_path(self):
         """macOS user home paths get replaced."""
-        text = "loaded from /Users/alice/.config/joplin/x.json failed"
+        text = "loaded from /Users/alice/.config/joplin/x.json"
         result = _sanitise_error(text)
         assert "/Users/alice" not in result
         assert "<path>" in result
@@ -120,11 +124,85 @@ class TestStripFilesystemPaths:
         assert "/home/bob" not in result
         assert "<path>" in result
 
+    def test_strips_etc_path(self):
+        """/etc paths leak system config layout."""
+        text = "permission denied on /etc/joplin/config.json"
+        result = _sanitise_error(text)
+        assert "/etc/joplin" not in result
+        assert "<path>" in result
+
+    def test_strips_opt_path(self):
+        """/opt is a typical Linux Joplin install root."""
+        text = "at boom (/opt/joplin/resources/app.asar:1:2)"
+        result = _sanitise_error(text)
+        assert "/opt/joplin" not in result
+        assert "(<path>)" in result
+
+    def test_strips_var_and_tmp_paths(self):
+        """/var, /tmp and similar leak runtime state directories."""
+        text = "spilled to /var/log/joplin.log; pid in /tmp/joplin.pid"
+        result = _sanitise_error(text)
+        assert "/var/log" not in result
+        assert "/tmp/joplin" not in result
+
+    def test_strips_snap_path(self):
+        """/snap is a typical Linux Joplin install root."""
+        text = "loaded /snap/joplin/current/usr/bin/joplin"
+        result = _sanitise_error(text)
+        assert "/snap/joplin" not in result
+
     def test_does_not_strip_url_paths(self):
         """A URL path with /notes/ etc. should not be matched as a filesystem path."""
         text = "GET http://localhost:41184/notes/abc?fields=id"
         result = _sanitise_error(text)
         assert "/notes/abc" in result
+
+    def test_does_not_strip_https_url(self):
+        """https://... URLs preserve their path component."""
+        text = "GET https://example.com/api/v1/notes/abc"
+        result = _sanitise_error(text)
+        assert "/api/v1/notes/abc" in result
+
+    def test_does_not_strip_date_string(self):
+        """Date-like '2024/01/15' is not a filesystem path."""
+        text = "captured on 2024/01/15 at midnight"
+        result = _sanitise_error(text)
+        assert "2024/01/15" in result
+
+    def test_does_not_strip_relative_path(self):
+        """Relative paths (no leading /) are left alone."""
+        text = "see docs/architecture.md for details"
+        result = _sanitise_error(text)
+        assert "docs/architecture.md" in result
+
+    def test_strips_windows_drive_path(self):
+        """Windows paths like C:\\Users\\... get replaced."""
+        text = "at handler (C:\\Users\\alice\\AppData\\Local\\Programs\\Joplin\\x.js:1:2)"
+        result = _sanitise_error(text)
+        assert "C:\\Users\\alice" not in result
+        assert "AppData" not in result
+        assert "(<path>)" in result
+
+    def test_strips_windows_program_files_path(self):
+        """Windows install paths under Program Files get fully replaced (incl. space)."""
+        text = "loaded from C:\\Program Files\\Joplin\\resources\\app.asar"
+        result = _sanitise_error(text)
+        assert "Program Files" not in result
+        assert "Joplin\\resources" not in result
+        assert "<path>" in result
+
+    def test_strips_windows_path_with_forward_slashes(self):
+        """Node sometimes emits C:/Users/... — handle that shape too."""
+        text = "at boom (C:/Users/bob/joplin/x.js:1:2)"
+        result = _sanitise_error(text)
+        assert "C:/Users/bob" not in result
+        assert "(<path>)" in result
+
+    def test_does_not_strip_http_scheme(self):
+        """The 'p:' in 'http://...' must not be matched as a drive letter."""
+        text = "GET http://localhost:41184/notes/abc"
+        result = _sanitise_error(text)
+        assert "http://localhost:41184/notes/abc" in result
 
 
 class TestSanitiseRealisticJoppyError:
