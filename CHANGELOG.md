@@ -1,5 +1,5 @@
 # [v0.8.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.8.0)
-*Released on 2026-05-16*
+*Released on 2026-05-16T10:27:53Z*
 
 ## What's New
 
@@ -15,21 +15,24 @@
 - **Move notes between notebooks** — `update_note` accepts a `notebook_name` argument that relocates the note in a single call. Previously the only way to move a note from inside the MCP was a delete-and-recreate dance (closes #21).
 - **Bulk tag operations** — `tag_note` and `untag_note` accept lists of note IDs and tag names. When either side is a list, the cartesian product runs in one call with a per-pair report, so tagging a batch of notes is one tool invocation instead of N (closes #22).
 
+## Dependency Changes
+
+- **`fastmcp` upgraded to v3** (`>=3,<4`, with `3.3.1` excluded for an upstream import regression). `fastmcp` 3.x moved tool storage off `_tool_manager._tools` onto a provider model and made decorators return the wrapped function instead of a Tool object, so the internal registration path was rewritten against the v3 API. No surface-API change for users beyond the dependency bump itself.
+
 ## Fixes
 
-- **Information disclosure in error messages** — tool errors used to forward the Joplin API token via the request URL, the internal TypeScript stack-trace lines from Joplin Desktop, and absolute filesystem paths from the install location. The sanitiser now scrubs all three before the message reaches the MCP client. The leak was surfaced by an agent smoke test that flagged a leaky `get_note` error (#49).
+- **Information disclosure in error messages** — tool errors used to forward the Joplin API token via the request URL, the internal TypeScript stack-trace lines from Joplin Desktop, and absolute filesystem paths from the install location (some wrapped in `file://` URLs, some inside JSON response bodies with escaped `\n` between frames). The sanitiser now scrubs all of those before the message reaches the MCP client. The leak was surfaced by an agent smoke test against `get_note` with an all-zeros ID; a follow-up smoke pass surfaced the JSON-escaped / `file://` variants that the first pass missed (#49).
+- **`delete_notebook` no longer reports SUCCESS for a non-existent notebook.** Joplin's Data API is idempotent on DELETE — calling it for a missing notebook silently 200s. The tool now does a GET first so the 404 propagates as a sanitised `ValueError` instead of masking a no-op as success. Surfaced by the agent smoke test.
+- **`delete_note` no longer reports SUCCESS for a non-existent note** — same root cause as `delete_notebook`. The fix is tidier here because the allowlist branch already had a `client.get_note(...)` for the parent-ID lookup; pulling that GET out of the conditional lets it serve as the existence check too, so there's no extra round trip when the allowlist is on.
 - **Stricter `create_notebook` parent ID validation** — malformed parent IDs are caught at the tool boundary now, instead of falling through to joppy with a less useful error (#28 by @iclem).
 - **Allowlist edge cases**:
   - empty list now denies all access, instead of being treated as "no restriction" (#46, #47)
   - the allowlist is preserved through `JoplinMCPConfig.copy`, so derived configs don't silently drop the restriction (#45)
   - the notebook-resolver factory rebinds correctly when the client is patched, so tests using monkey-patched clients no longer see stale state (#38)
+- **Smart-TOC `NEXT_STEPS` grounded in the note's own headings** — the hint used to show placeholder examples like `section="Introduction"` and `start_line=45` that didn't match the TOC printed directly above. Now both examples pull from the parsed headings: a real heading title and a real line number, so an agent doesn't have to mentally substitute.
 - `DELETED` metadata is surfaced on every note-returning path, so trashed notes are always flagged regardless of which tool fetched them.
-- `delete_notebook` returns a corrected recovery hint.
+- The `delete_notebook` recovery hint is corrected.
 - The installer's update-tools prompt now offers `restore_from_trash` on upgrade.
-
-## Dependency Changes
-
-- **`fastmcp` upgraded to v3** (`>=3,<4`, with `3.3.1` excluded for an upstream import regression). `fastmcp` 3.x moved tool storage off `_tool_manager._tools` onto a provider model and made decorators return the wrapped function instead of a Tool object, so the internal registration path was rewritten against the v3 API. No surface-API change for users beyond the dependency bump itself.
 
 ## Other Changes
 
@@ -41,6 +44,7 @@ A fair amount of internal restructuring lands alongside the features, mostly aim
 - **Note rendering** moved into `note_view`; the `get_note` display dispatch collapsed into the same module, keeping formatting out of the tool layer (#39, #43).
 - **Search helpers** consolidated next to `find_notes` (#44).
 - **Interactive config construction** moved to `ui_integration`, so the installer no longer reaches into server-time code (#48).
+- **Delete-tool docstring asymmetry surfaced** — `delete_note` and `delete_notebook` explicitly state they're reversible (unlike `delete_tag`, which is permanent), and `delete_tag`'s description references the other two from its side. All three now document their missing-ID failure modes via a `Raises:` clause.
 - **E2E suite for the notebook allowlist** (#27 by @rubalo), plus broader tightening of the existing e2e tests (#32, #33). `delete_note`'s soft-delete behaviour is asserted explicitly now (#34); `JoplinIdType` validation is exercised through the MCP `.run()` path (#37).
 - **Opt-in e2e** via `--run-e2e`, so the unit suite stays fast by default and e2e only runs when you have a live Joplin instance to point at (#35).
 - **Agent smoke tests** documented in `docs/agent-smoke-tests.md` for hand-driving an MCP-connected agent against the server: a broad first-time-user pass and a targeted allowlist-gating regression. The broad pass is what surfaced #49.
