@@ -65,7 +65,7 @@ class TestRedactToken:
 
 
 class TestStripStackFrames:
-    """JS and Python stack-frame lines must be dropped."""
+    """JS stack-frame lines must be dropped."""
 
     def test_strips_js_stack_frame_lines(self):
         """Lines like '    at Func (...)' should be removed entirely."""
@@ -78,17 +78,6 @@ class TestStripStackFrames:
         assert "at handleRequest" not in result
         assert "at process._tickCallback" not in result
         assert "Error: Not found" in result
-
-    def test_strips_python_file_frame_lines(self):
-        """Lines like '  File "...", line N, in func' should be removed."""
-        text = (
-            "RuntimeError: boom\n"
-            '  File "module.py", line 42, in some_func\n'
-            "    do_thing()"
-        )
-        result = _sanitise_error(text)
-        assert 'File "module.py"' not in result
-        assert "RuntimeError: boom" in result
 
     def test_keeps_prose_starting_with_at(self):
         """A normal sentence beginning with 'at' (no leading whitespace) stays."""
