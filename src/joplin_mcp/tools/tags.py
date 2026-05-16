@@ -167,13 +167,15 @@ async def delete_tag(
 ) -> str:
     """Delete a tag from Joplin.
 
-    Permanently removes a tag from Joplin. This action cannot be undone.
-    The tag will be removed from all notes that currently have it.
+    Hard-deletes the tag (unlike delete_note and delete_notebook which
+    soft-delete to trash and can be recovered via restore_from_trash).
+    The tag is removed from all notes that currently have it; the notes
+    themselves are unaffected.
 
     Returns:
         str: Success message confirming the tag was deleted.
 
-    Warning: This action is permanent and cannot be undone. The tag will be removed from all notes.
+    Warning: This action is permanent and cannot be undone.
     """
     client = get_joplin_client()
     client.delete_tag(tag_id)

@@ -711,8 +711,10 @@ async def delete_note(
 ) -> str:
     """Delete a note from Joplin (moves to trash).
 
-    Soft-deletes a note by moving it to Joplin's trash.  The note can be
-    found with find_notes("*", trash=True) and restored with restore_from_trash().
+    Soft-deletes a note by moving it to Joplin's trash. The note can be
+    found with find_notes("*", trash=True) and restored with
+    restore_from_trash(). This action is reversible (unlike delete_tag,
+    which is permanent).
 
     Returns:
         str: Success message confirming the note was moved to trash.

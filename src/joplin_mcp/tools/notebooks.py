@@ -135,7 +135,8 @@ async def delete_notebook(
 
     Soft-deletes a notebook and its contained notes by moving them to
     Joplin's trash. Trashed items can be found with find_notes(trash=True)
-    and restored with restore_from_trash().
+    and restored with restore_from_trash(). This action is reversible (unlike
+    delete_tag, which is permanent).
 
     Returns:
         str: Success message confirming the notebook was moved to trash.
