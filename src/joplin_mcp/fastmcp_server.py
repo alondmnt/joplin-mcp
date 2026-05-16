@@ -93,7 +93,7 @@ T = TypeVar("T")
 
 
 # Log the enabled-tool count from the auto-discovered config. Auto-discovery
-# itself (and its file/path logging) lives in joplin_mcp.config -- see ADR-0001.
+# itself (and its file/path logging) lives in joplin_mcp.config.
 try:
     _enabled = sorted([k for k, v in get_config().tools.items() if v])
     logger.info("Module config loaded; enabled tools count=%d", len(_enabled))
@@ -259,8 +259,8 @@ OptionalBoolType = Optional[
 def get_joplin_client() -> ClientApi:
     """Get a configured joppy client instance.
 
-    Reads the live config via the resolver (see ADR-0001). Falls back to
-    the JOPLIN_TOKEN env var if the config has no token.
+    Reads the live config via the resolver. Falls back to the JOPLIN_TOKEN
+    env var if the config has no token.
     """
     config = get_config()
 
@@ -807,8 +807,8 @@ def main(
     try:
         logger.info("🚀 Starting FastMCP Joplin server...")
 
-        # Runtime config supersedes the auto-discovered one. See ADR-0001:
-        # one config identity at a time, wholesale replace.
+        # Runtime config supersedes the auto-discovered one -- one config
+        # identity at a time, wholesale replace.
         if config_file:
             set_config(JoplinMCPConfig.from_file(config_file))
             logger.info(f"Runtime configuration loaded from {config_file}")

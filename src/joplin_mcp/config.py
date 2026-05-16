@@ -1270,10 +1270,10 @@ class JoplinMCPConfig:
 
 
 # === Config resolver ===
-# See ADR-0001 (docs/adr/0001-config-resolver.md): one config identity at
-# a time. Tools read via get_config(); main() replaces wholesale via
-# set_config() when --config-file is supplied. set_config is a replace,
-# not a merge -- partial-blend semantics are intentionally absent.
+# One config identity at a time. Tools read via get_config(); main()
+# replaces wholesale via set_config() when --config-file is supplied.
+# set_config is a replace, not a merge -- partial-blend semantics are
+# intentionally absent.
 
 logger = logging.getLogger(__name__)
 
@@ -1359,7 +1359,7 @@ def set_config(cfg: JoplinMCPConfig) -> None:
     """Replace the live config wholesale.
 
     Subsequent get_config() calls return ``cfg``. This is a replace, not
-    a merge: fields not present on ``cfg`` are gone. See ADR-0001.
+    a merge: fields not present on ``cfg`` are gone.
     """
     global _current_config
     _current_config = cfg

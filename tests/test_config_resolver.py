@@ -1,8 +1,7 @@
 """Tests for the config resolver (get_config / set_config).
 
-See ADR-0001 (docs/adr/0001-config-resolver.md). The resolver mediates
-all reads of the live JoplinMCPConfig; set_config replaces wholesale,
-not by merge.
+The resolver mediates all reads of the live JoplinMCPConfig; set_config
+replaces wholesale, not by merge.
 """
 
 import pytest
@@ -38,7 +37,7 @@ class TestConfigResolver:
 
     def test_set_config_replaces_wholesale(self):
         """set_config replaces the live config; fields from the previous
-        config must not persist (this is the ADR-0001 invariant)."""
+        config must not persist (the wholesale-replace invariant)."""
         with_allowlist = JoplinMCPConfig(
             token="test-token", notebook_allowlist=["AI"]
         )
