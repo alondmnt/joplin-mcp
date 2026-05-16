@@ -330,16 +330,36 @@ def process_search_results(results: Any) -> List[Any]:
 
 
 _TOKEN_QUERY_RE = re.compile(r"([?&]token=)[^&\s\"'`)\]]+", re.IGNORECASE)
+# Drop entire lines that look like JS stack frames ("    at SomeFn (...)") or
+# Python frames ('  File "...", line N'). joppy stringifies HTTPError with the
+# Joplin response body inline, which Joplin populates with a TS stack trace.
+_STACK_FRAME_LINE_RE = re.compile(
+    r"^[ \t]+(?:at\s.*|File \"[^\"]*\", line \d+.*)$",
+    re.MULTILINE,
+)
+# Absolute filesystem paths under common roots — leak the local install
+# location and OS user. Match the path until whitespace or a closing delimiter.
+_ABS_PATH_RE = re.compile(
+    r"/(?:Applications|Users|home)(?:/[^\s\"'`)\]<>]*)?"
+)
 
 
-def _redact_token(text: str) -> str:
-    """Replace the token query param value with *** in any URL inside text.
+def _sanitise_error(text: str) -> str:
+    """Scrub upstream stack traces, filesystem paths, and token params.
 
-    joppy appends ?token=<full-token> to every Joplin API request, so any
-    requests.HTTPError raised upstream stringifies the full token through
-    the request URL. Redact before the error text reaches MCP clients or logs.
+    joppy stringifies requests.HTTPError with the Joplin server response body
+    inline. Joplin populates that body with TypeScript stack-trace lines and
+    absolute paths from its install location, and the request URL carries the
+    full API token. Strip all three before the message reaches MCP clients or
+    logs — information disclosure in a hostile-agent setting and confusing UX
+    in general.
     """
-    return _TOKEN_QUERY_RE.sub(r"\1***", text)
+    text = _TOKEN_QUERY_RE.sub(r"\1***", text)
+    text = _STACK_FRAME_LINE_RE.sub("", text)
+    text = _ABS_PATH_RE.sub("<path>", text)
+    # Collapse blank-line gaps left by stripped trace lines.
+    text = re.sub(r"\n[ \t]*\n+", "\n", text)
+    return text.strip()
 
 
 def with_client_error_handling(operation_name: str):
@@ -353,7 +373,7 @@ def with_client_error_handling(operation_name: str):
             except Exception as e:
                 if "parameter is required" in str(e) or "must be between" in str(e):
                     raise e  # Re-raise validation errors as-is
-                raise ValueError(f"{operation_name} failed: {_redact_token(str(e))}")
+                raise ValueError(f"{operation_name} failed: {_sanitise_error(str(e))}")
 
         return wrapper
 

@@ -9,7 +9,7 @@ from joplin_mcp.fastmcp_server import (
     ItemType,
     JoplinIdType,
     RequiredStringType,
-    _redact_token,
+    _sanitise_error,
     create_tool,
     format_creation_success,
     format_delete_success,
@@ -276,7 +276,7 @@ async def tag_note(
                 client.add_tag_to_note(tag_map[tname], nid)
                 results.append((nid, tname, True, ""))
             except Exception as e:
-                results.append((nid, tname, False, _redact_token(str(e))))
+                results.append((nid, tname, False, _sanitise_error(str(e))))
 
     return _format_tag_op_report("TAG_NOTE", results)
 
@@ -342,6 +342,6 @@ async def untag_note(
                 client.delete(f"/tags/{tag_map[tname]}/notes/{nid}")
                 results.append((nid, tname, True, ""))
             except Exception as e:
-                results.append((nid, tname, False, _redact_token(str(e))))
+                results.append((nid, tname, False, _sanitise_error(str(e))))
 
     return _format_tag_op_report("UNTAG_NOTE", results)
