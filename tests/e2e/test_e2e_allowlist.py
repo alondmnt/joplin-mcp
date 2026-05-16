@@ -587,9 +587,13 @@ class TestErrorMessagePrivacy:
                 await _call(create_note, title="X", notebook_name="E2ETest_Personal", body="x")
 
             error_msg = str(exc_info.value).lower()
-            # Should contain generic denial
-            assert "not accessible" in error_msg
-            # Should NOT contain the blocked notebook name or ID
+            # Generic denial: either "not accessible" (allowlist gate fires
+            # first, when the caller passes a notebook ID) or "not found"
+            # (name resolution sees the filtered map and reports the absence —
+            # more private since it doesn't confirm the notebook exists). Both
+            # close the door; see docs/agent-smoke-tests.md for the rationale.
+            assert "not accessible" in error_msg or "not found" in error_msg
+            # Should NOT contain the blocked notebook ID
             assert hierarchy["E2ETest_Personal"].lower() not in error_msg
 
 
