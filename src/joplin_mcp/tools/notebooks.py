@@ -27,8 +27,9 @@ PARENT_ID_ERROR = (
 
 # Joplin stores folder icons as a JSON string with type=1 for emoji.
 # Length cap leaves room for the longest standard ZWJ emoji sequences
-# (e.g. family-of-four is 7 codepoints) without admitting prose.
-_EMOJI_MAX_LEN = 8
+# (kiss-with-skin-tones can reach ~10 codepoints; cap leaves headroom)
+# without admitting prose.
+_EMOJI_MAX_LEN = 16
 _EMOJI_ERROR = (
     "emoji must be a short emoji glyph; got an empty/whitespace or "
     "letter/digit-containing string, or one over "

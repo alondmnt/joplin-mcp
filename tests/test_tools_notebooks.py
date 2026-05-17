@@ -221,7 +221,25 @@ class TestCreateNotebookTool:
 
         fn = _get_tool_fn(create_notebook)
         with pytest.raises(ValueError, match="emoji"):
-            await fn(title="Bad", emoji="🎯🎯🎯🎯🎯🎯🎯🎯🎯")
+            await fn(title="Bad", emoji="this is a sentence, not an emoji")
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_accepts_long_zwj_sequence_with_skin_tones(self, mock_resolver):
+        """Skin-tone ZWJ sequences (e.g. kiss-with-skin-tones) can reach ~10
+        codepoints. They must clear the length cap or we'd reject legitimate
+        emojis chosen by Joplin's picker."""
+        import json
+        from joplin_mcp.tools.notebooks import create_notebook
+
+        mock_resolver.add_notebook.return_value = "nb_id"
+
+        kiss = "👩🏽‍❤️‍💋‍👨🏿"  # 10 codepoints
+        fn = _get_tool_fn(create_notebook)
+        await fn(title="Couple", emoji=kiss)
+
+        call_kwargs = mock_resolver.add_notebook.call_args[1]
+        assert json.loads(call_kwargs["icon"])["emoji"] == kiss
 
 
 # === Tests for update_notebook tool ===
