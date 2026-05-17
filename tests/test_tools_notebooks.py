@@ -443,6 +443,15 @@ class TestFormatNotebookIcon:
         line = _format_notebook_icon('{"type":1,"emoji":"👨‍👩‍👧","name":""}')
         assert line == "  emoji: 👨‍👩‍👧"
 
+    def test_renders_legacy_typeless_emoji_icon(self):
+        """Older Joplin entries in the wild store emoji icons without an
+        explicit `type` field. Dispatching on the `emoji` key (not `type==1`)
+        keeps them rendering correctly."""
+        from joplin_mcp.fastmcp_server import _format_notebook_icon
+
+        line = _format_notebook_icon('{"emoji":"🎩","name":"top hat"}')
+        assert line == "  emoji: 🎩"
+
     def test_flags_image_icon(self):
         """Non-emoji icon types should be surfaced as 'image' so the agent
         knows an icon exists without trying to render it."""

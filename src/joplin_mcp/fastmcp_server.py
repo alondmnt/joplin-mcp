@@ -533,10 +533,13 @@ def get_tag_id_by_name(name: str) -> str:
 def _format_notebook_icon(icon_field: Optional[str]) -> Optional[str]:
     """Render a notebook's `icon` field as a single output line, or None to skip.
 
-    Joplin stores folder icons as a JSON string with `type` (1 = emoji,
-    others = image). We surface emoji glyphs directly and flag non-emoji
-    icons as "image" so the agent knows an icon exists without trying to
-    render it. Empty / unparseable values yield no line.
+    Joplin stores folder icons as a JSON string. The desktop picker writes
+    `{"type":1, "emoji":..., "name":...}` for emoji icons, but older entries
+    in the wild use the same shape without an explicit `type` field — so we
+    dispatch on the presence of an `emoji` key rather than `type==1`.
+    Anything else with `type==2` or a `dataUrl` is treated as an image,
+    surfaced as `icon: image` so the agent knows one exists. Empty or
+    unparseable values yield no line.
     """
     if not icon_field:
         return None
@@ -546,12 +549,12 @@ def _format_notebook_icon(icon_field: Optional[str]) -> Optional[str]:
         return None
     if not isinstance(data, dict):
         return None
-    if data.get("type") == 1:
-        emoji = data.get("emoji")
-        if emoji:
-            return f"  emoji: {emoji}"
-        return None
-    return "  icon: image"
+    emoji = data.get("emoji")
+    if emoji:
+        return f"  emoji: {emoji}"
+    if data.get("type") == 2 or "dataUrl" in data:
+        return "  icon: image"
+    return None
 
 
 def format_item_list(items: List[Any], item_type: ItemType) -> str:
