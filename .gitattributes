@@ -1,0 +1,4 @@
+# Ensure shell scripts always check out with LF line endings,
+# so the Docker build works when cloned on Windows with core.autocrlf=true.
+*.sh text eol=lf
+docker/entrypoint.sh text eol=lf
