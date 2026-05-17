@@ -498,7 +498,9 @@ async def create_note(
 @create_tool("update_note", "Update note")
 async def update_note(
     note_id: Annotated[JoplinIdType, Field(description="Note ID to update")],
-    title: Annotated[Optional[str], Field(description="New title (optional)")] = None,
+    title: Annotated[
+        Optional[str], Field(description="New title (optional)", min_length=1)
+    ] = None,
     body: Annotated[Optional[str], Field(description="New content (optional)")] = None,
     notebook_name: Annotated[
         Optional[str],

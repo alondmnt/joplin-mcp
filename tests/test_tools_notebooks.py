@@ -327,6 +327,20 @@ class TestUpdateNotebookTool:
         with pytest.raises(ValueError, match="At least one field"):
             await fn(notebook_id="12345678901234567890123456789012")
 
+    @pytest.mark.asyncio
+    async def test_rejects_empty_title(self):
+        """An empty `title` would silently rename the notebook to "" — reject
+        it at the Pydantic boundary instead. Regression guard."""
+        from joplin_mcp.tools.notebooks import update_notebook
+
+        with pytest.raises(ValidationError, match="at least 1 character"):
+            await update_notebook.run(
+                {
+                    "notebook_id": "12345678901234567890123456789012",
+                    "title": "",
+                }
+            )
+
 
 # === Tests for delete_notebook tool ===
 

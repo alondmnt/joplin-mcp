@@ -134,6 +134,21 @@ class TestUpdateNoteTool:
         assert "At least one field must be provided" in str(exc_info.value)
 
     @pytest.mark.asyncio
+    async def test_rejects_empty_title(self):
+        """An empty `title` would silently rename the note to "" — reject it
+        at the Pydantic boundary."""
+        from pydantic import ValidationError
+        from joplin_mcp.tools.notes import update_note
+
+        with pytest.raises(ValidationError, match="at least 1 character"):
+            await update_note.run(
+                {
+                    "note_id": "12345678901234567890123456789012",
+                    "title": "",
+                }
+            )
+
+    @pytest.mark.asyncio
     @patch("joplin_mcp.tools.notes.get_joplin_client")
     async def test_updates_title(self, mock_get_client):
         """Should update note title."""

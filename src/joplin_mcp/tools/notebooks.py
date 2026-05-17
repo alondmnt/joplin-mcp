@@ -152,7 +152,7 @@ async def update_notebook(
     notebook_id: Annotated[JoplinIdType, Field(description="Notebook ID to update")],
     title: Annotated[
         Optional[str],
-        Field(description="New notebook title (optional)"),
+        Field(description="New notebook title (optional)", min_length=1),
     ] = None,
     emoji: Annotated[
         Optional[str],
