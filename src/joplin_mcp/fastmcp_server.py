@@ -593,50 +593,6 @@ def format_item_list(items: List[Any], item_type: ItemType) -> str:
     return "\n".join(result_parts)
 
 
-def format_item_details(item: Any, item_type: ItemType) -> str:
-    """Format a single item (notebook, tag, etc.) for detailed display."""
-    emoji = get_item_emoji(item_type)
-    title = getattr(item, "title", "Untitled")
-    item_id = getattr(item, "id", "unknown")
-
-    result_parts = [f"{emoji} **{title}**", f"ID: {item_id}", ""]
-
-    # Add metadata
-    metadata = []
-
-    # Timestamps
-    created_time = getattr(item, "created_time", None)
-    if created_time:
-        created_date = format_timestamp(created_time)
-        if created_date:
-            metadata.append(f"Created: {created_date}")
-
-    updated_time = getattr(item, "updated_time", None)
-    if updated_time:
-        updated_date = format_timestamp(updated_time)
-        if updated_date:
-            metadata.append(f"Updated: {updated_date}")
-
-    # Parent and path (for notebooks)
-    parent_id = getattr(item, "parent_id", None)
-    if parent_id:
-        metadata.append(f"Parent: {parent_id}")
-    if item_type == ItemType.notebook:
-        try:
-            nb_map = notebook_resolver.get_map()
-            path = _compute_notebook_path(getattr(item, "id", None), nb_map)
-            if path:
-                metadata.append(f"Path: {path}")
-        except Exception:
-            pass
-
-    if metadata:
-        result_parts.append("**Metadata:**")
-        result_parts.extend(f"- {m}" for m in metadata)
-
-    return "\n".join(result_parts)
-
-
 def format_tag_list_with_counts(tags: List[Any], client: Any) -> str:
     """Format a list of tags with note counts for display optimized for LLM comprehension."""
     if not tags:
