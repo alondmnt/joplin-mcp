@@ -169,6 +169,60 @@ class TestCreateNotebookTool:
 
         mock_resolver.add_notebook.assert_called_once_with(title="Top Level Notebook")
 
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_creates_with_emoji_icon(self, mock_resolver):
+        """Should serialise emoji into Joplin's icon JSON shape."""
+        import json
+        from joplin_mcp.tools.notebooks import create_notebook
+
+        mock_resolver.add_notebook.return_value = "nb_id"
+
+        fn = _get_tool_fn(create_notebook)
+        await fn(title="Tasks", emoji="🎯")
+
+        call_kwargs = mock_resolver.add_notebook.call_args[1]
+        assert call_kwargs["title"] == "Tasks"
+        assert json.loads(call_kwargs["icon"]) == {
+            "type": 1,
+            "emoji": "🎯",
+            "name": "",
+        }
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_creates_with_zwj_emoji_icon(self, mock_resolver):
+        """ZWJ emoji sequences (e.g. family, profession) round-trip cleanly."""
+        import json
+        from joplin_mcp.tools.notebooks import create_notebook
+
+        mock_resolver.add_notebook.return_value = "nb_id"
+
+        fn = _get_tool_fn(create_notebook)
+        await fn(title="Family", emoji="👨‍👩‍👧")
+
+        call_kwargs = mock_resolver.add_notebook.call_args[1]
+        assert json.loads(call_kwargs["icon"])["emoji"] == "👨‍👩‍👧"
+
+    @pytest.mark.asyncio
+    async def test_rejects_word_as_emoji(self):
+        """A non-emoji string should be rejected — guards against the agent
+        stuffing a title-like value into the emoji parameter."""
+        from joplin_mcp.tools.notebooks import create_notebook
+
+        fn = _get_tool_fn(create_notebook)
+        with pytest.raises(ValueError, match="emoji"):
+            await fn(title="Bad", emoji="hello")
+
+    @pytest.mark.asyncio
+    async def test_rejects_over_long_emoji(self):
+        """Length cap protects against multi-emoji or pasted prose."""
+        from joplin_mcp.tools.notebooks import create_notebook
+
+        fn = _get_tool_fn(create_notebook)
+        with pytest.raises(ValueError, match="emoji"):
+            await fn(title="Bad", emoji="🎯🎯🎯🎯🎯🎯🎯🎯🎯")
+
 
 # === Tests for update_notebook tool ===
 
@@ -209,6 +263,69 @@ class TestUpdateNotebookTool:
         )
 
         mock_resolver.modify_notebook.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_updates_emoji_only(self, mock_resolver):
+        """Should accept emoji-only updates without requiring a title."""
+        import json
+        from joplin_mcp.tools.notebooks import update_notebook
+
+        fn = _get_tool_fn(update_notebook)
+        await fn(
+            notebook_id="12345678901234567890123456789012",
+            emoji="🕰️",
+        )
+
+        call_args, call_kwargs = mock_resolver.modify_notebook.call_args
+        assert call_args == ("12345678901234567890123456789012",)
+        assert "title" not in call_kwargs
+        assert json.loads(call_kwargs["icon"]) == {
+            "type": 1,
+            "emoji": "🕰️",
+            "name": "",
+        }
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_clears_emoji_with_empty_string(self, mock_resolver):
+        """`emoji=""` should clear the icon by sending an empty string to Joplin."""
+        from joplin_mcp.tools.notebooks import update_notebook
+
+        fn = _get_tool_fn(update_notebook)
+        await fn(
+            notebook_id="12345678901234567890123456789012",
+            emoji="",
+        )
+
+        _, call_kwargs = mock_resolver.modify_notebook.call_args
+        assert call_kwargs["icon"] == ""
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_updates_title_and_emoji_together(self, mock_resolver):
+        """Both fields can be updated in a single call."""
+        from joplin_mcp.tools.notebooks import update_notebook
+
+        fn = _get_tool_fn(update_notebook)
+        await fn(
+            notebook_id="12345678901234567890123456789012",
+            title="Renamed",
+            emoji="📁",
+        )
+
+        _, call_kwargs = mock_resolver.modify_notebook.call_args
+        assert call_kwargs["title"] == "Renamed"
+        assert "icon" in call_kwargs
+
+    @pytest.mark.asyncio
+    async def test_rejects_update_with_no_fields(self):
+        """Calling update_notebook with nothing to change should be an error."""
+        from joplin_mcp.tools.notebooks import update_notebook
+
+        fn = _get_tool_fn(update_notebook)
+        with pytest.raises(ValueError, match="At least one field"):
+            await fn(notebook_id="12345678901234567890123456789012")
 
 
 # === Tests for delete_notebook tool ===
@@ -274,3 +391,51 @@ class TestDeleteNotebookTool:
             await fn(notebook_id="00000000000000000000000000000000")
 
         mock_resolver.delete_notebook.assert_not_called()
+
+
+# === Tests for _format_notebook_icon (list_notebooks output parsing) ===
+
+
+class TestFormatNotebookIcon:
+    """Tests for the icon-field renderer used by format_item_list."""
+
+    def test_renders_emoji_icon(self):
+        from joplin_mcp.fastmcp_server import _format_notebook_icon
+
+        line = _format_notebook_icon('{"type":1,"emoji":"🎯","name":""}')
+        assert line == "  emoji: 🎯"
+
+    def test_renders_zwj_emoji_icon(self):
+        from joplin_mcp.fastmcp_server import _format_notebook_icon
+
+        line = _format_notebook_icon('{"type":1,"emoji":"👨‍👩‍👧","name":""}')
+        assert line == "  emoji: 👨‍👩‍👧"
+
+    def test_flags_image_icon(self):
+        """Non-emoji icon types should be surfaced as 'image' so the agent
+        knows an icon exists without trying to render it."""
+        from joplin_mcp.fastmcp_server import _format_notebook_icon
+
+        line = _format_notebook_icon('{"type":2,"name":"folder","dataUrl":"data:image/png;base64,..."}')
+        assert line == "  icon: image"
+
+    def test_skips_empty_icon(self):
+        from joplin_mcp.fastmcp_server import _format_notebook_icon
+
+        assert _format_notebook_icon("") is None
+        assert _format_notebook_icon(None) is None
+
+    def test_skips_unparseable_icon(self):
+        """Corrupt or unexpected JSON should be silently skipped rather than
+        breaking the listing."""
+        from joplin_mcp.fastmcp_server import _format_notebook_icon
+
+        assert _format_notebook_icon("not json at all") is None
+        assert _format_notebook_icon("[1,2,3]") is None  # JSON but not a dict
+
+    def test_skips_emoji_type_without_emoji_field(self):
+        """A type=1 icon with no emoji glyph is malformed — skip rather than
+        render an empty line."""
+        from joplin_mcp.fastmcp_server import _format_notebook_icon
+
+        assert _format_notebook_icon('{"type":1,"name":""}') is None

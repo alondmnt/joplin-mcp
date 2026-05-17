@@ -27,8 +27,9 @@
 - get_tags_by_note(note_id) - See what tags a note has
 
 📁 MANAGING NOTEBOOKS:
-- list_notebooks() - List all available notebooks
-- create_notebook(title) - Create a new notebook
+- list_notebooks() - List all available notebooks (surfaces each notebook's emoji icon, if set)
+- create_notebook(title, parent_id, emoji) - Create a new notebook, optionally with an emoji icon
+- update_notebook(notebook_id, title, emoji) - Rename a notebook and/or set its emoji icon (emoji="" clears)
 
 🗑️ TRASH MANAGEMENT:
 - restore_from_trash(item_id, item_type) - Restore a soft-deleted note or notebook (item_type: 'note' or 'notebook')
@@ -36,6 +37,7 @@
 """
 
 import datetime
+import json
 import re
 import time
 import logging
@@ -528,6 +530,30 @@ def get_tag_id_by_name(name: str) -> str:
 # Functions below depend on notebook path utilities or config:
 
 
+def _format_notebook_icon(icon_field: Optional[str]) -> Optional[str]:
+    """Render a notebook's `icon` field as a single output line, or None to skip.
+
+    Joplin stores folder icons as a JSON string with `type` (1 = emoji,
+    others = image). We surface emoji glyphs directly and flag non-emoji
+    icons as "image" so the agent knows an icon exists without trying to
+    render it. Empty / unparseable values yield no line.
+    """
+    if not icon_field:
+        return None
+    try:
+        data = json.loads(icon_field)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    if data.get("type") == 1:
+        emoji = data.get("emoji")
+        if emoji:
+            return f"  emoji: {emoji}"
+        return None
+    return "  icon: image"
+
+
 def format_item_list(items: List[Any], item_type: ItemType) -> str:
     """Format a list of items (notebooks, tags, etc.) for display optimized for LLM comprehension."""
     if not items:
@@ -573,6 +599,10 @@ def format_item_list(items: List[Any], item_type: ItemType) -> str:
                     result_parts.append(f"  path: {path}")
             except Exception:
                 pass
+
+            icon_line = _format_notebook_icon(getattr(item, "icon", None))
+            if icon_line:
+                result_parts.append(icon_line)
 
         # Add creation time if available
         created_time = getattr(item, "created_time", None)

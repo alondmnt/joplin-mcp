@@ -445,7 +445,7 @@ Note: Claude Desktop currently uses STDIO transport and does not consume HTTP/SS
 | `tools.edit_note` | `true` | Allow precision edits (find/replace, append, prepend) |
 | `tools.delete_note` | `false` | Allow deleting notes *(disabled by default — destructive)* |
 | `tools.create_notebook` | `true` | Allow creating new notebooks |
-| `tools.update_notebook` | `false` | Allow modifying notebook titles |
+| `tools.update_notebook` | `false` | Allow modifying notebook titles and emoji icons |
 | `tools.delete_notebook` | `false` | Allow deleting notebooks *(disabled by default — destructive)* |
 | `tools.create_tag` | `true` | Allow creating new tags |
 | `tools.update_tag` | `false` | Allow modifying tag titles |
@@ -589,8 +589,8 @@ The E2E suite talks to a real Joplin Desktop via the Web Clipper API and exercis
 | `delete_note` | Delete | Remove notes |
 | **Managing Notebooks** | | |
 | `list_notebooks` | Read | Browse all notebooks |
-| `create_notebook` | Write | Create new notebooks |
-| `update_notebook` | Update | Modify notebook titles |
+| `create_notebook` | Write | Create new notebooks, optionally with an emoji icon |
+| `update_notebook` | Update | Modify notebook title and/or emoji icon |
 | `delete_notebook` | Delete | Remove notebooks |
 | **Managing Tags** | | |
 | `list_tags` | Read | View all available tags |

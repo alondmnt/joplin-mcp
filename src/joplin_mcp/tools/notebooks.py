@@ -1,4 +1,5 @@
 """Notebook tools for Joplin MCP."""
+import json
 from typing import Annotated, Optional
 
 from pydantic import AfterValidator, Field, StringConstraints
@@ -24,6 +25,16 @@ PARENT_ID_ERROR = (
     "32-character lowercase hex parent notebook ID"
 )
 
+# Joplin stores folder icons as a JSON string with type=1 for emoji.
+# Length cap leaves room for the longest standard ZWJ emoji sequences
+# (e.g. family-of-four is 7 codepoints) without admitting prose.
+_EMOJI_MAX_LEN = 8
+_EMOJI_ERROR = (
+    "emoji must be a short emoji glyph; got an empty/whitespace or "
+    "letter/digit-containing string, or one over "
+    f"{_EMOJI_MAX_LEN} characters"
+)
+
 
 def _validate_parent_notebook_id(parent_id: str) -> str:
     """Validate parent notebook IDs after Pydantic has normalized them."""
@@ -35,6 +46,28 @@ def _validate_parent_notebook_id(parent_id: str) -> str:
         return validate_joplin_id(normalized)
     except ValueError as exc:
         raise ValueError(PARENT_ID_ERROR) from exc
+
+
+def _build_icon_payload(emoji: str) -> str:
+    """Convert an `emoji` parameter to Joplin's icon-field wire format.
+
+    Empty string is passed through unchanged (sentinel for "clear icon").
+    Other strings are validated and serialised as a type=1 emoji icon.
+    """
+    if emoji == "":
+        return ""
+
+    if (
+        not emoji.strip()
+        or len(emoji) > _EMOJI_MAX_LEN
+        or any(c.isascii() and c.isalnum() for c in emoji)
+    ):
+        raise ValueError(_EMOJI_ERROR)
+
+    return json.dumps(
+        {"type": 1, "emoji": emoji, "name": ""},
+        ensure_ascii=False,
+    )
 
 
 ParentNotebookIdType = Annotated[
@@ -57,7 +90,7 @@ async def list_notebooks() -> str:
         str: Formatted list of all notebooks including title, unique ID, parent notebook (if sub-notebook), and creation date.
     """
     client = get_joplin_client()
-    fields_list = "id,title,created_time,updated_time,parent_id"
+    fields_list = "id,title,created_time,updated_time,parent_id,icon"
     notebooks = client.get_all_notebooks(fields=fields_list)
     if get_config().has_notebook_allowlist:
         notebooks = notebook_resolver.filter_accessible(
@@ -73,11 +106,16 @@ async def create_notebook(
         Optional[ParentNotebookIdType],
         Field(description="Parent notebook ID (optional)"),
     ] = None,
+    emoji: Annotated[
+        Optional[str],
+        Field(description="Single emoji glyph to use as the notebook's icon (optional)"),
+    ] = None,
 ) -> str:
     """Create a new notebook (folder) in Joplin to organize your notes.
 
     Creates a new notebook that can be used to organize and contain notes. You can create
-    top-level notebooks or sub-notebooks within existing notebooks.
+    top-level notebooks or sub-notebooks within existing notebooks, optionally with an
+    emoji icon shown in Joplin's sidebar.
 
     Returns:
         str: Success message containing the created notebook's title and unique ID.
@@ -85,6 +123,7 @@ async def create_notebook(
     Examples:
         - create_notebook("Work Projects") - Create a top-level notebook
         - create_notebook("2024 Projects", "0123456789abcdef0123456789abcdef") - Create a sub-notebook
+        - create_notebook("Tasks", emoji="🎯") - Create a notebook with an emoji icon
     """
 
     normalized_parent_id = parent_id.strip() if parent_id is not None else None
@@ -101,6 +140,8 @@ async def create_notebook(
     notebook_kwargs = {"title": title}
     if normalized_parent_id:
         notebook_kwargs["parent_id"] = normalized_parent_id
+    if emoji is not None:
+        notebook_kwargs["icon"] = _build_icon_payload(emoji)
 
     notebook = notebook_resolver.add_notebook(**notebook_kwargs)
     return format_creation_success(ItemType.notebook, title, str(notebook))
@@ -109,21 +150,48 @@ async def create_notebook(
 @create_tool("update_notebook", "Update notebook")
 async def update_notebook(
     notebook_id: Annotated[JoplinIdType, Field(description="Notebook ID to update")],
-    title: Annotated[RequiredStringType, Field(description="New notebook title")],
+    title: Annotated[
+        Optional[str],
+        Field(description="New notebook title (optional)"),
+    ] = None,
+    emoji: Annotated[
+        Optional[str],
+        Field(
+            description=(
+                "New emoji icon for the notebook (optional). "
+                "Pass an empty string to clear an existing icon."
+            )
+        ),
+    ] = None,
 ) -> str:
-    """Update an existing notebook.
+    """Update an existing notebook's title and/or emoji icon.
 
-    Updates the title of an existing notebook. Currently only the title can be updated.
+    Pass `emoji=""` to clear an existing icon. At least one of `title` or `emoji`
+    must be provided.
 
     Returns:
         str: Success message confirming the notebook was updated.
+
+    Examples:
+        - update_notebook("0123...", title="Archive") - Rename a notebook
+        - update_notebook("0123...", emoji="🎯") - Set or replace the emoji icon
+        - update_notebook("0123...", emoji="") - Clear the emoji icon
     """
+    update_kwargs = {}
+    if title is not None:
+        update_kwargs["title"] = title
+    if emoji is not None:
+        update_kwargs["icon"] = _build_icon_payload(emoji)
+
+    if not update_kwargs:
+        raise ValueError("At least one field must be provided for update")
+
     if get_config().has_notebook_allowlist:
         notebook_resolver.validate_access(
             notebook_id, allowlist_entries=get_config().notebook_allowlist
         )
 
-    notebook_resolver.modify_notebook(notebook_id, title=title)
+    notebook_resolver.modify_notebook(notebook_id, **update_kwargs)
     return format_update_success(ItemType.notebook, notebook_id)
 
 
