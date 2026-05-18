@@ -10,6 +10,7 @@
 📋 MANAGING NOTES:
 - create_note(title, notebook_name, body) - Create a new note
 - get_note(note_id) - Get a specific note by ID with smart display (sections, line ranges, TOC)
+- get_note_resources(note_id, ocr_only) - List a note's resources, including OCR text from images/PDFs
 - get_links(note_id) - Extract all links to other notes from a note
 - update_note(note_id, title, body) - Update an existing note
 - edit_note(note_id, new_string, old_string, replace_all, position) - Precision edit note content

@@ -574,6 +574,293 @@ class TestGetLinksTool:
         assert "section_slug: my-section" in result
 
 
+def _make_resource(rid, title="x.png", mime="image/png", ocr_text="", ocr_status=0):
+    """Build a MagicMock resource matching joppy's ResourceData attribute shape."""
+    r = MagicMock()
+    r.id = rid
+    r.title = title
+    r.mime = mime
+    r.ocr_text = ocr_text
+    r.ocr_status = ocr_status
+    return r
+
+
+def _make_page(items, has_more=False):
+    """Build a MagicMock matching joppy DataList shape."""
+    page = MagicMock()
+    page.items = items
+    page.has_more = has_more
+    return page
+
+
+class TestGetNoteResourcesTool:
+    """Tests for get_note_resources tool."""
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_empty_resource_list(self, mock_get_client):
+        """No resources attached -> 'RESOURCES: None' and zero counts."""
+        from joplin_mcp.tools.notes import get_note_resources
+
+        mock_client = MagicMock()
+        mock_client.get_resources.return_value = _make_page([])
+        mock_get_client.return_value = mock_client
+
+        result = await get_note_resources.fn("12345678901234567890123456789012")
+
+        assert "TOTAL_RESOURCES: 0" in result
+        assert "RESOURCES_WITH_OCR_TEXT: 0" in result
+        assert "RESOURCES: None" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_single_resource_with_ocr_text(self, mock_get_client):
+        """Resource with OCR text -> rendered with status label and indented text."""
+        from joplin_mcp.tools.notes import get_note_resources
+
+        mock_client = MagicMock()
+        mock_client.get_resources.return_value = _make_page([
+            _make_resource("res1", title="photo.png", ocr_text="Hello\nworld", ocr_status=2),
+        ])
+        mock_get_client.return_value = mock_client
+
+        result = await get_note_resources.fn("12345678901234567890123456789012")
+
+        assert "TOTAL_RESOURCES: 1" in result
+        assert "RESOURCES_WITH_OCR_TEXT: 1" in result
+        assert "resource_id: res1" in result
+        assert "title: photo.png" in result
+        assert "ocr_status: done" in result
+        # Multi-line OCR text indented under the literal-block marker.
+        assert "ocr_text: |" in result
+        assert "      Hello" in result
+        assert "      world" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_ocr_only_false_includes_empty_text(self, mock_get_client):
+        """Default ocr_only=False -> resources without OCR text still listed."""
+        from joplin_mcp.tools.notes import get_note_resources
+
+        mock_client = MagicMock()
+        mock_client.get_resources.return_value = _make_page([
+            _make_resource("res1", title="audio.m4a", mime="audio/mp4", ocr_text="", ocr_status=0),
+        ])
+        mock_get_client.return_value = mock_client
+
+        result = await get_note_resources.fn("12345678901234567890123456789012")
+
+        assert "TOTAL_RESOURCES: 1" in result
+        assert "RESOURCES_WITH_OCR_TEXT: 0" in result
+        assert "resource_id: res1" in result
+        assert "ocr_status: none" in result
+        assert "ocr_text: (none)" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_ocr_only_true_filters_empty_text(self, mock_get_client):
+        """ocr_only=True -> resources with empty OCR text are excluded from listing."""
+        from joplin_mcp.tools.notes import get_note_resources
+
+        mock_client = MagicMock()
+        mock_client.get_resources.return_value = _make_page([
+            _make_resource("res1", ocr_text="", ocr_status=0),
+            _make_resource("res2", title="diagram.png", ocr_text="Some text", ocr_status=2),
+        ])
+        mock_get_client.return_value = mock_client
+
+        result = await get_note_resources.fn(
+            "12345678901234567890123456789012", ocr_only=True
+        )
+
+        assert "TOTAL_RESOURCES: 2" in result  # underlying count unchanged
+        assert "RESOURCES_WITH_OCR_TEXT: 1" in result
+        assert "OCR_ONLY_FILTER: true" in result
+        # Listed section has only the resource with OCR text.
+        assert "resource_id: res2" in result
+        assert "resource_id: res1" not in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_ocr_only_true_with_no_ocr_resources(self, mock_get_client):
+        """ocr_only=True with resources but none OCRed -> informative empty message."""
+        from joplin_mcp.tools.notes import get_note_resources
+
+        mock_client = MagicMock()
+        mock_client.get_resources.return_value = _make_page([
+            _make_resource("res1", ocr_text="", ocr_status=0),
+        ])
+        mock_get_client.return_value = mock_client
+
+        result = await get_note_resources.fn(
+            "12345678901234567890123456789012", ocr_only=True
+        )
+
+        assert "TOTAL_RESOURCES: 1" in result
+        assert "RESOURCES_WITH_OCR_TEXT: 0" in result
+        assert "1 resource(s) attached but none have OCR text yet" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_resources_sorted_by_id(self, mock_get_client):
+        """Output ordering is deterministic by resource ID, regardless of input order."""
+        from joplin_mcp.tools.notes import get_note_resources
+
+        mock_client = MagicMock()
+        mock_client.get_resources.return_value = _make_page([
+            _make_resource("zzz", title="last"),
+            _make_resource("aaa", title="first"),
+            _make_resource("mmm", title="middle"),
+        ])
+        mock_get_client.return_value = mock_client
+
+        result = await get_note_resources.fn("12345678901234567890123456789012")
+
+        # The IDs should appear in sorted order.
+        pos_a = result.find("resource_id: aaa")
+        pos_m = result.find("resource_id: mmm")
+        pos_z = result.find("resource_id: zzz")
+        assert 0 < pos_a < pos_m < pos_z
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_pagination_concatenates_pages(self, mock_get_client):
+        """has_more=True triggers another page; both pages are merged."""
+        from joplin_mcp.tools.notes import get_note_resources
+
+        mock_client = MagicMock()
+        mock_client.get_resources.side_effect = [
+            _make_page([_make_resource("res1")], has_more=True),
+            _make_page([_make_resource("res2")], has_more=False),
+        ]
+        mock_get_client.return_value = mock_client
+
+        result = await get_note_resources.fn("12345678901234567890123456789012")
+
+        assert "TOTAL_RESOURCES: 2" in result
+        assert "resource_id: res1" in result
+        assert "resource_id: res2" in result
+        # Two calls, with page=1 then page=2.
+        assert mock_client.get_resources.call_count == 2
+        page_args = [
+            call.kwargs.get("page") for call in mock_client.get_resources.call_args_list
+        ]
+        assert page_args == [1, 2]
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_ocr_status_labels(self, mock_get_client):
+        """All Joplin ocr_status integers map to readable labels."""
+        from joplin_mcp.tools.notes import get_note_resources
+
+        mock_client = MagicMock()
+        mock_client.get_resources.return_value = _make_page([
+            _make_resource("a", ocr_status=0),
+            _make_resource("b", ocr_status=1),
+            _make_resource("c", ocr_status=2),
+            _make_resource("d", ocr_status=3),
+        ])
+        mock_get_client.return_value = mock_client
+
+        result = await get_note_resources.fn("12345678901234567890123456789012")
+
+        assert "ocr_status: none" in result
+        assert "ocr_status: pending" in result
+        assert "ocr_status: done" in result
+        assert "ocr_status: error" in result
+
+
+class TestGetNoteResourceFooter:
+    """Tests for the resource-reference footer appended by get_note."""
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_no_footer_when_body_has_no_refs(self, mock_get_client):
+        """Plain note body with no :/<id> references -> no footer."""
+        from joplin_mcp.tools.notes import get_note
+
+        note = MagicMock()
+        note.id = "12345678901234567890123456789012"
+        note.title = "Plain Note"
+        note.body = "Just some text. No resource references here."
+        note.parent_id = "nb1"
+
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        result = await get_note.fn("12345678901234567890123456789012")
+
+        assert "get_note_resources" not in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_footer_when_body_has_one_ref(self, mock_get_client):
+        """Body with a single :/<id> ref -> footer with count 1."""
+        from joplin_mcp.tools.notes import get_note
+
+        note = MagicMock()
+        note.id = "12345678901234567890123456789012"
+        note.title = "Note With Image"
+        note.body = "Here is an image: ![](:/abcdef0123456789abcdef0123456789)"
+        note.parent_id = "nb1"
+
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        result = await get_note.fn("12345678901234567890123456789012")
+
+        assert "references 1 resource(s)" in result
+        assert "get_note_resources" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_footer_counts_multiple_refs(self, mock_get_client):
+        """Body with multiple :/<id> refs -> footer with accurate count."""
+        from joplin_mcp.tools.notes import get_note
+
+        note = MagicMock()
+        note.id = "12345678901234567890123456789012"
+        note.title = "Multi-resource Note"
+        note.body = (
+            "First: ![](:/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa) and "
+            "second: ![](:/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb) and "
+            "third: ![](:/cccccccccccccccccccccccccccccccc)"
+        )
+        note.parent_id = "nb1"
+
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        result = await get_note.fn("12345678901234567890123456789012")
+
+        assert "references 3 resource(s)" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_no_footer_in_metadata_only_mode(self, mock_get_client):
+        """metadata_only=True hides body content and the footer with it."""
+        from joplin_mcp.tools.notes import get_note
+
+        note = MagicMock()
+        note.id = "12345678901234567890123456789012"
+        note.title = "Note With Image"
+        note.body = "![](:/abcdef0123456789abcdef0123456789)"
+        note.parent_id = "nb1"
+
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        result = await get_note.fn(
+            "12345678901234567890123456789012", metadata_only=True
+        )
+
+        assert "get_note_resources" not in result
+
+
 class TestFindInNoteTool:
     """Tests for find_in_note tool."""
 

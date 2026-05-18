@@ -21,11 +21,11 @@ A **FastMCP-based Model Context Protocol (MCP) server** for [Joplin](https://jop
 
 ## What You Can Do
 
-This MCP server provides **25 optimized tools** for comprehensive Joplin integration:
+This MCP server provides **26 optimized tools** for comprehensive Joplin integration:
 
 ### **Note Management**
 - **Find & Search**: `find_notes` (supports `trash=True` for trashed notes), `find_notes_with_tag`, `find_notes_in_notebook`, `get_all_notes`
-- **CRUD Operations**: `get_note`, `get_links`, `create_note`, `update_note`, `edit_note`, `delete_note`
+- **CRUD Operations**: `get_note`, `get_note_resources` (read OCR text from attached images/PDFs), `get_links`, `create_note`, `update_note`, `edit_note`, `delete_note`
 
 ### **Notebook Management** 
 - **Organize**: `list_notebooks`, `create_notebook`, `update_notebook`, `delete_notebook`
@@ -199,7 +199,7 @@ Negation patterns always win over positive patterns (any negation match on a pat
 ### How It Works
 
 - **Hierarchical access**: Allowing a parent notebook grants access to all its children. Allowing `Projects` means notes in `Projects/Work/Tasks` are also accessible.
-- **Read protection**: `get_note`, `find_notes`, `get_links` — notes in blocked notebooks are filtered out or rejected.
+- **Read protection**: `get_note`, `get_note_resources`, `find_notes`, `get_links` — notes in blocked notebooks are filtered out or rejected.
 - **Write protection**: `create_note`, `update_note`, `edit_note`, `delete_note` — operations on notes in blocked notebooks are rejected.
 - **Notebook operations**: `list_notebooks` only shows accessible notebooks. `create_notebook` is rejected both under a blocked parent and at the top level (no `parent_name`) when an allowlist is set, and `update_notebook` rejects moves to top-level (`parent_name="/"`) under the same policy — both would let the agent silently move a notebook out of allowlist-enforced scope. To grow the allowlist, create or relocate the notebook in the Joplin UI, then add it to `notebook_allowlist` and restart the server.
 - **Search filtering**: `find_notes` results are filtered to only include notes in accessible notebooks.
@@ -459,6 +459,7 @@ Note: Claude Desktop currently uses STDIO transport and does not consume HTTP/SS
 | `tools.find_in_note` | `true` | Allow regex search within a single note |
 | `tools.get_all_notes` | `false` | Allow getting all notes (disabled by default - can fill context window) |
 | `tools.get_note` | `true` | Allow getting specific notes |
+| `tools.get_note_resources` | `true` | Allow reading a note's resources and their OCR text |
 | `tools.get_links` | `true` | Allow extracting links to other notes |
 | `tools.list_notebooks` | `true` | Allow listing all notebooks |
 | `tools.list_tags` | `true` | Allow listing all tags |
@@ -524,7 +525,7 @@ The container listens on `0.0.0.0:8000` by default. If exposing publicly, place 
 ## Project Structure
 
 - **`src/joplin_mcp/`** - Main package directory
-  - `fastmcp_server.py` - Server implementation with 25 tools and Pydantic validation types
+  - `fastmcp_server.py` - Server implementation with 26 tools and Pydantic validation types
   - `config.py` - Configuration management (including notebook allowlist)
   - `notebook_utils.py` - Notebook path resolution, allowlist matching, and caching
   - `server.py` - Server entrypoint (module and CLI)
@@ -552,7 +553,7 @@ Starting Joplin FastMCP Server...
 Successfully connected to Joplin!
 Found X notebooks, Y notes, Z tags
 FastMCP server starting...
-Available tools: 25 tools ready
+Available tools: 26 tools ready
 ```
 
 ### Running Tests
@@ -582,6 +583,7 @@ The E2E suite talks to a real Joplin Desktop via the Web Clipper API and exercis
 | `get_note` | Read | Get specific note by ID |
 | `find_in_note` | Read | Regex search within a single note (paginated matches & context, multiline anchors on by default) |
 | `get_links` | Read | Extract links to other notes from a note |
+| `get_note_resources` | Read | List a note's resources (images, PDFs, attachments) and read their OCR text |
 | **Managing Notes** | | |
 | `create_note` | Write | Create new notes |
 | `update_note` | Update | Modify existing notes (incl. moving between notebooks) |

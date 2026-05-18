@@ -4,7 +4,7 @@ Two prompts for hand-driving an agent against a running joplin-mcp server. Hand 
 
 ## Note on tool availability
 
-The joplin-mcp server exposes ~25 tools, of which ~18 are enabled by default. Each can be toggled per-server via the `tools` block in `joplin-mcp.json`. Off by default (destructive or context-heavy): `get_all_notes`, `delete_note`, `update_notebook`, `delete_notebook`, `update_tag`, `delete_tag`, `import_from_file`. Operators often re-enable some of these once they trust the workflow.
+The joplin-mcp server exposes ~26 tools, of which ~18 are enabled by default. Each can be toggled per-server via the `tools` block in `joplin-mcp.json`. Off by default (destructive or context-heavy): `get_all_notes`, `delete_note`, `update_notebook`, `delete_notebook`, `update_tag`, `delete_tag`, `import_from_file`. Operators often re-enable some of these once they trust the workflow.
 
 The agent should discover its actual tool list from the MCP capability handshake and skip any step that requires a tool it doesn't have — flag the gap in the report rather than failing the run.
 
@@ -12,7 +12,7 @@ The agent should discover its actual tool list from the MCP capability handshake
 
 First-time user perspective. Exercises the main tool surfaces and reports anything awkward, confusing, or leaky.
 
-> You have access to the joplin-mcp server's tools. The server exposes a subset of ~25 tools depending on its config (defaults: ~18 enabled). Off by default are mostly destructive ops: `get_all_notes`, `delete_note`, `update_notebook`, `delete_notebook`, `update_tag`, `delete_tag`, `import_from_file`. Check your tool list before each step and skip any whose tool isn't exposed — note "skipped: `tool_name` not enabled" in the report. Your job is to smoke-test the MCP from a first-time user's perspective and report findings. You're not writing code; this is exploratory tool testing.
+> You have access to the joplin-mcp server's tools. The server exposes a subset of ~26 tools depending on its config (defaults: ~19 enabled). Off by default are mostly destructive ops: `get_all_notes`, `delete_note`, `update_notebook`, `delete_notebook`, `update_tag`, `delete_tag`, `import_from_file`. Check your tool list before each step and skip any whose tool isn't exposed — note "skipped: `tool_name` not enabled" in the report. Your job is to smoke-test the MCP from a first-time user's perspective and report findings. You're not writing code; this is exploratory tool testing.
 >
 > ### Sandbox
 >

@@ -1,4 +1,5 @@
 """Note tools for Joplin MCP."""
+import re
 from typing import Annotated, Any, Dict, List, Optional, Union
 
 from pydantic import Field
@@ -191,7 +192,7 @@ async def get_note(
         parent_id = getattr(note, 'parent_id', '')
         validate_notebook_access(parent_id, allowlist_entries=get_config().notebook_allowlist)
 
-    return note_view.render_note(
+    rendered = note_view.render_note(
         note,
         note_id=note_id,
         section=section,
@@ -202,6 +203,147 @@ async def get_note(
         include_body=include_body,
         config=get_config(),
     )
+
+    # Discoverability hint: if the note's body references resources, point the
+    # agent at get_note_resources. Free check — no extra API call. Suppressed
+    # when the caller asked for metadata only.
+    if include_body:
+        body = getattr(note, "body", "") or ""
+        resource_ref_count = len(_RESOURCE_REF_PATTERN.findall(body))
+        if resource_ref_count > 0:
+            rendered = (
+                f"{rendered}\n\n"
+                f"> This note references {resource_ref_count} resource(s). "
+                f"Use `get_note_resources(\"{note_id}\")` to view their "
+                f"content (including any OCR text from images)."
+            )
+
+    return rendered
+
+
+# Matches Joplin's `:/<id>` resource and note-link references in note bodies.
+# Used by `get_note` to detect attached resources without an extra API call.
+_RESOURCE_REF_PATTERN = re.compile(r":/[a-zA-Z0-9]{32}")
+
+# Joplin's ocr_status integer values, mapped to readable labels.
+# Source: Joplin's BaseItem model. 0=none, 1=pending, 2=done, 3=error.
+_OCR_STATUS_LABELS = {
+    0: "none",
+    1: "pending",
+    2: "done",
+    3: "error",
+}
+
+
+@create_tool("get_note_resources", "Get note resources")
+async def get_note_resources(
+    note_id: Annotated[
+        JoplinIdType, Field(description="Note ID whose resources to list")
+    ],
+    ocr_only: Annotated[
+        OptionalBoolType,
+        Field(description="Return only resources with non-empty OCR text (default: False)"),
+    ] = False,
+) -> str:
+    """List resources attached to a note, including OCR text for images and PDFs.
+
+    Joplin runs OCR on attached images and PDFs and stores the result on each
+    resource. This tool exposes that text so an agent reading a note can also
+    see what's inside its images. Resources without OCR text (audio, plain
+    files, or images not yet OCRed) are still listed unless ``ocr_only=True``.
+
+    Args:
+        note_id: Note identifier.
+        ocr_only: If True, omit resources whose OCR text is empty/whitespace.
+
+    Returns:
+        Formatted listing with per-resource metadata (id, title, mime,
+        ocr_status) and full OCR text where available.
+
+    Examples:
+        get_note_resources("id") - list all resources on the note
+        get_note_resources("id", ocr_only=True) - only resources with OCR text
+    """
+    note_id = validate_joplin_id(note_id)
+    ocr_only = flexible_bool_converter(ocr_only)
+
+    client = get_joplin_client()
+
+    if get_config().has_notebook_allowlist:
+        parent_id = getattr(
+            client.get_note(note_id, fields="id,parent_id"), "parent_id", ""
+        )
+        validate_notebook_access(
+            parent_id, allowlist_entries=get_config().notebook_allowlist
+        )
+
+    resources: List[Any] = []
+    page = 1
+    while True:
+        page_result = client.get_resources(
+            note_id=note_id,
+            fields="id,title,mime,ocr_text,ocr_status",
+            page=page,
+            limit=100,
+        )
+        resources.extend(page_result.items)
+        if not page_result.has_more:
+            break
+        page += 1
+
+    # Deterministic ordering across calls and devices.
+    resources.sort(key=lambda r: getattr(r, "id", "") or "")
+
+    total_resources = len(resources)
+    with_ocr = [
+        r for r in resources
+        if (getattr(r, "ocr_text", "") or "").strip()
+    ]
+    total_with_ocr = len(with_ocr)
+
+    listed = with_ocr if ocr_only else resources
+
+    header = [
+        f"NOTE_ID: {note_id}",
+        f"TOTAL_RESOURCES: {total_resources}",
+        f"RESOURCES_WITH_OCR_TEXT: {total_with_ocr}",
+        f"OCR_ONLY_FILTER: {str(ocr_only).lower()}",
+        "",
+    ]
+
+    if not listed:
+        if ocr_only and total_resources > 0:
+            header.append(
+                f"RESOURCES: None with OCR text "
+                f"({total_resources} resource(s) attached but none have OCR text yet)"
+            )
+        else:
+            header.append("RESOURCES: None")
+        return "\n".join(header)
+
+    header.append("RESOURCES:")
+    for idx, resource in enumerate(listed, 1):
+        rid = getattr(resource, "id", "") or ""
+        title = getattr(resource, "title", "") or "Untitled"
+        mime = getattr(resource, "mime", "") or "unknown"
+        status_raw = getattr(resource, "ocr_status", None)
+        status_label = _OCR_STATUS_LABELS.get(status_raw, str(status_raw))
+        ocr_text = (getattr(resource, "ocr_text", "") or "").strip()
+
+        header.append(f"  RESOURCE_{idx}:")
+        header.append(f"    resource_id: {rid}")
+        header.append(f"    title: {title}")
+        header.append(f"    mime: {mime}")
+        header.append(f"    ocr_status: {status_label}")
+        if ocr_text:
+            header.append("    ocr_text: |")
+            for line in ocr_text.splitlines():
+                header.append(f"      {line}")
+        else:
+            header.append("    ocr_text: (none)")
+        header.append("")
+
+    return "\n".join(header).rstrip()
 
 
 @create_tool("get_links", "Get links")

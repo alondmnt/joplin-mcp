@@ -223,6 +223,73 @@ class TestGetNoteAllowlist:
         mock_validate.assert_called_once_with("any_nb_id", allowlist_entries=[])
 
 
+# === Tests for get_note_resources with allowlist ===
+
+
+class TestGetNoteResourcesAllowlist:
+    """Tests for get_note_resources allowlist validation."""
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.validate_notebook_access")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_get_note_resources_allowlisted(
+        self,
+        mock_get_client,
+        mock_validate,
+        mock_allowlist_config,
+    ):
+        """Should succeed and fetch resources when the parent notebook is allowlisted."""
+        from joplin_mcp.tools.notes import get_note_resources
+
+        mock_note = MagicMock()
+        mock_note.parent_id = "allowlisted_nb_id"
+
+        mock_page = MagicMock()
+        mock_page.items = []
+        mock_page.has_more = False
+
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = mock_note
+        mock_client.get_resources.return_value = mock_page
+        mock_get_client.return_value = mock_client
+
+        fn = _get_tool_fn(get_note_resources)
+        result = await fn(note_id="12345678901234567890123456789012")
+
+        mock_validate.assert_called_once_with(
+            "allowlisted_nb_id",
+            allowlist_entries=mock_allowlist_config.notebook_allowlist,
+        )
+        assert "TOTAL_RESOURCES: 0" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.validate_notebook_access")
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_get_note_resources_non_allowlisted(
+        self,
+        mock_get_client,
+        mock_validate,
+        mock_allowlist_config,
+    ):
+        """Should raise (and not fetch resources) when parent notebook is not allowlisted."""
+        from joplin_mcp.tools.notes import get_note_resources
+
+        mock_note = MagicMock()
+        mock_note.parent_id = "blocked_nb_id"
+
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = mock_note
+        mock_get_client.return_value = mock_client
+
+        mock_validate.side_effect = ValueError("Notebook not accessible")
+
+        fn = _get_tool_fn(get_note_resources)
+        with pytest.raises(ValueError, match="Notebook not accessible"):
+            await fn(note_id="12345678901234567890123456789012")
+
+        mock_client.get_resources.assert_not_called()
+
+
 # === Tests for update_note with allowlist ===
 
 
