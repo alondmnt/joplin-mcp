@@ -568,6 +568,113 @@ def test_compute_notebook_path_returns_none_for_empty():
     assert _compute_notebook_path("", {}) is None
 
 
+class TestWouldCreateCycle:
+    """Tests for NotebookResolver.would_create_cycle.
+
+    Joplin's REST API does not reject cycles or self-moves on PUT /folders/:id
+    -- it silently 200s and leaves the database in an unreachable loop. The
+    tool layer relies on this check to refuse cycle-creating moves before any
+    API call.
+    """
+
+    @staticmethod
+    def _patch_map(resolver, nb_map):
+        """Install a fake map on the resolver, bypassing the cache fetch."""
+        from unittest.mock import patch
+        return patch.object(resolver, "get_map", return_value=nb_map)
+
+    def test_root_destination_never_cycles(self):
+        from joplin_mcp.notebook_utils import notebook_resolver
+
+        with self._patch_map(notebook_resolver, {}):
+            assert (
+                notebook_resolver.would_create_cycle("any_id", "") is False
+            )
+
+    def test_self_move_is_a_cycle(self):
+        from joplin_mcp.notebook_utils import notebook_resolver
+
+        # Even an empty map should catch a self-move via the early-return.
+        with self._patch_map(notebook_resolver, {}):
+            assert (
+                notebook_resolver.would_create_cycle("nb_a", "nb_a") is True
+            )
+
+    def test_one_deep_descendant_is_a_cycle(self):
+        from joplin_mcp.notebook_utils import notebook_resolver
+
+        # B is a child of A. Moving A under B would loop.
+        nb_map = {
+            "nb_a": {"parent_id": ""},
+            "nb_b": {"parent_id": "nb_a"},
+        }
+        with self._patch_map(notebook_resolver, nb_map):
+            assert (
+                notebook_resolver.would_create_cycle("nb_a", "nb_b") is True
+            )
+
+    def test_n_deep_descendant_is_a_cycle(self):
+        from joplin_mcp.notebook_utils import notebook_resolver
+
+        # A -> B -> C -> D. Moving A under D would loop.
+        nb_map = {
+            "nb_a": {"parent_id": ""},
+            "nb_b": {"parent_id": "nb_a"},
+            "nb_c": {"parent_id": "nb_b"},
+            "nb_d": {"parent_id": "nb_c"},
+        }
+        with self._patch_map(notebook_resolver, nb_map):
+            assert (
+                notebook_resolver.would_create_cycle("nb_a", "nb_d") is True
+            )
+
+    def test_sibling_move_is_not_a_cycle(self):
+        from joplin_mcp.notebook_utils import notebook_resolver
+
+        # B and C share parent A. Moving B under C is fine.
+        nb_map = {
+            "nb_a": {"parent_id": ""},
+            "nb_b": {"parent_id": "nb_a"},
+            "nb_c": {"parent_id": "nb_a"},
+        }
+        with self._patch_map(notebook_resolver, nb_map):
+            assert (
+                notebook_resolver.would_create_cycle("nb_b", "nb_c") is False
+            )
+
+    def test_unrelated_subtree_move_is_not_a_cycle(self):
+        from joplin_mcp.notebook_utils import notebook_resolver
+
+        # A -> B; X -> Y. Moving B under Y crosses subtrees -- no cycle.
+        nb_map = {
+            "nb_a": {"parent_id": ""},
+            "nb_b": {"parent_id": "nb_a"},
+            "nb_x": {"parent_id": ""},
+            "nb_y": {"parent_id": "nb_x"},
+        }
+        with self._patch_map(notebook_resolver, nb_map):
+            assert (
+                notebook_resolver.would_create_cycle("nb_b", "nb_y") is False
+            )
+
+    def test_walk_terminates_on_pre_existing_cycle_in_map(self):
+        """Defensive: if the cached map already contains a cycle (corrupt
+        state from earlier writes that bypassed this check), the walk must
+        still terminate via the visited set."""
+        from joplin_mcp.notebook_utils import notebook_resolver
+
+        nb_map = {
+            "nb_a": {"parent_id": "nb_b"},
+            "nb_b": {"parent_id": "nb_a"},  # pre-existing loop
+        }
+        with self._patch_map(notebook_resolver, nb_map):
+            # nb_c isn't in the loop -- moving it under nb_a should terminate
+            # and return False (no cycle relative to nb_c).
+            assert (
+                notebook_resolver.would_create_cycle("nb_c", "nb_a") is False
+            )
+
+
 def test_invalidate_resets_resolver_cache():
     """NotebookResolver.invalidate clears the cached map and allowlist specs."""
     from joplin_mcp.notebook_utils import notebook_resolver

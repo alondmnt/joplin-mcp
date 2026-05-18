@@ -201,7 +201,7 @@ Negation patterns always win over positive patterns (any negation match on a pat
 - **Hierarchical access**: Allowing a parent notebook grants access to all its children. Allowing `Projects` means notes in `Projects/Work/Tasks` are also accessible.
 - **Read protection**: `get_note`, `find_notes`, `get_links` — notes in blocked notebooks are filtered out or rejected.
 - **Write protection**: `create_note`, `update_note`, `edit_note`, `delete_note` — operations on notes in blocked notebooks are rejected.
-- **Notebook operations**: `list_notebooks` only shows accessible notebooks. `create_notebook` is rejected both under a blocked parent and at the top level (no `parent_name`) when an allowlist is set — top-level creation would let the agent silently expand its own scope. To grow the allowlist, create the notebook in the Joplin UI, then add it to `notebook_allowlist` and restart the server.
+- **Notebook operations**: `list_notebooks` only shows accessible notebooks. `create_notebook` is rejected both under a blocked parent and at the top level (no `parent_name`) when an allowlist is set, and `update_notebook` rejects moves to top-level (`parent_name="/"`) under the same policy — both would let the agent silently move a notebook out of allowlist-enforced scope. To grow the allowlist, create or relocate the notebook in the Joplin UI, then add it to `notebook_allowlist` and restart the server.
 - **Search filtering**: `find_notes` results are filtered to only include notes in accessible notebooks.
 - **Tag operations**: `tag_note`, `untag_note`, `get_tags_by_note` enforce access on the note's notebook.
 - **Error privacy**: Blocked access raises a generic "Notebook not accessible" error without revealing notebook names or IDs.
@@ -590,7 +590,7 @@ The E2E suite talks to a real Joplin Desktop via the Web Clipper API and exercis
 | **Managing Notebooks** | | |
 | `list_notebooks` | Read | Browse all notebooks |
 | `create_notebook` | Write | Create new notebooks under an optional parent (by name or path), optionally with an emoji icon |
-| `update_notebook` | Update | Modify notebook title and/or emoji icon |
+| `update_notebook` | Update | Rename, change emoji icon, or move a notebook under another parent (or to top-level with `parent_name="/"`) |
 | `delete_notebook` | Delete | Remove notebooks |
 | **Managing Tags** | | |
 | `list_tags` | Read | View all available tags |

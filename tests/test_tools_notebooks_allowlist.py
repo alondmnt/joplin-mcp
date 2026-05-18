@@ -357,6 +357,66 @@ class TestUpdateNotebookAllowlist:
 
         mock_resolver.modify_notebook.assert_not_called()
 
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_update_notebook_move_to_root_blocked_under_allowlist(
+        self,
+        mock_resolver,
+        mock_allowlist_config,
+    ):
+        """parent_name='/' is rejected under an allowlist -- moving to
+        top-level would silently move a notebook out of the allowlist's
+        path-pattern scope (parallel to the create_notebook top-level block).
+
+        Without an allowlist this is permitted (the user wants free reign);
+        that case is covered by the e2e move-to-root test.
+        """
+        from joplin_mcp.tools.notebooks import update_notebook
+
+        fn = _get_tool_fn(update_notebook)
+        with pytest.raises(ValueError, match="Notebook not accessible"):
+            await fn(
+                notebook_id="12345678901234567890123456789012",
+                parent_name="/",
+            )
+
+        # No mutation, no cycle check, no destination resolution -- the
+        # block fires before any work.
+        mock_resolver.modify_notebook.assert_not_called()
+        mock_resolver.would_create_cycle.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.get_notebook_id_by_name")
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_update_notebook_move_destination_blocked(
+        self,
+        mock_resolver,
+        mock_resolve,
+        mock_allowlist_config,
+    ):
+        """Move destination outside allowlist is rejected before mutation,
+        even if the source notebook itself is allowlisted."""
+        from joplin_mcp.tools.notebooks import update_notebook
+
+        mock_resolve.return_value = "destination_id_000000000000000000"
+        mock_resolver.validate_access.side_effect = ValueError(
+            "Notebook not accessible"
+        )
+
+        fn = _get_tool_fn(update_notebook)
+        with pytest.raises(ValueError, match="Notebook not accessible"):
+            await fn(
+                notebook_id="12345678901234567890123456789012",
+                parent_name="Personal",
+            )
+
+        # validate_access was called for the destination; no mutation happened.
+        mock_resolver.validate_access.assert_called_once_with(
+            "destination_id_000000000000000000",
+            allowlist_entries=mock_allowlist_config.notebook_allowlist,
+        )
+        mock_resolver.modify_notebook.assert_not_called()
+
 
 # === Tests for delete_notebook with allowlist ===
 

@@ -155,6 +155,77 @@ async def test_e2e_create_notebook_missing_parent_raises(e2e_client):
     assert before == after
 
 
+@pytest.mark.asyncio
+async def test_e2e_move_notebook_under_sibling(e2e_client):
+    """update_notebook(parent_name=...) moves a notebook between parents.
+
+    Builds sandbox/A/B + sandbox/C, then moves B under C. Verifies the new
+    parent_id via a direct client read. Sandbox is uuid-named so the test
+    doesn't rely on any pre-existing structure.
+    """
+    from joplin_mcp.tools.notebooks import update_notebook
+
+    suffix = uuid.uuid4().hex[:8]
+    sandbox_id = e2e_client.add_notebook(title=f"__e2e_sandbox_{suffix}__")
+    a_id = e2e_client.add_notebook(title=f"__e2e_a_{suffix}__", parent_id=sandbox_id)
+    b_id = e2e_client.add_notebook(title=f"__e2e_b_{suffix}__", parent_id=a_id)
+    c_id = e2e_client.add_notebook(title=f"__e2e_c_{suffix}__", parent_id=sandbox_id)
+
+    await _call(
+        update_notebook,
+        notebook_id=b_id,
+        parent_name=f"__e2e_sandbox_{suffix}__/__e2e_c_{suffix}__",
+    )
+
+    assert e2e_client.get_notebook(b_id, fields="id,parent_id").parent_id == c_id
+
+
+@pytest.mark.asyncio
+async def test_e2e_move_notebook_to_root(e2e_client):
+    """parent_name='/' moves a notebook to top-level (parent_id == '')."""
+    from joplin_mcp.tools.notebooks import update_notebook
+
+    suffix = uuid.uuid4().hex[:8]
+    sandbox_id = e2e_client.add_notebook(title=f"__e2e_sandbox_{suffix}__")
+    child_id = e2e_client.add_notebook(
+        title=f"__e2e_child_{suffix}__", parent_id=sandbox_id
+    )
+
+    await _call(update_notebook, notebook_id=child_id, parent_name="/")
+
+    assert e2e_client.get_notebook(child_id, fields="id,parent_id").parent_id == ""
+
+
+@pytest.mark.asyncio
+async def test_e2e_move_notebook_cycle_rejected(e2e_client):
+    """Moving a notebook under one of its own descendants is rejected by the
+    tool before any PUT. Regression for the probe finding that Joplin
+    silently accepts cycles."""
+    from joplin_mcp.tools.notebooks import update_notebook
+
+    suffix = uuid.uuid4().hex[:8]
+    sandbox_id = e2e_client.add_notebook(title=f"__e2e_sandbox_{suffix}__")
+    a_id = e2e_client.add_notebook(title=f"__e2e_a_{suffix}__", parent_id=sandbox_id)
+    b_id = e2e_client.add_notebook(title=f"__e2e_b_{suffix}__", parent_id=a_id)
+
+    original_parent = e2e_client.get_notebook(a_id, fields="id,parent_id").parent_id
+
+    with pytest.raises(ValueError, match="under itself or one of its descendants"):
+        await _call(
+            update_notebook,
+            notebook_id=a_id,
+            parent_name=(
+                f"__e2e_sandbox_{suffix}__/__e2e_a_{suffix}__/__e2e_b_{suffix}__"
+            ),
+        )
+
+    # Parent unchanged -- the rejection happened before any API call.
+    assert (
+        e2e_client.get_notebook(a_id, fields="id,parent_id").parent_id
+        == original_parent
+    )
+
+
 # ---------------------------------------------------------------------------
 # Notes — CRUD
 # ---------------------------------------------------------------------------

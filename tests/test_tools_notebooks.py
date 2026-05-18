@@ -347,6 +347,128 @@ class TestUpdateNotebookTool:
                 }
             )
 
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.get_notebook_id_by_name")
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_move_via_parent_name(self, mock_resolver, mock_resolve):
+        """parent_name resolves and threads parent_id to modify_notebook."""
+        from joplin_mcp.tools.notebooks import update_notebook
+
+        mock_resolve.return_value = RESOLVED_PARENT_ID
+        mock_resolver.would_create_cycle.return_value = False
+
+        fn = _get_tool_fn(update_notebook)
+        await fn(
+            notebook_id="12345678901234567890123456789012",
+            parent_name="Archive",
+        )
+
+        mock_resolve.assert_called_once_with("Archive")
+        _, call_kwargs = mock_resolver.modify_notebook.call_args
+        assert call_kwargs["parent_id"] == RESOLVED_PARENT_ID
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_move_to_root_via_slash(self, mock_resolver):
+        """parent_name='/' threads an empty parent_id (Joplin's root sentinel)."""
+        from joplin_mcp.tools.notebooks import update_notebook
+
+        mock_resolver.would_create_cycle.return_value = False
+
+        fn = _get_tool_fn(update_notebook)
+        await fn(
+            notebook_id="12345678901234567890123456789012",
+            parent_name="/",
+        )
+
+        _, call_kwargs = mock_resolver.modify_notebook.call_args
+        assert call_kwargs["parent_id"] == ""
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.get_notebook_id_by_name")
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_move_propagates_resolver_not_found(
+        self, mock_resolver, mock_resolve
+    ):
+        """Resolver errors surface; no modify_notebook call."""
+        from joplin_mcp.tools.notebooks import update_notebook
+
+        mock_resolve.side_effect = ValueError("Notebook 'Missing' not found")
+
+        fn = _get_tool_fn(update_notebook)
+        with pytest.raises(ValueError, match="not found"):
+            await fn(
+                notebook_id="12345678901234567890123456789012",
+                parent_name="Missing",
+            )
+
+        mock_resolver.modify_notebook.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.get_notebook_id_by_name")
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_move_rejects_cycle(self, mock_resolver, mock_resolve):
+        """Cycle detection rejects the move before any modify_notebook call.
+
+        Joplin's REST API silently accepts cycles, so the tool must catch
+        them up-front. Regression guard for the probe finding.
+        """
+        from joplin_mcp.tools.notebooks import update_notebook
+
+        mock_resolve.return_value = "descendant_id_0000000000000000000"
+        mock_resolver.would_create_cycle.return_value = True
+
+        fn = _get_tool_fn(update_notebook)
+        with pytest.raises(ValueError, match="under itself or one of its descendants"):
+            await fn(
+                notebook_id="12345678901234567890123456789012",
+                parent_name="Child",
+            )
+
+        mock_resolver.modify_notebook.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_move_rejects_self(self, mock_resolver):
+        """Self-move (parent_name resolves to the source itself) is rejected
+        by the cycle check (would_create_cycle returns True for self)."""
+        from joplin_mcp.tools.notebooks import update_notebook
+
+        # Mock the cycle check directly — it owns the self-move semantic.
+        mock_resolver.would_create_cycle.return_value = True
+
+        with patch(
+            "joplin_mcp.tools.notebooks.get_notebook_id_by_name",
+            return_value="12345678901234567890123456789012",
+        ):
+            fn = _get_tool_fn(update_notebook)
+            with pytest.raises(ValueError, match="under itself"):
+                await fn(
+                    notebook_id="12345678901234567890123456789012",
+                    parent_name="Self",
+                )
+
+        mock_resolver.modify_notebook.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_move_to_root_alone_satisfies_field_guard(self, mock_resolver):
+        """parent_name='/' alone is a real change, so the at-least-one-field
+        check must not reject it (regression guard)."""
+        from joplin_mcp.tools.notebooks import update_notebook
+
+        mock_resolver.would_create_cycle.return_value = False
+
+        fn = _get_tool_fn(update_notebook)
+        # No title, no emoji, only parent_name="/" — should succeed.
+        result = await fn(
+            notebook_id="12345678901234567890123456789012",
+            parent_name="/",
+        )
+
+        mock_resolver.modify_notebook.assert_called_once()
+        assert "SUCCESS" in result
+
 
 # === Tests for delete_notebook tool ===
 

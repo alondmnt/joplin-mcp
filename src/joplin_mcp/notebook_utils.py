@@ -562,6 +562,34 @@ class NotebookResolver:
 
         return matches[0]
 
+    def would_create_cycle(self, notebook_id: str, new_parent_id: str) -> bool:
+        """Check whether reparenting ``notebook_id`` under ``new_parent_id``
+        would create a cycle.
+
+        Joplin's REST API does not reject cycles or self-moves — it silently
+        200s and leaves the database in an unreachable loop. Callers that
+        change a notebook's parent must check first.
+
+        Walks ``new_parent_id``'s ancestor chain via the cached notebook map.
+        Returns True if ``notebook_id`` appears in the chain (including the
+        self-move case where ``new_parent_id == notebook_id``). Empty
+        ``new_parent_id`` is treated as root and never creates a cycle.
+        """
+        if not new_parent_id:
+            return False
+        if new_parent_id == notebook_id:
+            return True
+
+        nb_map = self.get_map()
+        visited: set = set()
+        cursor: Optional[str] = new_parent_id
+        while cursor and cursor not in visited:
+            if cursor == notebook_id:
+                return True
+            visited.add(cursor)
+            cursor = (nb_map.get(cursor) or {}).get("parent_id")
+        return False
+
     # === Mutation methods (auto-invalidate) ===
 
     def add_notebook(self, **kwargs: Any) -> Any:

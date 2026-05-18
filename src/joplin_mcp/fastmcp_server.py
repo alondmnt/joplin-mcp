@@ -29,7 +29,7 @@
 📁 MANAGING NOTEBOOKS:
 - list_notebooks() - List all available notebooks (surfaces each notebook's emoji icon, if set)
 - create_notebook(title, parent_name, emoji) - Create a new notebook (omit parent_name for top-level), optionally with an emoji icon
-- update_notebook(notebook_id, title, emoji) - Rename a notebook and/or set its emoji icon (emoji="" clears)
+- update_notebook(notebook_id, title, emoji, parent_name) - Rename, set emoji icon (emoji="" clears), or move under another parent (parent_name="/" for top-level)
 
 🗑️ TRASH MANAGEMENT:
 - restore_from_trash(item_id, item_type) - Restore a soft-deleted note or notebook (item_type: 'note' or 'notebook')

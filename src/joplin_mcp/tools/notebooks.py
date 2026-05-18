@@ -151,11 +151,22 @@ async def update_notebook(
             )
         ),
     ] = None,
+    parent_name: Annotated[
+        Optional[str],
+        Field(
+            description=(
+                "Move the notebook under another parent by name or path "
+                "(e.g., 'Projects/Work'), or '/' to move it to top-level. "
+                "Omit to leave the parent unchanged."
+            )
+        ),
+    ] = None,
 ) -> str:
-    """Update an existing notebook's title and/or emoji icon.
+    """Update an existing notebook's title, emoji icon, or parent.
 
-    Pass `emoji=""` to clear an existing icon. At least one of `title` or `emoji`
-    must be provided.
+    Pass `emoji=""` to clear an existing icon. Pass `parent_name="/"` to move
+    the notebook to top-level, or a name/path to move it under another parent.
+    At least one of `title`, `emoji`, or `parent_name` must be provided.
 
     Returns:
         str: Success message confirming the notebook was updated.
@@ -164,12 +175,35 @@ async def update_notebook(
         - update_notebook("0123...", title="Archive") - Rename a notebook
         - update_notebook("0123...", emoji="🎯") - Set or replace the emoji icon
         - update_notebook("0123...", emoji="") - Clear the emoji icon
+        - update_notebook("0123...", parent_name="Projects/Work") - Move under another parent
+        - update_notebook("0123...", parent_name="/") - Move to top-level
     """
     update_kwargs = {}
     if title is not None:
         update_kwargs["title"] = title
     if emoji is not None:
         update_kwargs["icon"] = _build_icon_payload(emoji)
+
+    if parent_name is not None:
+        if parent_name == "/":
+            # Moving to top-level under an allowlist would let the agent
+            # silently move a notebook out of policy-enforced scope -- mirrors
+            # the create_notebook top-level block. No allowlist == free reign.
+            if get_config().has_notebook_allowlist:
+                raise ValueError("Notebook not accessible")
+            new_parent_id = ""
+        else:
+            new_parent_id = get_notebook_id_by_name(parent_name)
+            if get_config().has_notebook_allowlist:
+                notebook_resolver.validate_access(
+                    new_parent_id,
+                    allowlist_entries=get_config().notebook_allowlist,
+                )
+        if notebook_resolver.would_create_cycle(notebook_id, new_parent_id):
+            raise ValueError(
+                "Cannot move a notebook under itself or one of its descendants"
+            )
+        update_kwargs["parent_id"] = new_parent_id
 
     if not update_kwargs:
         raise ValueError("At least one field must be provided for update")
