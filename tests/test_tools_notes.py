@@ -675,7 +675,6 @@ class TestGetNoteResourcesTool:
 
         assert "TOTAL_RESOURCES: 2" in result  # underlying count unchanged
         assert "RESOURCES_WITH_OCR_TEXT: 1" in result
-        assert "OCR_ONLY_FILTER: true" in result
         # Listed section has only the resource with OCR text.
         assert "resource_id: res2" in result
         assert "resource_id: res1" not in result
@@ -769,96 +768,23 @@ class TestGetNoteResourcesTool:
         assert "ocr_status: done" in result
         assert "ocr_status: error" in result
 
-
-class TestGetNoteResourceFooter:
-    """Tests for the resource-reference footer appended by get_note."""
-
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.notes.get_joplin_client")
-    async def test_no_footer_when_body_has_no_refs(self, mock_get_client):
-        """Plain note body with no :/<id> references -> no footer."""
-        from joplin_mcp.tools.notes import get_note
-
-        note = MagicMock()
-        note.id = "12345678901234567890123456789012"
-        note.title = "Plain Note"
-        note.body = "Just some text. No resource references here."
-        note.parent_id = "nb1"
+    async def test_unknown_ocr_status_maps_to_unknown(self, mock_get_client):
+        """Missing or unrecognised ocr_status renders as 'unknown', not 'None'."""
+        from joplin_mcp.tools.notes import get_note_resources
 
         mock_client = MagicMock()
-        mock_client.get_note.return_value = note
+        mock_client.get_resources.return_value = _make_page([
+            _make_resource("a", ocr_status=None),
+            _make_resource("b", ocr_status=99),
+        ])
         mock_get_client.return_value = mock_client
 
-        result = await get_note.fn("12345678901234567890123456789012")
+        result = await get_note_resources.fn("12345678901234567890123456789012")
 
-        assert "get_note_resources" not in result
-
-    @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.notes.get_joplin_client")
-    async def test_footer_when_body_has_one_ref(self, mock_get_client):
-        """Body with a single :/<id> ref -> footer with count 1."""
-        from joplin_mcp.tools.notes import get_note
-
-        note = MagicMock()
-        note.id = "12345678901234567890123456789012"
-        note.title = "Note With Image"
-        note.body = "Here is an image: ![](:/abcdef0123456789abcdef0123456789)"
-        note.parent_id = "nb1"
-
-        mock_client = MagicMock()
-        mock_client.get_note.return_value = note
-        mock_get_client.return_value = mock_client
-
-        result = await get_note.fn("12345678901234567890123456789012")
-
-        assert "references 1 resource(s)" in result
-        assert "get_note_resources" in result
-
-    @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.notes.get_joplin_client")
-    async def test_footer_counts_multiple_refs(self, mock_get_client):
-        """Body with multiple :/<id> refs -> footer with accurate count."""
-        from joplin_mcp.tools.notes import get_note
-
-        note = MagicMock()
-        note.id = "12345678901234567890123456789012"
-        note.title = "Multi-resource Note"
-        note.body = (
-            "First: ![](:/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa) and "
-            "second: ![](:/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb) and "
-            "third: ![](:/cccccccccccccccccccccccccccccccc)"
-        )
-        note.parent_id = "nb1"
-
-        mock_client = MagicMock()
-        mock_client.get_note.return_value = note
-        mock_get_client.return_value = mock_client
-
-        result = await get_note.fn("12345678901234567890123456789012")
-
-        assert "references 3 resource(s)" in result
-
-    @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.notes.get_joplin_client")
-    async def test_no_footer_in_metadata_only_mode(self, mock_get_client):
-        """metadata_only=True hides body content and the footer with it."""
-        from joplin_mcp.tools.notes import get_note
-
-        note = MagicMock()
-        note.id = "12345678901234567890123456789012"
-        note.title = "Note With Image"
-        note.body = "![](:/abcdef0123456789abcdef0123456789)"
-        note.parent_id = "nb1"
-
-        mock_client = MagicMock()
-        mock_client.get_note.return_value = note
-        mock_get_client.return_value = mock_client
-
-        result = await get_note.fn(
-            "12345678901234567890123456789012", metadata_only=True
-        )
-
-        assert "get_note_resources" not in result
+        assert "ocr_status: unknown" in result
+        assert "ocr_status: None" not in result
 
 
 class TestFindInNoteTool:

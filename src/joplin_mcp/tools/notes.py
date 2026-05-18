@@ -1,5 +1,4 @@
 """Note tools for Joplin MCP."""
-import re
 from typing import Annotated, Any, Dict, List, Optional, Union
 
 from pydantic import Field
@@ -192,7 +191,7 @@ async def get_note(
         parent_id = getattr(note, 'parent_id', '')
         validate_notebook_access(parent_id, allowlist_entries=get_config().notebook_allowlist)
 
-    rendered = note_view.render_note(
+    return note_view.render_note(
         note,
         note_id=note_id,
         section=section,
@@ -204,26 +203,6 @@ async def get_note(
         config=get_config(),
     )
 
-    # Discoverability hint: if the note's body references resources, point the
-    # agent at get_note_resources. Free check — no extra API call. Suppressed
-    # when the caller asked for metadata only.
-    if include_body:
-        body = getattr(note, "body", "") or ""
-        resource_ref_count = len(_RESOURCE_REF_PATTERN.findall(body))
-        if resource_ref_count > 0:
-            rendered = (
-                f"{rendered}\n\n"
-                f"> This note references {resource_ref_count} resource(s). "
-                f"Use `get_note_resources(\"{note_id}\")` to view their "
-                f"content (including any OCR text from images)."
-            )
-
-    return rendered
-
-
-# Matches Joplin's `:/<id>` resource and note-link references in note bodies.
-# Used by `get_note` to detect attached resources without an extra API call.
-_RESOURCE_REF_PATTERN = re.compile(r":/[a-zA-Z0-9]{32}")
 
 # Joplin's ocr_status integer values, mapped to readable labels.
 # Source: Joplin's BaseItem model. 0=none, 1=pending, 2=done, 3=error.
@@ -307,7 +286,6 @@ async def get_note_resources(
         f"NOTE_ID: {note_id}",
         f"TOTAL_RESOURCES: {total_resources}",
         f"RESOURCES_WITH_OCR_TEXT: {total_with_ocr}",
-        f"OCR_ONLY_FILTER: {str(ocr_only).lower()}",
         "",
     ]
 
@@ -327,7 +305,7 @@ async def get_note_resources(
         title = getattr(resource, "title", "") or "Untitled"
         mime = getattr(resource, "mime", "") or "unknown"
         status_raw = getattr(resource, "ocr_status", None)
-        status_label = _OCR_STATUS_LABELS.get(status_raw, str(status_raw))
+        status_label = _OCR_STATUS_LABELS.get(status_raw, "unknown")
         ocr_text = (getattr(resource, "ocr_text", "") or "").strip()
 
         header.append(f"  RESOURCE_{idx}:")
