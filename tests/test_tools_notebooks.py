@@ -11,6 +11,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
+RESOLVED_PARENT_ID = "abcdefabcdefabcdefabcdefabcdefab"
+
 
 def _get_tool_fn(tool):
     """Get the underlying function from a tool (handles both wrapped and unwrapped)."""
@@ -77,24 +79,57 @@ class TestCreateNotebookTool:
         assert "My New Notebook" in result
 
     @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.get_notebook_id_by_name")
     @patch("joplin_mcp.tools.notebooks.notebook_resolver")
-    async def test_creates_sub_notebook(self, mock_resolver):
-        """Should create a sub-notebook with parent_id."""
+    async def test_creates_sub_notebook_by_name(self, mock_resolver, mock_resolve):
+        """parent_name resolves to an id and is threaded to add_notebook."""
         from joplin_mcp.tools.notebooks import create_notebook
 
+        mock_resolve.return_value = RESOLVED_PARENT_ID
         mock_resolver.add_notebook.return_value = "sub_notebook_id_67890"
 
         fn = _get_tool_fn(create_notebook)
-        result = await fn(
-            title="Sub Notebook",
-            parent_id="12345678901234567890123456789012"
-        )
+        result = await fn(title="Sub Notebook", parent_name="Work")
 
-        mock_resolver.add_notebook.assert_called_once()
+        mock_resolve.assert_called_once_with("Work")
         call_kwargs = mock_resolver.add_notebook.call_args[1]
         assert call_kwargs["title"] == "Sub Notebook"
-        assert call_kwargs["parent_id"] == "12345678901234567890123456789012"
+        assert call_kwargs["parent_id"] == RESOLVED_PARENT_ID
         assert "SUCCESS" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.get_notebook_id_by_name")
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_creates_sub_notebook_by_path(self, mock_resolver, mock_resolve):
+        """parent_name supports path syntax."""
+        from joplin_mcp.tools.notebooks import create_notebook
+
+        mock_resolve.return_value = RESOLVED_PARENT_ID
+        mock_resolver.add_notebook.return_value = "sub_notebook_id"
+
+        fn = _get_tool_fn(create_notebook)
+        await fn(title="Tasks", parent_name="Projects/Work")
+
+        mock_resolve.assert_called_once_with("Projects/Work")
+        call_kwargs = mock_resolver.add_notebook.call_args[1]
+        assert call_kwargs["parent_id"] == RESOLVED_PARENT_ID
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.get_notebook_id_by_name")
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_propagates_resolver_not_found_error(
+        self, mock_resolver, mock_resolve
+    ):
+        """Resolver-not-found errors surface; no notebook is created."""
+        from joplin_mcp.tools.notebooks import create_notebook
+
+        mock_resolve.side_effect = ValueError("Notebook 'Missing' not found")
+
+        fn = _get_tool_fn(create_notebook)
+        with pytest.raises(ValueError, match="not found"):
+            await fn(title="Sub Notebook", parent_name="Missing")
+
+        mock_resolver.add_notebook.assert_not_called()
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.notebooks.notebook_resolver")
@@ -112,60 +147,13 @@ class TestCreateNotebookTool:
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.notebooks.notebook_resolver")
-    async def test_strips_whitespace_from_parent_id(self, mock_resolver):
-        """Should strip whitespace from parent_id."""
+    async def test_accepts_explicit_null_parent_name(self, mock_resolver):
+        """Explicit parent_name=None creates a top-level notebook."""
         from joplin_mcp.tools.notebooks import create_notebook
 
         mock_resolver.add_notebook.return_value = "nb_id"
 
-        await create_notebook.run(
-            {"title": "Test", "parent_id": " 12345678901234567890123456789012 "}
-        )
-
-        call_kwargs = mock_resolver.add_notebook.call_args[1]
-        assert call_kwargs["parent_id"] == "12345678901234567890123456789012"
-
-    @pytest.mark.asyncio
-    async def test_rejects_string_null_parent_id(self):
-        """Should reject the literal string 'null' as parent_id."""
-        from joplin_mcp.tools.notebooks import create_notebook
-
-        with pytest.raises(ValidationError, match="at least 32 characters"):
-            await create_notebook.run({"title": "Bad Notebook", "parent_id": "null"})
-
-    @pytest.mark.asyncio
-    async def test_rejects_blank_parent_id(self):
-        """Should reject blank parent_id values instead of treating them as valid."""
-        from joplin_mcp.tools.notebooks import create_notebook
-
-        with pytest.raises(ValidationError, match="at least 32 characters"):
-            await create_notebook.run({"title": "Bad Notebook", "parent_id": "   "})
-
-    @pytest.mark.asyncio
-    async def test_rejects_non_hex_parent_id(self):
-        """Should reject 32-char parent IDs that are not valid hex."""
-        from joplin_mcp.tools.notebooks import create_notebook
-
-        with pytest.raises(
-            ValidationError,
-            match="parent_id must be omitted for a top-level notebook",
-        ):
-            await create_notebook.run(
-                {
-                    "title": "Bad Notebook",
-                    "parent_id": "g2345678901234567890123456789012",
-                }
-            )
-
-    @pytest.mark.asyncio
-    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
-    async def test_accepts_explicit_null_parent_id(self, mock_resolver):
-        """Should allow explicit null parent_id values via the MCP tool path."""
-        from joplin_mcp.tools.notebooks import create_notebook
-
-        mock_resolver.add_notebook.return_value = "nb_id"
-
-        await create_notebook.run({"title": "Top Level Notebook", "parent_id": None})
+        await create_notebook.run({"title": "Top Level Notebook", "parent_name": None})
 
         mock_resolver.add_notebook.assert_called_once_with(title="Top Level Notebook")
 

@@ -84,9 +84,8 @@ edit_note(id, old_string="...", new_string="...")  # surgical edit
 ### Create a sub-notebook with notes
 
 ```
-create_notebook("Sub")              # top-level notebook: omit parent_id
-list_notebooks()                      # find parent notebook ID
-create_notebook("Sub", parent_id="<parent_hex_id>")
+create_notebook("Sub")              # top-level notebook: omit parent_name
+create_notebook("Sub", parent_name="Projects/Work")  # under an existing notebook (by name or path)
 create_note("Title", notebook_name="Sub", body="...")
 ```
 

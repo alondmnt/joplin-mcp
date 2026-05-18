@@ -2,7 +2,7 @@
 import json
 from typing import Annotated, Optional
 
-from pydantic import AfterValidator, Field, StringConstraints
+from pydantic import Field
 
 from joplin_mcp.config import get_config
 from joplin_mcp.fastmcp_server import (
@@ -15,15 +15,9 @@ from joplin_mcp.fastmcp_server import (
     format_item_list,
     format_update_success,
     get_joplin_client,
-    validate_joplin_id,
 )
-from joplin_mcp.notebook_utils import notebook_resolver
+from joplin_mcp.notebook_utils import get_notebook_id_by_name, notebook_resolver
 
-
-PARENT_ID_ERROR = (
-    "parent_id must be omitted for a top-level notebook, or be a "
-    "32-character lowercase hex parent notebook ID"
-)
 
 # Joplin stores folder icons as a JSON string with type=1 for emoji.
 # Length cap leaves room for the longest standard ZWJ emoji sequences
@@ -35,18 +29,6 @@ _EMOJI_ERROR = (
     "letter/digit-containing string, or one over "
     f"{_EMOJI_MAX_LEN} characters"
 )
-
-
-def _validate_parent_notebook_id(parent_id: str) -> str:
-    """Validate parent notebook IDs after Pydantic has normalized them."""
-    normalized = parent_id.strip()
-    if not normalized:
-        raise ValueError(PARENT_ID_ERROR)
-
-    try:
-        return validate_joplin_id(normalized)
-    except ValueError as exc:
-        raise ValueError(PARENT_ID_ERROR) from exc
 
 
 def _build_icon_payload(emoji: str) -> str:
@@ -69,13 +51,6 @@ def _build_icon_payload(emoji: str) -> str:
         {"type": 1, "emoji": emoji, "name": ""},
         ensure_ascii=False,
     )
-
-
-ParentNotebookIdType = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, min_length=32, max_length=32),
-    AfterValidator(_validate_parent_notebook_id),
-]
 
 
 # === NOTEBOOK TOOLS ===
@@ -103,9 +78,14 @@ async def list_notebooks() -> str:
 @create_tool("create_notebook", "Create notebook")
 async def create_notebook(
     title: Annotated[RequiredStringType, Field(description="Notebook title")],
-    parent_id: Annotated[
-        Optional[ParentNotebookIdType],
-        Field(description="Parent notebook ID (optional)"),
+    parent_name: Annotated[
+        Optional[str],
+        Field(
+            description=(
+                "Parent notebook name or path (e.g., 'Work' or 'Projects/Work'). "
+                "Omit for a top-level notebook."
+            )
+        ),
     ] = None,
     emoji: Annotated[
         Optional[str],
@@ -118,29 +98,36 @@ async def create_notebook(
     top-level notebooks or sub-notebooks within existing notebooks, optionally with an
     emoji icon shown in Joplin's sidebar.
 
+    Notebook can be specified by name or path:
+    - "Work" - matches notebook named "Work" (must be unique)
+    - "Projects/Work" - matches "Work" notebook inside "Projects"
+
     Returns:
         str: Success message containing the created notebook's title and unique ID.
 
     Examples:
         - create_notebook("Work Projects") - Create a top-level notebook
-        - create_notebook("2024 Projects", "0123456789abcdef0123456789abcdef") - Create a sub-notebook
+        - create_notebook("2024 Projects", "Work") - Create a sub-notebook under "Work"
+        - create_notebook("Tasks", "Projects/Work") - Create a sub-notebook by path
         - create_notebook("Tasks", emoji="🎯") - Create a notebook with an emoji icon
     """
 
-    normalized_parent_id = parent_id.strip() if parent_id is not None else None
+    resolved_parent_id: Optional[str] = None
+    if parent_name is not None:
+        resolved_parent_id = get_notebook_id_by_name(parent_name)
 
     if get_config().has_notebook_allowlist:
-        if normalized_parent_id:
+        if resolved_parent_id:
             notebook_resolver.validate_access(
-                normalized_parent_id,
+                resolved_parent_id,
                 allowlist_entries=get_config().notebook_allowlist,
             )
         else:
             raise ValueError("Notebook not accessible")
 
     notebook_kwargs = {"title": title}
-    if normalized_parent_id:
-        notebook_kwargs["parent_id"] = normalized_parent_id
+    if resolved_parent_id:
+        notebook_kwargs["parent_id"] = resolved_parent_id
     if emoji is not None:
         notebook_kwargs["icon"] = _build_icon_payload(emoji)
 

@@ -3,6 +3,7 @@
 import asyncio
 import re
 import time
+import uuid
 
 import pytest
 
@@ -102,6 +103,56 @@ async def test_e2e_create_notebook(e2e_client):
     next_item = nb_section.find("ITEM_")
     nb_block = nb_section if next_item == -1 else nb_section[:next_item]
     assert "emoji:" not in nb_block
+
+
+@pytest.mark.asyncio
+async def test_e2e_create_notebook_under_sandbox_parent(e2e_client):
+    """create_notebook(parent_name=...) resolves the parent and threads the
+    resolved id to Joplin.
+
+    Uses a uniquely-named sandbox notebook built fresh per test so the
+    assertion doesn't rely on any pre-existing structure in the live DB.
+    The autouse e2e_cleanup fixture reaps both the sandbox and the child.
+    """
+    from joplin_mcp.tools.notebooks import create_notebook
+
+    sandbox_title = f"__e2e_sandbox_{uuid.uuid4().hex[:8]}__"
+    sandbox_id = e2e_client.add_notebook(title=sandbox_title)
+
+    result = await _call(create_notebook, title="Child", parent_name=sandbox_title)
+    child_id = _extract_id(result)
+
+    child = e2e_client.get_notebook(child_id, fields="id,parent_id")
+    assert child.parent_id == sandbox_id
+
+
+@pytest.mark.asyncio
+async def test_e2e_create_top_level_notebook_with_no_parent(e2e_client):
+    """Omitting parent_name creates a top-level notebook (parent_id == "")."""
+    from joplin_mcp.tools.notebooks import create_notebook
+
+    title = f"__e2e_top_{uuid.uuid4().hex[:8]}__"
+    result = await _call(create_notebook, title=title)
+    new_id = _extract_id(result)
+
+    nb = e2e_client.get_notebook(new_id, fields="id,parent_id")
+    assert nb.parent_id == ""
+
+
+@pytest.mark.asyncio
+async def test_e2e_create_notebook_missing_parent_raises(e2e_client):
+    """parent_name that doesn't resolve surfaces the resolver error and
+    creates nothing."""
+    from joplin_mcp.tools.notebooks import create_notebook
+
+    missing = f"__e2e_missing_{uuid.uuid4().hex[:8]}__"
+
+    before = {nb.id for nb in e2e_client.get_all_notebooks()}
+    with pytest.raises(ValueError, match="not found"):
+        await _call(create_notebook, title="Orphan", parent_name=missing)
+    after = {nb.id for nb in e2e_client.get_all_notebooks()}
+
+    assert before == after
 
 
 # ---------------------------------------------------------------------------

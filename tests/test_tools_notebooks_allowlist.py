@@ -190,51 +190,88 @@ class TestCreateNotebookAllowlist:
     """Tests for create_notebook allowlist validation."""
 
     @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.get_notebook_id_by_name")
     @patch("joplin_mcp.tools.notebooks.notebook_resolver")
     async def test_create_notebook_allowlisted_parent(
         self,
         mock_resolver,
+        mock_resolve,
         mock_allowlist_config,
     ):
-        """Should succeed when parent notebook is allowlisted."""
+        """Should succeed when resolved parent notebook is allowlisted."""
         from joplin_mcp.tools.notebooks import create_notebook
 
+        resolved_id = "12345678901234567890123456789012"
+        mock_resolve.return_value = resolved_id
         mock_resolver.add_notebook.return_value = "new_nb_id"
 
         fn = _get_tool_fn(create_notebook)
-        result = await fn(
-            title="Sub Notebook", parent_id="12345678901234567890123456789012"
-        )
+        result = await fn(title="Sub Notebook", parent_name="AI")
 
+        mock_resolve.assert_called_once_with("AI")
         mock_resolver.validate_access.assert_called_once_with(
-            "12345678901234567890123456789012",
+            resolved_id,
             allowlist_entries=mock_allowlist_config.notebook_allowlist,
         )
         mock_resolver.add_notebook.assert_called_once()
         assert "SUCCESS" in result
 
     @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.get_notebook_id_by_name")
     @patch("joplin_mcp.tools.notebooks.notebook_resolver")
     async def test_create_notebook_non_allowlisted_parent(
         self,
         mock_resolver,
+        mock_resolve,
         mock_allowlist_config,
     ):
-        """Should raise error when parent notebook is not allowlisted."""
+        """Should raise error when resolved parent notebook is not allowlisted."""
         from joplin_mcp.tools.notebooks import create_notebook
 
+        mock_resolve.return_value = "12345678901234567890123456789012"
         mock_resolver.validate_access.side_effect = ValueError(
             "Notebook not accessible"
         )
 
         fn = _get_tool_fn(create_notebook)
         with pytest.raises(ValueError, match="Notebook not accessible"):
-            await fn(
-                title="Bad Notebook", parent_id="12345678901234567890123456789012"
-            )
+            await fn(title="Bad Notebook", parent_name="Personal")
 
         # Validation should be attempted but the write must not happen
         mock_resolver.validate_access.assert_called_once()
+        mock_resolver.add_notebook.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.get_notebook_id_by_name")
+    @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    async def test_create_notebook_rejects_ancestor_of_allowlisted(
+        self,
+        mock_resolver,
+        mock_resolve,
+        mock_allowlist_config,
+    ):
+        """Defence-in-depth: an ancestor of an allowlisted notebook is in
+        get_accessible_map (so name resolution succeeds) but isn't itself
+        accessible. The tool's own validate_access must reject it -- otherwise
+        an agent could widen its reach by creating under the bare ancestor of
+        an allowlisted path. Regression guard for the defence-in-depth call."""
+        from joplin_mcp.tools.notebooks import create_notebook
+
+        # Resolver succeeds (ancestor is in the filtered map).
+        mock_resolve.return_value = "ancestor_id_00000000000000000000"
+        # validate_access then rejects the bare ancestor.
+        mock_resolver.validate_access.side_effect = ValueError(
+            "Notebook not accessible"
+        )
+
+        fn = _get_tool_fn(create_notebook)
+        with pytest.raises(ValueError, match="Notebook not accessible"):
+            await fn(title="Sneaky", parent_name="Projects")
+
+        mock_resolver.validate_access.assert_called_once_with(
+            "ancestor_id_00000000000000000000",
+            allowlist_entries=mock_allowlist_config.notebook_allowlist,
+        )
         mock_resolver.add_notebook.assert_not_called()
 
     @pytest.mark.asyncio

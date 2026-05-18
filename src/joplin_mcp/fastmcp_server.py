@@ -28,7 +28,7 @@
 
 📁 MANAGING NOTEBOOKS:
 - list_notebooks() - List all available notebooks (surfaces each notebook's emoji icon, if set)
-- create_notebook(title, parent_id, emoji) - Create a new notebook, optionally with an emoji icon
+- create_notebook(title, parent_name, emoji) - Create a new notebook (omit parent_name for top-level), optionally with an emoji icon
 - update_notebook(notebook_id, title, emoji) - Rename a notebook and/or set its emoji icon (emoji="" clears)
 
 🗑️ TRASH MANAGEMENT:

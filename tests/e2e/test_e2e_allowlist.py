@@ -454,7 +454,7 @@ class TestCreateNotebookAllowlist:
         from joplin_mcp.tools.notebooks import create_notebook
 
         with _allowlist_config(["E2ETest_Projects"]):
-            r = await _call(create_notebook, title="New Sub", parent_id=hierarchy["E2ETest_Projects"])
+            r = await _call(create_notebook, title="New Sub", parent_name="E2ETest_Projects")
             assert "New Sub" in r
             nb_id = _extract_id(r)
             assert e2e_client.get_notebook(nb_id, fields="id,parent_id").parent_id == hierarchy["E2ETest_Projects"]
@@ -465,7 +465,7 @@ class TestCreateNotebookAllowlist:
 
         with _allowlist_config(["E2ETest_AI"]):
             with pytest.raises(Exception):
-                await _call(create_notebook, title="Nope", parent_id=hierarchy["E2ETest_Personal"])
+                await _call(create_notebook, title="Nope", parent_name="E2ETest_Personal")
 
     @pytest.mark.asyncio
     async def test_create_top_level_notebook_blocked(self, hierarchy):
