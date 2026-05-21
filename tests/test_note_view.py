@@ -9,6 +9,8 @@ that only assert on the mode-specific wrapper text don't bother patching.
 import time
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from joplin_mcp import note_view
 
 
@@ -51,6 +53,48 @@ class TestNoteCache:
         # Simulate time advancing past TTL by rewriting the timestamp.
         note_view._cached_at = time.monotonic() - (note_view._CACHE_TTL_SECONDS + 1)
         assert note_view.get_cached_note("note1") is None
+
+
+# === Mutation wrappers ===
+
+
+class TestMutationWrappers:
+    """``modify_note`` / ``delete_note`` own the cache-invalidation invariant
+    so individual tools can't forget to clear after a write."""
+
+    def setup_method(self):
+        note_view.clear_note_cache()
+
+    def test_modify_note_calls_client_and_clears_cache(self):
+        note_view.set_cached_note("note1", MagicMock())
+        client = MagicMock()
+
+        note_view.modify_note(client, "note1", body="new body", title="t")
+
+        client.modify_note.assert_called_once_with("note1", body="new body", title="t")
+        assert note_view.get_cached_note("note1") is None
+
+    def test_delete_note_calls_client_and_clears_cache(self):
+        note_view.set_cached_note("note1", MagicMock())
+        client = MagicMock()
+
+        note_view.delete_note(client, "note1")
+
+        client.delete_note.assert_called_once_with("note1")
+        assert note_view.get_cached_note("note1") is None
+
+    def test_modify_note_does_not_clear_cache_when_client_raises(self):
+        """If the write failed, server state is unchanged — keep the cache.
+        Also pins that exceptions propagate (the wrapper must not swallow)."""
+        cached = MagicMock()
+        note_view.set_cached_note("note1", cached)
+        client = MagicMock()
+        client.modify_note.side_effect = RuntimeError("write failed")
+
+        with pytest.raises(RuntimeError):
+            note_view.modify_note(client, "note1", body="x")
+
+        assert note_view.get_cached_note("note1") is cached
 
 
 # === render_note: shared fixtures ===

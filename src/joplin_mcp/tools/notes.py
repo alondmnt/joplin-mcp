@@ -694,8 +694,7 @@ async def update_note(
                 allowlist_entries=get_config().notebook_allowlist,
             )
 
-    client.modify_note(note_id, **update_data)
-    note_view.clear_note_cache()
+    note_view.modify_note(client, note_id, **update_data)
 
     return format_update_success(ItemType.note, note_id)
 
@@ -805,8 +804,7 @@ async def edit_note(
             new_body = body.replace(old_string, new_string, 1)
             replacements = 1
 
-        client.modify_note(note_id, body=new_body)
-        note_view.clear_note_cache()
+        note_view.modify_note(client, note_id, body=new_body)
 
         if new_string == "":
             return f"EDIT_NOTE: Deleted {replacements} occurrence(s) of the specified text."
@@ -821,8 +819,7 @@ async def edit_note(
             new_body = new_string + body
             action = "Prepended"
 
-        client.modify_note(note_id, body=new_body)
-        note_view.clear_note_cache()
+        note_view.modify_note(client, note_id, body=new_body)
 
         return f"EDIT_NOTE: {action} {len(new_string)} characters."
 
@@ -857,10 +854,7 @@ async def delete_note(
         parent_id = getattr(note, 'parent_id', '')
         validate_notebook_access(parent_id, allowlist_entries=get_config().notebook_allowlist)
 
-    client.delete_note(note_id)
-
-    # Invalidate cache for deleted note
-    note_view.clear_note_cache()
+    note_view.delete_note(client, note_id)
 
     return format_delete_success(ItemType.note, note_id)
 

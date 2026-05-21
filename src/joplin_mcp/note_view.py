@@ -3,8 +3,10 @@
 The module owns three concerns:
 
 - Single-note cache for sequential reading (``get_cached_note`` /
-  ``set_cached_note`` / ``clear_note_cache``; mutation tools call
-  ``clear_note_cache`` to invalidate after writes).
+  ``set_cached_note`` / ``clear_note_cache``). Note-tool mutations flow
+  through ``modify_note`` / ``delete_note`` here, which call the joppy
+  client and invalidate the cache in one step so the invariant lives
+  in one place.
 - Formatters shared across get_note, find_notes, and find_in_note:
   ``format_note_details``, ``format_search_results_with_pagination``,
   and ``_build_find_in_note_header``.
@@ -68,6 +70,25 @@ def clear_note_cache() -> None:
     _cached_note = None
     _cached_note_id = None
     _cached_at = 0.0
+
+
+# === MUTATIONS ===
+# Thin wrappers around joppy mutations that own the cache-invalidation
+# invariant. Tools call these instead of ``client.modify_note`` /
+# ``client.delete_note`` directly so callers can't forget to clear the cache
+# after a write.
+
+
+def modify_note(client: Any, note_id: str, **fields: Any) -> None:
+    """Apply a joppy ``modify_note`` and invalidate the single-note cache."""
+    client.modify_note(note_id, **fields)
+    clear_note_cache()
+
+
+def delete_note(client: Any, note_id: str) -> None:
+    """Apply a joppy ``delete_note`` (soft delete) and invalidate the cache."""
+    client.delete_note(note_id)
+    clear_note_cache()
 
 
 # === FORMATTERS ===
