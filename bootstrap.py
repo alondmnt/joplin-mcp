@@ -52,16 +52,26 @@ def _reexec_in(python: Path) -> None:
 def _ensure_venv(repo_root: Path) -> None:
     """Ask about creating a venv, then re-exec inside it.
 
-    No-ops if we're already in a venv. If ``venv/`` already exists but is
-    not active, re-exec into it without asking (the user clearly intended
-    to use it).
+    No-ops if we're already in a venv. If a usable ``venv/`` already
+    exists in the repo root, re-exec into it without asking (the user
+    clearly intended to use it). If ``venv/`` exists but its interpreter
+    is missing -- stale checkout, wrong python version, half-deleted --
+    warn and fall through to the normal prompt rather than re-execing
+    into something that will fail downstream.
     """
     if _in_venv():
         return
 
     venv_dir = repo_root / "venv"
     if venv_dir.exists():
-        _reexec_in(_venv_python(venv_dir))
+        venv_python = _venv_python(venv_dir)
+        if venv_python.is_file():
+            _reexec_in(venv_python)
+            return  # _reexec_in calls sys.exit; this guards against test stubs.
+        print(
+            f"WARNING: {venv_dir} exists but {venv_python} is missing. "
+            "Falling back to the venv prompt."
+        )
 
     answer = input(
         "No virtual environment detected. Create one at ./venv? (y/n) [recommended]: "
