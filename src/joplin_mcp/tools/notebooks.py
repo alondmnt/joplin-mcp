@@ -168,6 +168,11 @@ async def update_notebook(
     the notebook to top-level, or a name/path to move it under another parent.
     At least one of `title`, `emoji`, or `parent_name` must be provided.
 
+    Parent destination can be specified by name or path:
+    - "Work" - matches notebook named "Work" (must be unique)
+    - "Projects/Work" - matches "Work" notebook inside "Projects"
+    - "/" - move to top-level
+
     Returns:
         str: Success message confirming the notebook was updated.
 
