@@ -6,8 +6,9 @@ Two entry points reach this module:
 * ``joplin-mcp-install`` (the pip console script defined in pyproject.toml)
   -- calls ``main()`` directly, pip mode.
 * ``python -m joplin_mcp.install [--dev]`` -- the ``__main__`` block below
-  parses argv. ``install.sh`` / ``install.bat`` invoke it with ``--dev`` from
-  a cloned repo so the config lands inside the repo rather than ``$HOME``.
+  parses argv. ``bootstrap.py`` invokes it with ``--dev`` after the dev
+  environment is set up, so the config lands inside the repo rather than
+  ``$HOME``.
 """
 
 import argparse
@@ -28,7 +29,7 @@ def _config_path(is_development: bool) -> Path:
     """Where the joplin-mcp.json file lives for each install mode."""
     if is_development:
         # Dev: write next to the cloned repo so the script and its config sit
-        # together. install.sh / install.bat invoke us from the repo root.
+        # together. bootstrap.py invokes us from the repo root.
         return Path.cwd() / "joplin-mcp.json"
     # Pip: write to the user's home for global access (dot-prefixed).
     return Path.home() / ".joplin-mcp.json"
@@ -44,8 +45,8 @@ def main(is_development: bool = False) -> int:
     """Run the interactive installer.
 
     Args:
-        is_development: True when invoked from a cloned repo (via install.sh
-            or install.bat); False (the default) for pip-installed users.
+        is_development: True when invoked from a cloned repo (via
+            ``bootstrap.py``); False (the default) for pip-installed users.
 
     Returns:
         Exit code (0 for success, non-zero for failure).
