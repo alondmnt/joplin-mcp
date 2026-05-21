@@ -470,6 +470,11 @@ def save_config_to_path(
         "content_exposure": config.content_exposure.copy(),
     }
 
+    # Only persist the allowlist when one is configured; omit when unrestricted
+    # so the JSON stays minimal and matches the "unset = allow all" convention.
+    if config.has_notebook_allowlist:
+        config_data["notebook_allowlist"] = list(config.notebook_allowlist)
+
     if include_token and config.token:
         config_data["token"] = config.token
 
