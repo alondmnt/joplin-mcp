@@ -8,9 +8,16 @@ persistence (via the file-system).
 import json
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 from joplin_mcp.config import JoplinMCPConfig
-from joplin_mcp.ui_integration import save_config_to_path
+from joplin_mcp.ui_integration import (
+    create_config_interactively,
+    get_notebook_allowlist_settings,
+    save_config_to_path,
+)
 
 
 class TestSaveConfigToPathAllowlist:
@@ -54,3 +61,78 @@ class TestSaveConfigToPathAllowlist:
         assert raw["notebook_allowlist"] == []
         assert reloaded.has_notebook_allowlist is True
         assert reloaded.notebook_allowlist == []
+
+
+class TestGetNotebookAllowlistSettings:
+    """Branches of the install-time allowlist prompt."""
+
+    @pytest.mark.parametrize("decline_input", ["", "n", "no", "N", "NO"])
+    def test_decline_returns_none(self, decline_input):
+        with patch("builtins.input", side_effect=[decline_input]):
+            assert get_notebook_allowlist_settings() is None
+
+    def test_opt_in_single_entry(self):
+        with patch("builtins.input", side_effect=["y", "work"]):
+            assert get_notebook_allowlist_settings() == ["work"]
+
+    def test_opt_in_multiple_entries_strips_whitespace_and_drops_blanks(self):
+        with patch(
+            "builtins.input",
+            side_effect=["y", "  work , projects ,  ,reading "],
+        ):
+            assert get_notebook_allowlist_settings() == [
+                "work",
+                "projects",
+                "reading",
+            ]
+
+    def test_opt_in_blank_input_re_prompts_until_non_empty(self):
+        # The whole point of the verification: opting in must not be allowed
+        # to produce an empty allowlist (which would lock out every notebook).
+        with patch(
+            "builtins.input",
+            side_effect=["y", "", "   ", ",,,", "finally"],
+        ):
+            assert get_notebook_allowlist_settings() == ["finally"]
+
+    def test_first_prompt_rejects_garbage_then_accepts_decline(self):
+        with patch("builtins.input", side_effect=["huh?", "n"]):
+            assert get_notebook_allowlist_settings() is None
+
+
+class TestCreateConfigInteractivelyAllowlistWiring:
+    """The ``include_notebook_allowlist`` flag must gate the prompt and the
+    resulting config value should land on ``JoplinMCPConfig`` unchanged."""
+
+    def test_include_false_skips_prompt_and_leaves_unrestricted(self):
+        # No input side-effect: if the prompt fires, the test fails with
+        # StopIteration. That's the assertion that we skipped it.
+        with patch("builtins.input", side_effect=[]):
+            cfg = create_config_interactively(
+                token="dummy-token-1234567890",
+                include_permissions=False,
+                include_content_privacy=False,
+                include_notebook_allowlist=False,
+            )
+        assert cfg.has_notebook_allowlist is False
+
+    def test_include_true_decline_path(self):
+        with patch("builtins.input", side_effect=["n"]):
+            cfg = create_config_interactively(
+                token="dummy-token-1234567890",
+                include_permissions=False,
+                include_content_privacy=False,
+                include_notebook_allowlist=True,
+            )
+        assert cfg.has_notebook_allowlist is False
+
+    def test_include_true_opt_in_path_flows_through_to_config(self):
+        with patch("builtins.input", side_effect=["y", "work, journal"]):
+            cfg = create_config_interactively(
+                token="dummy-token-1234567890",
+                include_permissions=False,
+                include_content_privacy=False,
+                include_notebook_allowlist=True,
+            )
+        assert cfg.has_notebook_allowlist is True
+        assert cfg.notebook_allowlist == ["work", "journal"]

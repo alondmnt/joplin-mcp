@@ -391,6 +391,54 @@ def get_content_privacy_settings() -> Dict[str, Union[str, int]]:
     return content_exposure
 
 
+def get_notebook_allowlist_settings() -> Optional[List[str]]:
+    """Prompt for notebook allowlist opt-in.
+
+    Returns:
+        ``None`` if the user declines (server stays unrestricted), or a
+        non-empty list of notebook names/IDs if they opt in. An empty
+        allowlist is never returned: opting in without supplying entries
+        would lock the agent out of every notebook, so we re-prompt until
+        at least one entry is given (or the user backs out with Ctrl-C).
+    """
+    print_step("Notebook Allowlist (Optional)")
+    print_info("Restrict the AI assistant to specific notebooks only.")
+    print_info(
+        "Useful if you want to keep personal/sensitive notebooks out of reach."
+    )
+    print_info("Leave disabled to allow access to all notebooks (default).")
+    print()
+
+    while True:
+        choice = (
+            input("Restrict the agent to specific notebooks? (y/n) [default: n]: ")
+            .lower()
+            .strip()
+        )
+        if choice in ("n", "no", ""):
+            print_info("Allowlist disabled -- all notebooks accessible.")
+            return None
+        elif choice in ("y", "yes"):
+            break
+        else:
+            print_warning("Please enter 'y' for yes or 'n' for no.")
+
+    print_info("Enter notebook names or IDs the agent may access.")
+    print_info("Separate multiple entries with commas (e.g. 'work, projects').")
+
+    while True:
+        raw = input("Allowed notebooks: ").strip()
+        entries = [e.strip() for e in raw.split(",") if e.strip()]
+        if entries:
+            label = "entry" if len(entries) == 1 else "entries"
+            print_info(f"Allowlist set to {len(entries)} {label}.")
+            return entries
+        print_warning(
+            "At least one notebook name or ID is required. "
+            "An empty allowlist would block every notebook."
+        )
+
+
 # === INTERACTIVE CONFIG CONSTRUCTION ===
 #
 # These functions live alongside the prompt helpers above rather than as
@@ -402,6 +450,7 @@ def create_config_interactively(
     token: Optional[str] = None,
     include_permissions: bool = True,
     include_content_privacy: bool = True,
+    include_notebook_allowlist: bool = True,
     **defaults: Any,
 ) -> JoplinMCPConfig:
     """Build a JoplinMCPConfig by prompting the user.
@@ -410,6 +459,7 @@ def create_config_interactively(
         token: Pre-provided token (skip the token prompt if given).
         include_permissions: Whether to prompt for tool permissions.
         include_content_privacy: Whether to prompt for content privacy settings.
+        include_notebook_allowlist: Whether to prompt for notebook allowlist opt-in.
         defaults: Default values for the connection-level fields
             (``host``, ``port``, ``timeout``, ``verify_ssl``).
 
@@ -429,6 +479,11 @@ def create_config_interactively(
     else:
         content_privacy = JoplinMCPConfig.DEFAULT_CONTENT_EXPOSURE.copy()
 
+    if include_notebook_allowlist:
+        notebook_allowlist = get_notebook_allowlist_settings()
+    else:
+        notebook_allowlist = None
+
     config_kwargs = {
         "host": defaults.get("host", JoplinMCPConfig.DEFAULT_CONNECTION["host"]),
         "port": defaults.get("port", JoplinMCPConfig.DEFAULT_CONNECTION["port"]),
@@ -441,6 +496,7 @@ def create_config_interactively(
         ),
         "tools": tool_permissions,
         "content_exposure": content_privacy,
+        "notebook_allowlist": notebook_allowlist,
     }
 
     return JoplinMCPConfig(**config_kwargs)
