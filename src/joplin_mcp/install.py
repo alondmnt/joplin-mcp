@@ -1,40 +1,74 @@
 #!/usr/bin/env python3
-"""Module-level installation script for joplin-mcp package.
+"""Canonical install runner for joplin-mcp.
 
-This can be run as: python -m joplin_mcp.install
+Three entry points all land here:
+
+* ``joplin-mcp-install`` (the pip console script defined in pyproject.toml)
+* ``python -m joplin_mcp.install``
+* the top-level ``install.py`` shim invoked by ``install.sh`` / ``install.bat``
+  in a cloned-repo dev workflow
+
+The dev shim passes ``is_development=True`` to flip the config location and
+welcome message; the other two paths use the pip defaults.
 """
 
 import sys
 from pathlib import Path
 
+from .config import JoplinMCPConfig
+from .ui_integration import (
+    create_config_interactively,
+    print_step,
+    print_success,
+    run_installation_process,
+    save_config_to_path,
+)
 
-# Add the root install script to the path and import it
-def main():
-    """Main entry point for module-level install."""
-    # Try to import the main install script
-    try:
-        # Look for install.py in the current directory first
-        current_dir = Path.cwd()
-        install_script = current_dir / "install.py"
 
-        if install_script.exists():
-            # We're in the development directory, use the local install.py
-            sys.path.insert(0, str(current_dir))
-            import install
+def _config_path(is_development: bool) -> Path:
+    """Where the joplin-mcp.json file lives for each install mode."""
+    if is_development:
+        # Dev: write next to the cloned repo so the script and its config sit
+        # together. install.sh / install.bat invoke us from the repo root.
+        return Path.cwd() / "joplin-mcp.json"
+    # Pip: write to the user's home for global access (dot-prefixed).
+    return Path.home() / ".joplin-mcp.json"
 
-            return install.main()
-        else:
-            # We're in a pip-installed package, use the embedded install logic
-            from .install_embedded import main as embedded_main
 
-            return embedded_main()
+def _welcome_message(is_development: bool) -> str:
+    if is_development:
+        return "Welcome! This script will help you set up the Joplin MCP server."
+    return "Welcome! This will configure the Joplin MCP server from your pip install."
 
-    except ImportError:
-        print("❌ Installation script not found.")
-        print(
-            "ℹ️  Please run from the joplin-mcp directory or ensure the package is properly installed."
+
+def main(is_development: bool = False) -> int:
+    """Run the interactive installer.
+
+    Args:
+        is_development: True when invoked from a cloned repo (via install.sh
+            or install.bat); False (the default) for pip-installed users.
+
+    Returns:
+        Exit code (0 for success, non-zero for failure).
+    """
+    config_path = _config_path(is_development)
+
+    def create_joplin_config(token: str) -> Path:
+        print_step("Creating Joplin MCP Configuration")
+        config = create_config_interactively(
+            token=token,
+            include_permissions=True,
+            **JoplinMCPConfig.DEFAULT_CONNECTION,
         )
-        return 1
+        saved_path = save_config_to_path(config, config_path, include_token=True)
+        print_success(f"Configuration saved to {saved_path}")
+        return saved_path
+
+    return run_installation_process(
+        config_path_resolver=create_joplin_config,
+        is_development=is_development,
+        welcome_message=_welcome_message(is_development),
+    )
 
 
 if __name__ == "__main__":
