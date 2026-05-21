@@ -1,20 +1,18 @@
-"""Tests for src/joplin_mcp/install.py and the top-level install.py shim.
+"""Tests for src/joplin_mcp/install.py.
 
-Covers the consolidated install runner that replaces the old trio of
-install.py / install_embedded.py / src install.py-with-cwd-bridge.
+Covers the consolidated install runner. Earlier this module also had to
+police a broken top-level install.py shim and a separate
+install_embedded.py; both are gone now and the runner is reached only
+via the pip console script (``joplin-mcp-install``) or
+``python -m joplin_mcp.install [--dev]``.
 """
 
-import importlib.util
-import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from joplin_mcp import install
-
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class TestConfigPath:
@@ -84,22 +82,17 @@ class TestMainRoutesFlag:
         assert captured["is_development"] is False
 
 
-class TestTopLevelShim:
-    """The top-level install.py used to call non-existent JoplinMCPConfig
-    methods; importing it crashed. This test catches a regression."""
+class TestParseArgs:
+    """argparse wiring for ``python -m joplin_mcp.install [--dev]``."""
 
-    def test_top_level_install_imports_and_exposes_main(self):
-        shim_path = REPO_ROOT / "install.py"
-        assert shim_path.exists(), "top-level install.py missing"
+    def test_no_args_defaults_to_pip_mode(self):
+        args = install._parse_args([])
+        assert args.dev is False
 
-        spec = importlib.util.spec_from_file_location(
-            "_top_level_install_smoke", shim_path
-        )
-        module = importlib.util.module_from_spec(spec)
-        try:
-            spec.loader.exec_module(module)
-            assert module.main is install.main, (
-                "top-level shim should delegate to joplin_mcp.install.main"
-            )
-        finally:
-            sys.modules.pop("_top_level_install_smoke", None)
+    def test_dev_flag_flips_to_development_mode(self):
+        args = install._parse_args(["--dev"])
+        assert args.dev is True
+
+    def test_unknown_flag_exits(self):
+        with pytest.raises(SystemExit):
+            install._parse_args(["--nope"])

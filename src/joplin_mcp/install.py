@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """Canonical install runner for joplin-mcp.
 
-Three entry points all land here:
+Two entry points reach this module:
 
 * ``joplin-mcp-install`` (the pip console script defined in pyproject.toml)
-* ``python -m joplin_mcp.install``
-* the top-level ``install.py`` shim invoked by ``install.sh`` / ``install.bat``
-  in a cloned-repo dev workflow
-
-The dev shim passes ``is_development=True`` to flip the config location and
-welcome message; the other two paths use the pip defaults.
+  -- calls ``main()`` directly, pip mode.
+* ``python -m joplin_mcp.install [--dev]`` -- the ``__main__`` block below
+  parses argv. ``install.sh`` / ``install.bat`` invoke it with ``--dev`` from
+  a cloned repo so the config lands inside the repo rather than ``$HOME``.
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -71,5 +70,26 @@ def main(is_development: bool = False) -> int:
     )
 
 
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    """Parse argv for ``python -m joplin_mcp.install``.
+
+    Extracted so tests can exercise the flag wiring without re-execing.
+    """
+    parser = argparse.ArgumentParser(
+        prog="python -m joplin_mcp.install",
+        description="Interactive installer for the Joplin MCP server.",
+    )
+    parser.add_argument(
+        "--dev",
+        action="store_true",
+        help=(
+            "Run in development mode (config written to the current "
+            "directory instead of $HOME). Used by the dev-install bootstrap."
+        ),
+    )
+    return parser.parse_args(argv)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    args = _parse_args(sys.argv[1:])
+    sys.exit(main(is_development=args.dev))

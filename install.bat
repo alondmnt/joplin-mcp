@@ -12,8 +12,8 @@ echo ============================================================
 echo.
 
 REM Check if we're in the right directory
-if not exist "install.py" (
-    echo ERROR: install.py not found. Please run this script from the joplin-mcp directory.
+if not exist "pyproject.toml" (
+    echo ERROR: pyproject.toml not found. Please run this script from the joplin-mcp directory.
     pause
     exit /b 1
 )
@@ -66,10 +66,10 @@ if exist "pyproject.toml" (
     echo Then run: python -m joplin_mcp.install
 )
 
-REM Run the main installation script
+REM Run the interactive installer in dev mode (config in cwd, not %USERPROFILE%)
 echo.
 echo Running installation script...
-%PYTHON_CMD% install.py
+%PYTHON_CMD% -m joplin_mcp.install --dev
 
 echo.
 echo Installation script completed!

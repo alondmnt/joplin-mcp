@@ -48,8 +48,8 @@ print_info() {
 }
 
 # Check if we're in the right directory
-if [ ! -f "install.py" ]; then
-    print_error "install.py not found. Please run this script from the joplin-mcp directory."
+if [ ! -f "pyproject.toml" ]; then
+    print_error "pyproject.toml not found. Please run this script from the joplin-mcp directory."
     exit 1
 fi
 
@@ -97,9 +97,9 @@ else
     print_info "Then run: python -m joplin_mcp.install"
 fi
 
-# Run the main installation script
+# Run the interactive installer in dev mode (config in cwd, not $HOME)
 print_step "Running installation script"
-$PYTHON_CMD install.py
+$PYTHON_CMD -m joplin_mcp.install --dev
 
 print_success "Installation script completed!"
 print_info "If you encounter any issues, please check the troubleshooting guide." 
