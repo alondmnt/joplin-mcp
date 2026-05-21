@@ -243,19 +243,13 @@ At server startup, the allowlist is validated and logged:
 
 For developers or users who want the latest features:
 
-**macOS/Linux:**
 ```bash
 git clone https://github.com/alondmnt/joplin-mcp.git
 cd joplin-mcp
-./install.sh
+python bootstrap.py
 ```
 
-**Windows:**
-```batch
-git clone https://github.com/alondmnt/joplin-mcp.git
-cd joplin-mcp
-install.bat
-```
+`bootstrap.py` is cross-platform: it offers to create a `./venv`, runs `pip install -e .`, then launches the interactive installer. Pass `--no-venv` to install into whichever Python is already active.
 
 ### Manual Configuration
 
