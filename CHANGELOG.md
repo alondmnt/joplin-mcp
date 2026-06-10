@@ -14,7 +14,6 @@
 - **`restore_from_trash`** — recover soft-deleted notes from Joplin's trash. The MCP could already soft-delete via `delete_note` but had no way to undelete, so an accidental delete by an agent meant dropping into the Joplin UI to recover. That gap is now closed (#23 by @MatthewOGoodman).
 - **Move notes between notebooks** — `update_note` accepts a `notebook_name` argument that relocates the note in a single call. Previously the only way to move a note from inside the MCP was a delete-and-recreate dance (closes #21).
 - **Bulk tag operations** — `tag_note` and `untag_note` accept lists of note IDs and tag names. When either side is a list, the cartesian product runs in one call with a per-pair report, so tagging a batch of notes is one tool invocation instead of N (closes #22).
-- **Emoji icons on notebooks** — `create_notebook` and `update_notebook` accept an `emoji` argument that sets the sidebar icon Joplin renders next to the folder. Without this the agent could only stuff the glyph into the title text, which is what surfaced the bug (closes #51 by @JaneX8). Pass `emoji=""` to `update_notebook` to clear an existing icon. `list_notebooks` now surfaces the icon back to the agent (emoji glyph for emoji icons, `icon: image` for image-type icons set in the desktop client).
 
 ## Dependency Changes
 
