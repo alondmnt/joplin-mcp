@@ -7,9 +7,9 @@
 
 ## What's New
 
-- **`get_note_resources`** — a new tool that lists a note's resources (images, PDFs, attachments) and exposes the OCR text Joplin has already extracted from them. An agent reading a note can now also see what's inside its images and scanned PDFs, without mutating the note body (closes #52, requested by @JaneX8).
-- **Move notebooks between parents** — `update_notebook` accepts a `parent_name` argument. Pass a notebook name or path to reparent it, or `/` to move it to top-level. Cycle prevention runs before the API call, since Joplin itself silently accepts cycles and would orphan the affected notebooks. Under an allowlist, moving to root is refused with the same generic error as `create_notebook`, so an agent can't quietly move a notebook out of enforced scope (closes #53, requested by @JaneX8).
-- **Emoji icons on notebooks** — `create_notebook` and `update_notebook` accept an `emoji` argument that sets the sidebar icon Joplin renders next to the folder. Without this the agent could only stuff the glyph into the title text, which is what surfaced the request (closes #51, requested by @JaneX8). Pass `emoji=""` to `update_notebook` to clear an existing icon. `list_notebooks` surfaces the icon back to the agent (emoji glyph for emoji icons, `icon: image` for image-type icons set in the desktop client).
+- **`get_note_resources`** — a new tool that lists a note's resources (images, PDFs, attachments) and exposes the OCR text Joplin has already extracted from them. An agent reading a note can now also see what's inside its images and scanned PDFs, without mutating the note body (closes #52, requested by JaneX8).
+- **Move notebooks between parents** — `update_notebook` accepts a `parent_name` argument. Pass a notebook name or path to reparent it, or `/` to move it to top-level. Cycle prevention runs before the API call, since Joplin itself silently accepts cycles and would orphan the affected notebooks. Under an allowlist, moving to root is refused with the same generic error as `create_notebook`, so an agent can't quietly move a notebook out of enforced scope (closes #53, requested by JaneX8).
+- **Emoji icons on notebooks** — `create_notebook` and `update_notebook` accept an `emoji` argument that sets the sidebar icon Joplin renders next to the folder. Without this the agent could only stuff the glyph into the title text, which is what surfaced the request (closes #51, requested by JaneX8). Pass `emoji=""` to `update_notebook` to clear an existing icon. `list_notebooks` surfaces the icon back to the agent (emoji glyph for emoji icons, `icon: image` for image-type icons set in the desktop client).
   - the codepoint cap was widened to 16 to accommodate multi-codepoint emoji (ZWJ sequences, flags, skin-tone modifiers)
   - legacy typeless emoji icons (set by older Joplin versions) now render in `list_notebooks` instead of being skipped
 - **Notebook allowlist opt-in during install** — the interactive installer now asks whether to restrict the agent to specific notebooks. Default is no (unrestricted), so a fresh install still works out of the box; opting in re-asks until you give at least one notebook, since an empty allowlist would lock the agent out entirely. Gives the allowlist a discoverable entry point instead of requiring a hand-edited config.
@@ -17,7 +17,7 @@
 ## Fixes
 
 - **Empty title rejected on `update_note` and `update_notebook`** — an empty or whitespace-only title is caught at the tool boundary instead of being written through.
-- **Docker image builds again** — `entrypoint.sh` had CRLF line endings that broke the build; the Dockerfile now strips CR during build (closes #50, reported by @JaneX8).
+- **Docker image builds again** — `entrypoint.sh` had CRLF line endings that broke the build; the Dockerfile now strips CR during build (closes #50, reported by JaneX8).
 - **`notebook_allowlist` persists through `save_config_to_path`** — it was being dropped when the config was written back to disk.
 - **Broken venv no longer fatal** — the installer prompts to recreate a broken virtualenv instead of re-exec'ing into it and failing.
 
