@@ -268,9 +268,9 @@ which python
 pip list | grep joplin
 ```
 
-#### 3. Install Dependencies
+#### 3. Install From PyPI
 ```bash
-pip install -r requirements.txt
+pip install joplin-mcp
 ```
 
 #### 4. Python Path Issues

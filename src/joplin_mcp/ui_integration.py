@@ -943,7 +943,7 @@ def test_joplin_connection(config_path: Path) -> bool:
             return False
     except ImportError:
         print_warning("Could not import Joplin MCP modules.")
-        print_info("Make sure to install dependencies: pip install -r requirements.txt")
+        print_info("Make sure the package is installed: pip install joplin-mcp")
         return False
     except Exception as e:
         print_error(f"Connection test failed: {e}")
