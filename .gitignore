@@ -113,6 +113,12 @@ ipython_config.py
 #   https://pdm.fming.dev/#use-with-ide
 .pdm.toml
 
+# uv
+#   Not tracked for this project: pyproject.toml is the source of truth for
+#   deps, and nothing in CI/Docker installs from the lock. A tracked lock just
+#   drifts (it sat on fastmcp 2.x long after the 0.9.0 bump to fastmcp 3.x).
+uv.lock
+
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
 __pypackages__/
 
