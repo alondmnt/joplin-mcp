@@ -303,6 +303,44 @@ ls -la /path/to/joplin-mcp
 chmod +x setup.py
 ```
 
+### Issue: "cannot import name 'FastMCP' from 'fastmcp'"
+
+**Symptoms:**
+- The server fails to start and the MCP client log shows:
+  ```
+  ❌ Failed to import FastMCP server: cannot import name 'FastMCP' from 'fastmcp' (unknown location)
+  ```
+  (On macOS the Claude Desktop log is at `~/Library/Logs/Claude/mcp-server-joplin.log`.)
+- Reinstalling `joplin-mcp` itself does **not** fix it.
+- Usually appears right after upgrading `joplin-mcp` in place from an older release.
+
+**Cause:**
+
+`fastmcp` 3.x ships as two pip distributions that share the same `fastmcp/`
+package directory: `fastmcp` (a thin shim) and `fastmcp-slim` (the actual
+code). During an in-place upgrade, pip can uninstall the old `fastmcp`
+*after* the new files are written, deleting shared files — including
+`fastmcp/__init__.py` — and leaving `fastmcp/` importable only as an empty
+namespace package. The corruption is in the dependency, not in `joplin-mcp`,
+which is why reinstalling `joplin-mcp` alone doesn't help.
+
+**Fix:**
+
+Force-reinstall both distributions together, pinned to the *same* version,
+without re-resolving their dependencies:
+
+```bash
+pip install --force-reinstall --no-deps fastmcp==3.4.2 fastmcp-slim==3.4.2
+```
+
+Replace `3.4.2` with whichever 3.x version you want — the two must match.
+Run this with the same Python interpreter your MCP client launches, then
+verify:
+
+```bash
+python -c "from fastmcp import FastMCP; print('OK')"
+```
+
 ---
 
 ## Configuration Problems
@@ -688,6 +726,7 @@ if __name__ == "__main__":
 | `Timeout error` | Network/performance issue | Increase timeout, check network |
 | `JSON decode error` | Malformed response | Check Joplin version compatibility |
 | `SSL certificate error` | HTTPS/certificate issue | Use HTTP or update certificates |
+| `cannot import name 'FastMCP' from 'fastmcp'` | Corrupted fastmcp upgrade (shared package dir) | `pip install --force-reinstall --no-deps fastmcp==X fastmcp-slim==X` |
 
 ---
 
