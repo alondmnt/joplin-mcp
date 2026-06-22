@@ -1,0 +1,134 @@
+# docker/docker-compose.headless.yml
+#
+# EXPERIMENTAL — community-supported headless deployment.
+#
+# Runs Joplin fully server-side (no Joplin Desktop app required) so an MCP
+# client / AI agent can read & write notes on a VPS, NAS, or CI box, while
+# still syncing to your other devices (phone, laptop) through a normal
+# self-hosted Joplin Server.
+#
+# Architecture:
+#
+#   db (postgres) ── joplin-server ◄──sync──► your phone / laptop
+#                         ▲
+#                         │ sync target 9 (Joplin Server)
+#                    joplin-data-api   headless Joplin CLI + nginx token-injection proxy (:41185 → :41184)
+#                         ▲
+#                         │ Joplin Data API (token auto-injected by nginx)
+#                    joplin-mcp        FastMCP server (:8000)  ◄── AI agents
+#
+# Image versions are PINNED by digest (no :latest). The human-readable tag
+# the digest corresponds to is noted in a comment; both are kept in sync.
+# Tested-with versions: postgres 16.14, joplin/server 3.7.1,
+# joplin-terminal-data-api (digest below). See docs/headless.md for the full
+# guide, the one-time bootstrap, backup/restore, and caveats.
+#
+# Setup:
+#   cp env.headless.example .env   # then fill in the required secrets
+#   docker compose -f docker/docker-compose.headless.yml up -d
+#   # then run the one-time bootstrap in docs/headless.md to configure sync.
+#
+# AI clients connect to: http://localhost:${MCP_PORT:-8000}/mcp
+
+services:
+  db:
+    # PostgreSQL 16.14
+    image: postgres:16.14@sha256:081f1bc7bd5e143dbb6e487b710bbc27712cdcfaced4c071b8e47349aa1b4171
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-joplin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=${POSTGRES_DB:-joplindb}
+    volumes:
+      - joplin_db:/var/lib/postgresql/data
+    networks:
+      - joplin_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-joplin} -d ${POSTGRES_DB:-joplindb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No published ports — postgres is private to the internal network.
+
+  joplin-server:
+    # Joplin Server 3.7.1
+    image: joplin/server:3.7.1@sha256:0877bfba41a943017c42c58e90db9d8d548bfe699b5e410248b5b879371734f9
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - APP_PORT=22300
+      # Set this to the URL your OTHER devices use to reach the sync server.
+      - APP_BASE_URL=${JOPLIN_SERVER_BASE_URL:-http://localhost:8082}
+      - DB_CLIENT=pg
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DATABASE=${POSTGRES_DB:-joplindb}
+      - POSTGRES_USER=${POSTGRES_USER:-joplin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      - MAILER_ENABLED=0
+    ports:
+      # Exposed so your phone/laptop can sync to this server. Put it behind a
+      # reverse proxy with TLS in production. NOTE: this is the sync server,
+      # not the Data API — the Data API itself is never published (see below).
+      - "${JOPLIN_SERVER_PORT:-8082}:22300"
+    networks:
+      - joplin_internal
+
+  joplin-data-api:
+    # rickonono3/joplin-terminal-data-api — headless Joplin CLI + nginx proxy.
+    # Listens on :41185 and injects the Joplin Data API token into every request,
+    # proxying to the internal Joplin Data API on :41184. Pinned by digest
+    # (the image publishes :latest only).
+    # https://github.com/RickoNoNo3/joplin-terminal-data-api
+    image: rickonono3/joplin-terminal-data-api@sha256:f7d5a0152ac876e1feb56ed9b3d7a2331fd03b23a77cc9bbd37fe68c47e032aa
+    restart: unless-stopped
+    depends_on:
+      - joplin-server
+    environment:
+      - JOPLIN_PORT=41184
+    volumes:
+      # Persists the Joplin CLI profile (settings.json, database.sqlite, token).
+      # This is what you back up. The sync target is configured here once
+      # (see the bootstrap section in docs/headless.md).
+      - joplin_profile:/root/joplin
+      - ./joplin-data-api.nginx.conf.template:/etc/nginx/nginx.conf.template:ro
+    networks:
+      - joplin_internal
+    # NO published ports — the Data API is PRIVATE to the internal network.
+    # Only joplin-mcp (same network) may reach it. Never expose 41184/41185.
+
+  joplin-mcp:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - joplin-data-api
+    environment:
+      # The real token is injected by the nginx proxy, so any non-empty value
+      # satisfies joplin-mcp's own config validation.
+      - JOPLIN_TOKEN=${JOPLIN_TOKEN:-injected-by-proxy}
+      # Reach the Data API by its compose service name over the internal network.
+      - JOPLIN_HOST=joplin-data-api
+      - JOPLIN_PORT=41185
+      - MCP_TRANSPORT=http
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8000
+      - MCP_LOG_LEVEL=${MCP_LOG_LEVEL:-info}
+    ports:
+      - "${MCP_PORT:-8000}:8000"
+    networks:
+      - joplin_internal
+    # Uncomment to mount a config file for fine-grained tool control:
+    # volumes:
+    #   - ../joplin-mcp.json:/config/joplin-mcp.json:ro
+
+networks:
+  joplin_internal:
+    driver: bridge
+
+volumes:
+  joplin_db:
+  joplin_profile:

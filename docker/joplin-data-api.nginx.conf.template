@@ -1,0 +1,43 @@
+user                            www;
+worker_processes                auto;
+
+error_log                       /var/log/nginx/error.log warn;
+
+events {
+    worker_connections          1024;
+}
+
+http {
+    include                     /etc/nginx/mime.types;
+    default_type                application/octet-stream;
+    sendfile                    on;
+    access_log                  /var/log/nginx/access.log;
+    keepalive_timeout           3000;
+
+    # Strip any existing "token" query parameter so the proxy always
+    # injects the single, authoritative token. This lets upstream clients
+    # (e.g. joplin-mcp) send any placeholder token without getting a 403.
+    # The joplin-terminal-data-api image substitutes __TOKEN__ with the
+    # Joplin CLI's real Data API token at container start.
+    map $args $args_no_token {
+        "~^(.+)&token=[^&]*&(.+)$" "$1&$2";
+        "~^(.+)&token=[^&]*$"      $1;
+        "~^token=[^&]*&(.+)$"      $1;
+        "~^token=[^&]*$"            "";
+        default                     $args;
+    }
+
+    server {
+        listen               41185;
+        client_max_body_size 2048M;
+        location / {
+            set $args $args_no_token;
+            set $delimeter "";
+            if ($is_args) {
+              set $delimeter "&";
+            }
+            set $args "$args${delimeter}token=__TOKEN__";
+            proxy_pass http://localhost:41184;
+        }
+    }
+}
