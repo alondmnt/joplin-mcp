@@ -26,10 +26,24 @@ from .types import ImportOptions
 logger = logging.getLogger(__name__)
 
 
+def _require_all_properties(schema: Dict[str, Any], _model: Any) -> None:
+    """Make object schemas strict-client compatible.
+
+    Some strict function-schema validators require every declared property to
+    appear in ``required`` even when the field itself is nullable.
+    """
+    properties = schema.get("properties")
+    if isinstance(properties, dict):
+        schema["required"] = list(properties.keys())
+
+
 class ImportFromFileOptions(BaseModel):
     """Structured import options exposed through the MCP schema."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=_require_all_properties,
+    )
 
     handle_duplicates: Optional[Literal["skip", "overwrite", "rename"]] = None
     create_missing_notebooks: Optional[bool] = None

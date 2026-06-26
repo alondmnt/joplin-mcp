@@ -248,6 +248,7 @@ async def test_import_from_file_schema_uses_object_for_import_options():
                     option for option in import_options["anyOf"] if option["type"] == "object"
                 )
                 assert object_branch["additionalProperties"] is False
+                assert set(object_branch["required"]) == set(object_branch["properties"].keys())
                 break
         else:
             pytest.fail("import_from_file tool not found")
