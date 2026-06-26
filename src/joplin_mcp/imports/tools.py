@@ -3,9 +3,9 @@ import ast
 import json
 import logging
 from pathlib import Path
-from typing import Annotated, Any, Dict, Optional, Union
+from typing import Annotated, Any, Dict, Literal, Optional
 
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from joplin_mcp.config import JoplinMCPConfig
 from joplin_mcp.fastmcp_server import create_tool, get_joplin_client
@@ -24,6 +24,29 @@ from .importers.utils import looks_like_raw_export
 from .types import ImportOptions
 
 logger = logging.getLogger(__name__)
+
+
+class ImportFromFileOptions(BaseModel):
+    """Structured import options exposed through the MCP schema."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    handle_duplicates: Optional[Literal["skip", "overwrite", "rename"]] = None
+    create_missing_notebooks: Optional[bool] = None
+    create_missing_tags: Optional[bool] = None
+    preserve_timestamps: Optional[bool] = None
+    max_batch_size: Optional[int] = Field(default=None, ge=1)
+    attachment_handling: Optional[Literal["link", "embed", "skip"]] = None
+    encoding: Optional[str] = None
+    max_file_size_mb: Optional[int] = Field(default=None, ge=1)
+    file_pattern: Optional[str] = None
+    preserve_structure: Optional[bool] = None
+    preserve_directory_structure: Optional[bool] = None
+    csv_import_mode: Optional[Literal["table", "rows"]] = None
+    csv_delimiter: Optional[str] = Field(
+        default=None, min_length=1, max_length=1, description="Single-character CSV delimiter override"
+    )
+    extract_hashtags: Optional[bool] = None
 
 
 # === UTILITY FUNCTIONS ===
@@ -294,8 +317,8 @@ async def import_from_file(
         Optional[str], Field(description="Target notebook name (optional, defaults to 'Imported')")
     ] = 'Imported',
     import_options: Annotated[
-        Optional[Union[Dict[str, Any], str]],
-        Field(description="Additional import options (object/dict; string is auto-parsed)")
+        Optional[ImportFromFileOptions],
+        Field(description="Additional structured import options")
     ] = None,
 ) -> str:
     """Import notes from a file or directory.
@@ -378,7 +401,9 @@ async def import_from_file(
             max_file_size_mb=config.import_settings.get("max_file_size_mb", 100),
         )
 
-        # Apply additional options (accept dict or JSON/Python-dict string)
+        # Apply additional options. Older direct Python callers may still pass a
+        # JSON/Python-dict string even though the MCP schema now exposes this as
+        # an object-only parameter for better client compatibility.
         if import_options:
             if isinstance(import_options, str):
                 try:
@@ -392,6 +417,10 @@ async def import_from_file(
                         return "VALIDATION_ERROR: import_options string did not parse to an object"
                 except Exception:
                     return "VALIDATION_ERROR: import_options must be an object or JSON/dict string"
+            elif isinstance(import_options, BaseModel):
+                import_options = import_options.model_dump(exclude_none=True)
+            elif not isinstance(import_options, dict):
+                return "VALIDATION_ERROR: import_options must be an object or JSON/dict string"
             # Merge structured options
             for key, value in import_options.items():
                 if hasattr(base_options, key):

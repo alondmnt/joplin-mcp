@@ -224,6 +224,35 @@ async def test_update_note_has_todo_due_param():
             pytest.fail("update_note tool not found")
 
 
+@pytest.mark.asyncio
+async def test_import_from_file_schema_uses_object_for_import_options():
+    """Test that import_from_file exposes import_options as an object-only schema.
+
+    Some MCP clients reject union schemas here, especially Dict|str|None, so the
+    wire schema should stay object-shaped while the Python implementation can
+    still keep legacy string parsing for direct callers.
+    """
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
+        for tool in tools:
+            if tool.name == "import_from_file":
+                schema = tool.inputSchema
+                assert schema and "properties" in schema
+                properties = schema["properties"]
+                assert "import_options" in properties
+                import_options = properties["import_options"]
+                assert "anyOf" in import_options
+                option_types = {option["type"] for option in import_options["anyOf"]}
+                assert option_types == {"object", "null"}
+                object_branch = next(
+                    option for option in import_options["anyOf"] if option["type"] == "object"
+                )
+                assert object_branch["additionalProperties"] is False
+                break
+        else:
+            pytest.fail("import_from_file tool not found")
+
+
 # === Tests for path-based notebook resolution ===
 
 
