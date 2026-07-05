@@ -17,11 +17,9 @@ from .types import (
 from .tools import (
     detect_directory_format,
     detect_file_format,
-    detect_source_format,
     format_import_result,
     get_importer_for_format,
     import_from_file,
-    import_source,
 )
 
 __all__ = [
@@ -36,9 +34,7 @@ __all__ = [
     # Tools and utilities
     "detect_directory_format",
     "detect_file_format",
-    "detect_source_format",
     "format_import_result",
     "get_importer_for_format",
     "import_from_file",
-    "import_source",
 ]

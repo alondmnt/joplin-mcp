@@ -151,18 +151,6 @@ def get_importer_for_format(file_format: str, options: ImportOptions):
     return importer_class(options)
 
 
-def detect_source_format(source_path: str) -> str:
-    """Detect format from file or directory path."""
-    path = Path(source_path)
-
-    if path.is_file():
-        return detect_file_format(source_path)
-    elif path.is_dir():
-        return detect_directory_format(source_path)
-    else:
-        raise ValueError(f"Source path does not exist: {source_path}")
-
-
 def detect_file_format(file_path: str) -> str:
     """Detect file format from file extension."""
     path = Path(file_path)
@@ -242,79 +230,6 @@ def detect_directory_format(directory_path: str) -> str:
 
     # Single supported type present
     return next(iter(present_supported))
-
-
-async def import_source(
-    source_path: str,
-    target_notebook: Optional[str] = None,
-    import_options: Optional[Dict[str, Any]] = None,
-) -> str:
-    """Import from file or directory source.
-
-    Args:
-        source_path: Path to file or directory to import
-        target_notebook: Target notebook name
-        import_options: Import configuration options
-
-    Returns:
-        Formatted import result
-    """
-    # Create import options
-    options = ImportOptions(
-        handle_duplicates=(
-            import_options.get("handle_duplicates", "rename")
-            if import_options
-            else "rename"
-        ),
-        create_missing_notebooks=(
-            import_options.get("create_missing_notebooks", True)
-            if import_options
-            else True
-        ),
-        create_missing_tags=(
-            import_options.get("create_missing_tags", True) if import_options else True
-        ),
-    )
-
-    # Detect format
-    detected_format = detect_source_format(source_path)
-
-    # Get appropriate importer
-    importer = get_importer_for_format(detected_format, options)
-
-    # Validate source
-    await importer.validate(source_path)
-
-    # Parse based on source type
-    path = Path(source_path)
-    if path.is_file():
-        notes = await importer.parse(source_path)
-    elif path.is_dir():
-        if hasattr(importer, "parse_directory"):
-            notes = await importer.parse_directory(source_path)
-        else:
-            # Fallback: use base class directory parsing
-            notes = await importer.parse_directory(source_path)
-    else:
-        raise ValueError(f"Invalid source path: {source_path}")
-
-    if not notes:
-        return f"No notes imported from {source_path}"
-
-    # Set target notebook if specified
-    if target_notebook:
-        for note in notes:
-            if not note.notebook:  # Don't override existing notebook assignments
-                note.notebook = target_notebook
-
-    # Get Joplin client and import
-    config = JoplinMCPConfig()
-    client = get_joplin_client()
-    engine = JoplinImportEngine(client, config)
-
-    result = await engine.import_batch(notes, options)
-
-    return format_import_result(result)
 
 
 # === IMPORT TOOL ===
