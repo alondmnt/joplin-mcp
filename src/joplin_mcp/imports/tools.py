@@ -56,6 +56,11 @@ class ImportFromFileOptions(BaseModel):
     file_pattern: Optional[str] = None
     preserve_structure: Optional[bool] = None
     preserve_directory_structure: Optional[bool] = None
+    # The fields below are not ImportOptions attributes: import_from_file routes
+    # them into base_options.import_options, where the importers read them
+    # (csv_import_mode/csv_delimiter in csv_importer; extract_hashtags in
+    # markdown_importer and base). extra="forbid" makes this a closed set, so a
+    # new importer option must be declared here too to be passable over MCP.
     csv_import_mode: Optional[Literal["table", "rows"]] = None
     csv_delimiter: Optional[str] = Field(
         default=None, min_length=1, max_length=1, description="Single-character CSV delimiter override"
