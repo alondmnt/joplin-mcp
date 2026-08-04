@@ -295,6 +295,19 @@ class JoplinMCPConfig:
         "enable_smart_toc": True,  # Enable smart TOC behavior in get_note
     }
 
+    # Environment variable suffix for each content_exposure key, and how to
+    # parse it. Single source of truth for from_environment() and the merge in
+    # from_file_and_environment() - the two must agree on names or an env var
+    # silently does nothing.
+    CONTENT_EXPOSURE_ENV_VARS = {
+        "search_results": ("CONTENT_SEARCH_RESULTS", "str"),
+        "individual_notes": ("CONTENT_INDIVIDUAL_NOTES", "str"),
+        "listings": ("CONTENT_LISTINGS", "str"),
+        "max_preview_length": ("MAX_PREVIEW_LENGTH", "int"),
+        "smart_toc_threshold": ("SMART_TOC_THRESHOLD", "int"),
+        "enable_smart_toc": ("ENABLE_SMART_TOC", "bool"),
+    }
+
     # Sentinel value: when notebook_allowlist equals this, all notebooks are accessible
     # Tuple to prevent accidental mutation of the shared sentinel
     ALLOW_ALL = ("**",)
@@ -463,18 +476,16 @@ class JoplinMCPConfig:
 
         # Load content exposure configuration from environment
         content_exposure = {}
-        for context in ["search_results", "individual_notes", "listings"]:
-            env_var = f"{prefix}CONTENT_{context.upper()}"
-            content_value = os.environ.get(env_var)
-            if content_value is not None:
-                content_exposure[context] = content_value
-
-        # Load max preview length from environment
-        max_preview_env = os.environ.get(f"{prefix}MAX_PREVIEW_LENGTH")
-        if max_preview_env is not None:
-            content_exposure["max_preview_length"] = ConfigParser.parse_int(
-                max_preview_env, "max_preview_length"
-            )
+        for key, (suffix, value_kind) in cls.CONTENT_EXPOSURE_ENV_VARS.items():
+            raw_value = os.environ.get(f"{prefix}{suffix}")
+            if raw_value is None:
+                continue
+            if value_kind == "int":
+                content_exposure[key] = ConfigParser.parse_int(raw_value, key)
+            elif value_kind == "bool":
+                content_exposure[key] = ConfigParser.parse_bool(raw_value)
+            else:
+                content_exposure[key] = raw_value
 
         # Load notebook allowlist from environment (comma-separated)
         notebook_allowlist = None
@@ -903,12 +914,8 @@ class JoplinMCPConfig:
         merged_content_exposure = config.content_exposure.copy()
         # Override with environment content exposure
         for key, value in env_config.content_exposure.items():
-            env_var_name = (
-                f"{prefix}CONTENT_{key.upper()}"
-                if key != "max_preview_length"
-                else f"{prefix}MAX_PREVIEW_LENGTH"
-            )
-            if env_var_name in os.environ:
+            suffix, _ = cls.CONTENT_EXPOSURE_ENV_VARS.get(key, (key.upper(), "str"))
+            if f"{prefix}{suffix}" in os.environ:
                 merged_content_exposure[key] = value
         # Override with direct content exposure overrides
         if "content_exposure" in overrides:
