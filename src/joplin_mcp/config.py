@@ -515,12 +515,20 @@ class JoplinMCPConfig:
                 content_exposure[key] = raw_value
 
         # Load notebook allowlist from environment (comma-separated).
-        # Blank reads as unset rather than as an empty allowlist: an empty list
-        # would either lock the agent out of everything or, worse, read as
-        # "unrestricted" depending on the consumer.
+        #
+        # Deliberately raw presence, not env_is_set(): this is the one key where
+        # blank cannot mean "unset". [] is deny-all here (see the constructor),
+        # so a blank value that read as absent would hand back ALLOW_ALL and
+        # turn "no notebooks" into "every notebook" for an environment-only
+        # setup. Blank must never widen access, so it stays deny-all.
+        #
+        # Layered over a config file, the merge in from_file_and_environment()
+        # treats blank as unset and the file's own list stands - also no
+        # widening, and it avoids an empty field in a client config locking a
+        # user out of their whole instance.
         notebook_allowlist = None
-        raw = ConfigParser.get_env_var("NOTEBOOK_ALLOWLIST", prefix)
-        if raw is not None:
+        if f"{prefix}NOTEBOOK_ALLOWLIST" in os.environ:
+            raw = os.environ[f"{prefix}NOTEBOOK_ALLOWLIST"]
             notebook_allowlist = [e.strip() for e in raw.split(",") if e.strip()]
 
         return cls(

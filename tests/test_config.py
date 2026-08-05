@@ -1922,3 +1922,57 @@ class TestConfigLoadFailureIsNotPermissive:
                 assert get_config_load_error() is None
         finally:
             os.unlink(path)
+
+
+class TestEnvironmentOnlyAllowlist:
+    """The allowlist is the one key where blank cannot mean "unset".
+
+    [] is deny-all (the constructor turns only None into ALLOW_ALL), so with no
+    config file to fall back on, a blank JOPLIN_NOTEBOOK_ALLOWLIST reading as
+    absent would flip an install from "no notebooks" to "every notebook" on
+    upgrade. Blank must never widen access.
+    """
+
+    def test_blank_allowlist_is_deny_all_not_unrestricted(self):
+        with patch.dict(
+            os.environ,
+            {"JOPLIN_TOKEN": "e" * 32, "JOPLIN_NOTEBOOK_ALLOWLIST": ""},
+            clear=True,
+        ):
+            config = JoplinMCPConfig.from_environment()
+
+        assert config.notebook_allowlist == []
+        assert config.has_notebook_allowlist is True
+        assert config.notebook_allowlist != JoplinMCPConfig.ALLOW_ALL
+
+    def test_whitespace_allowlist_is_deny_all(self):
+        with patch.dict(
+            os.environ,
+            {"JOPLIN_TOKEN": "e" * 32, "JOPLIN_NOTEBOOK_ALLOWLIST": "  ,  "},
+            clear=True,
+        ):
+            config = JoplinMCPConfig.from_environment()
+
+        assert config.notebook_allowlist == []
+        assert config.has_notebook_allowlist is True
+
+    def test_unset_allowlist_is_unrestricted(self):
+        with patch.dict(os.environ, {"JOPLIN_TOKEN": "e" * 32}, clear=True):
+            config = JoplinMCPConfig.from_environment()
+
+        assert config.notebook_allowlist == JoplinMCPConfig.ALLOW_ALL
+        assert config.has_notebook_allowlist is False
+
+    def test_populated_allowlist_is_parsed(self):
+        with patch.dict(
+            os.environ,
+            {
+                "JOPLIN_TOKEN": "e" * 32,
+                "JOPLIN_NOTEBOOK_ALLOWLIST": "Work, Personal/** ",
+            },
+            clear=True,
+        ):
+            config = JoplinMCPConfig.from_environment()
+
+        assert config.notebook_allowlist == ["Work", "Personal/**"]
+        assert config.has_notebook_allowlist is True

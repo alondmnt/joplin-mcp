@@ -165,6 +165,10 @@ Two things to know:
   set**, so it leaves the file's value alone. Clients routinely emit an
   empty string for a field the user left blank, and treating that as an
   override would replace a configured value with a default.
+- `JOPLIN_NOTEBOOK_ALLOWLIST` is the exception, because an empty allowlist
+  means *deny all* rather than "no allowlist". A blank value never widens
+  access: with no config file it denies every notebook, and alongside a
+  config file the file's own list stands.
 - A malformed variable (`JOPLIN_PORT=abc`) fails config load rather than
   being ignored, and **the server refuses to start**. It does not fall
   back to defaults: defaults enable more tools and no notebook allowlist,

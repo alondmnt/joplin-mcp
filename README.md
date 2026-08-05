@@ -394,7 +394,7 @@ Every tool can be toggled individually via `JOPLIN_TOOL_<NAME>=true|false`. Thes
 
 | Env var | Default | Description |
 |---------|---------|-------------|
-| `JOPLIN_NOTEBOOK_ALLOWLIST` | *(not set)* | Comma-separated list of notebook patterns (e.g., `Work,Projects/*,!Projects/Secret`) |
+| `JOPLIN_NOTEBOOK_ALLOWLIST` | *(not set)* | Comma-separated list of notebook patterns (e.g., `Work,Projects/*,!Projects/Secret`). Not set means no restriction; set but empty denies every notebook |
 
 ### HTTP Transport Support
 
