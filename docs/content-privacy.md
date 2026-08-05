@@ -144,9 +144,36 @@ export JOPLIN_SMART_TOC_THRESHOLD=2000
 export JOPLIN_ENABLE_SMART_TOC=true
 ```
 
-**Precedence:** the server loads a config file *or* the environment, not
-both. If `joplin-mcp.json` (or one of the other discovered paths) exists,
-these variables are ignored - put the settings in the file instead.
+**Precedence:** environment variables override the config file, key by
+key. A variable only takes part when it is actually set, so setting one
+does not disturb the rest of your file. Full order:
+
+```
+direct parameters  >  environment  >  config file  >  defaults
+```
+
+This is what makes an MCP client's `env` block work: Claude Desktop,
+Cursor and the VS Code extension all configure a server that way, and
+those settings need to win over whatever file happens to be discovered.
+
+Two things to know:
+
+- `notebook_allowlist` from the environment replaces the file's list
+  wholesale rather than intersecting with it, the same as every other
+  key. An env allowlist can therefore widen access, not only narrow it.
+- A variable set to an empty or whitespace-only value counts as **not
+  set**, so it leaves the file's value alone. Clients routinely emit an
+  empty string for a field the user left blank, and treating that as an
+  override would replace a configured value with a default.
+- `JOPLIN_NOTEBOOK_ALLOWLIST` is the exception, because an empty allowlist
+  means *deny all* rather than "no allowlist". A blank value never widens
+  access: with no config file it denies every notebook, and alongside a
+  config file the file's own list stands.
+- A malformed variable (`JOPLIN_PORT=abc`) fails config load rather than
+  being ignored, and **the server refuses to start**. It does not fall
+  back to defaults: defaults enable more tools and no notebook allowlist,
+  so a typo in one variable must never widen what the agent can reach.
+  The parse error is logged to stderr.
 
 ## Security Best Practices
 
