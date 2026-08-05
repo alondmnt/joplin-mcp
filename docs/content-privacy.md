@@ -33,10 +33,7 @@ Controls content visibility when retrieving specific notes:
 
 **Default:** `full`
 
-These two are the only contexts. Earlier versions also documented a
-`listings` context for `find_notes_in_notebook` and `find_notes_with_tag`,
-but no tool ever read it - those tools use `search_results`. The key is
-still accepted in existing config files and ignored with a warning.
+These two are the only contexts.
 
 ## Smart TOC Controls
 
