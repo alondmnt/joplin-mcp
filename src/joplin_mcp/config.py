@@ -270,6 +270,16 @@ class JoplinMCPConfig:
         ],
     }
 
+    # Contexts that actually gate content in tool output
+    CONTENT_EXPOSURE_CONTEXTS = ("search_results", "individual_notes")
+
+    # Keys accepted in existing config files but dropped on load. "listings"
+    # was written by the installer and documented as governing
+    # find_notes_in_notebook/find_notes_with_tag, but no tool ever read it -
+    # those tools use "search_results". Rejecting the key outright would break
+    # every config file the old installer wrote.
+    DEPRECATED_CONTENT_EXPOSURE_KEYS = ("listings",)
+
     # Content exposure levels for privacy control
     CONTENT_EXPOSURE_LEVELS = {
         "none": "No content shown - titles and metadata only",
@@ -289,7 +299,6 @@ class JoplinMCPConfig:
     DEFAULT_CONTENT_EXPOSURE = {
         "search_results": "preview",  # Search results show previews
         "individual_notes": "full",  # Individual note retrieval shows full content
-        "listings": "none",  # Note listings show no content
         "max_preview_length": 300,  # Maximum preview length in characters
         "smart_toc_threshold": 2000,  # Show TOC for notes longer than this (in characters)
         "enable_smart_toc": True,  # Enable smart TOC behavior in get_note
@@ -302,7 +311,6 @@ class JoplinMCPConfig:
     CONTENT_EXPOSURE_ENV_VARS = {
         "search_results": ("CONTENT_SEARCH_RESULTS", "str"),
         "individual_notes": ("CONTENT_INDIVIDUAL_NOTES", "str"),
-        "listings": ("CONTENT_LISTINGS", "str"),
         "max_preview_length": ("MAX_PREVIEW_LENGTH", "int"),
         "smart_toc_threshold": ("SMART_TOC_THRESHOLD", "int"),
         "enable_smart_toc": ("ENABLE_SMART_TOC", "bool"),
@@ -542,11 +550,13 @@ class JoplinMCPConfig:
                     raise ConfigError(
                         f"enable_smart_toc must be a boolean, got {type(value)}"
                     )
-            elif key in ["search_results", "individual_notes", "listings"]:
+            elif key in self.CONTENT_EXPOSURE_CONTEXTS:
                 if value not in self.CONTENT_EXPOSURE_LEVELS:
                     raise ConfigError(
                         f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}"
                     )
+            elif key in self.DEPRECATED_CONTENT_EXPOSURE_KEYS:
+                continue  # Inert, tolerated for older config files
             else:
                 raise ConfigError(f"Unknown content exposure setting: {key}")
 
@@ -776,7 +786,7 @@ class JoplinMCPConfig:
                             raise ConfigError(
                                 f"Invalid value for 'enable_smart_toc': expected boolean, got {type(value)}"
                             )
-                    elif key in ["search_results", "individual_notes", "listings"]:
+                    elif key in cls.CONTENT_EXPOSURE_CONTEXTS:
                         if not isinstance(value, str):
                             raise ConfigError(
                                 f"Invalid value for '{key}': expected string, got {type(value)}"
@@ -785,6 +795,12 @@ class JoplinMCPConfig:
                             raise ConfigError(
                                 f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(cls.CONTENT_EXPOSURE_LEVELS.keys())}"
                             )
+                    elif key in cls.DEPRECATED_CONTENT_EXPOSURE_KEYS:
+                        logger.warning(
+                            f"Ignoring content_exposure setting '{key}': no tool reads "
+                            "it. Use 'search_results' to control note listings."
+                        )
+                        continue
                     else:
                         raise ConfigError(f"Unknown content exposure setting: {key}")
                     content_exposure[key] = value
@@ -1060,13 +1076,15 @@ class JoplinMCPConfig:
                                 f"enable_smart_toc must be a boolean, got {type(value)}"
                             )
                         )
-                elif key in ["search_results", "individual_notes", "listings"]:
+                elif key in self.CONTENT_EXPOSURE_CONTEXTS:
                     if value not in self.CONTENT_EXPOSURE_LEVELS:
                         errors.append(
                             ConfigError(
                                 f"Invalid content exposure level '{value}' for '{key}'. Must be one of: {list(self.CONTENT_EXPOSURE_LEVELS.keys())}"
                             )
                         )
+                elif key in self.DEPRECATED_CONTENT_EXPOSURE_KEYS:
+                    continue  # Inert, tolerated for older config files
                 else:
                     errors.append(
                         ConfigError(f"Unknown content exposure setting: {key}")

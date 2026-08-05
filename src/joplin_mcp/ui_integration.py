@@ -295,35 +295,10 @@ def get_content_privacy_settings() -> Dict[str, Union[str, int]]:
         else:
             print_warning("Please enter 'none', 'preview', or 'full'.")
 
-    # 3. Note Listings
-    print()
-    print_colored("3. 📂 NOTE LISTINGS", Colors.MAGENTA + Colors.BOLD)
-    print_info("   When listing notes by notebook/tag, what content should be visible?")
-    print_info("   Contexts: find_notes_in_notebook, find_notes_with_tag")
-    print()
-
-    while True:
-        default_listings = JoplinMCPConfig.DEFAULT_CONTENT_EXPOSURE["listings"]
-        listing_level = (
-            input(
-                f"Note listings content level (none/preview/full) [default: {default_listings}]: "
-            )
-            .lower()
-            .strip()
-        )
-        if listing_level in ("", default_listings):
-            content_exposure["listings"] = default_listings
-            break
-        elif listing_level in ("none", "preview", "full"):
-            content_exposure["listings"] = listing_level
-            break
-        else:
-            print_warning("Please enter 'none', 'preview', or 'full'.")
-
-    # 4. Preview Length (if any previews are enabled)
+    # 3. Preview Length (if any previews are enabled)
     if any(level == "preview" for level in content_exposure.values()):
         print()
-        print_colored("4. ✂️  PREVIEW LENGTH", Colors.CYAN + Colors.BOLD)
+        print_colored("3. ✂️  PREVIEW LENGTH", Colors.CYAN + Colors.BOLD)
         print_info("   Maximum length for content previews (in characters)")
         print()
 
@@ -358,12 +333,12 @@ def get_content_privacy_settings() -> Dict[str, Union[str, int]]:
     print_colored("🔒 Privacy Summary:", Colors.BOLD)
     print_info(f"• Search results: {content_exposure['search_results']}")
     print_info(f"• Individual notes: {content_exposure['individual_notes']}")
-    print_info(f"• Note listings: {content_exposure['listings']}")
     print_info(f"• Preview length: {content_exposure['max_preview_length']} characters")
 
-    # Privacy assessment
+    # Privacy assessment: 2 points per hidden context, 1 per preview-only,
+    # so 4 means nothing is exposed and 0 means both contexts show full bodies.
     privacy_score = 0
-    for context in ["search_results", "individual_notes", "listings"]:
+    for context in JoplinMCPConfig.CONTENT_EXPOSURE_CONTEXTS:
         level = content_exposure[context]
         if level == "none":
             privacy_score += 2
@@ -372,11 +347,11 @@ def get_content_privacy_settings() -> Dict[str, Union[str, int]]:
         # "full" adds 0
 
     print()
-    if privacy_score >= 5:
+    if privacy_score >= 4:
         print_colored(
             "✅ High Privacy: Minimal content exposure", Colors.GREEN + Colors.BOLD
         )
-    elif privacy_score >= 3:
+    elif privacy_score >= 1:
         print_colored(
             "⚠️  Balanced Privacy: Some content visible", Colors.YELLOW + Colors.BOLD
         )

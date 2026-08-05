@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+from pathlib import Path
 import uuid
 from unittest.mock import patch
 
@@ -489,6 +490,30 @@ class TestConfigPriority:
                 assert config.token == "direct-token"
                 # Should still use file value for port (no env or direct override)
                 assert config.port == 8080
+        finally:
+            os.unlink(config_file)
+
+    def test_deprecated_listings_key_is_dropped_not_rejected(self):
+        """Config files written by the old installer must still load.
+
+        `listings` was never read by any tool, so it is ignored - but
+        rejecting it would break every config the old installer produced.
+        """
+        config_data = {
+            "token": "file-token",
+            "content_exposure": {"search_results": "preview", "listings": "none"},
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(config_data, f)
+            config_file = f.name
+
+        try:
+            config = JoplinMCPConfig.from_file(config_file)
+
+            assert "listings" not in config.content_exposure
+            assert config.get_content_exposure_level("search_results") == "preview"
+            config.validate()  # must not raise
         finally:
             os.unlink(config_file)
 
@@ -1490,3 +1515,46 @@ class TestConfigToolConfiguration:
         # Should have errors for invalid tool and invalid tool value
         tool_errors = [e for e in errors if "tool" in str(e).lower()]
         assert len(tool_errors) >= 2
+
+
+class TestShippedExampleConfigs:
+    """The example configs we ship must load without warnings or errors.
+
+    Catches the case where a config key is retired in code but left behind in
+    an example, so anyone copying it hits a deprecation warning on first run.
+    """
+
+    def _example_paths(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        paths = sorted(repo_root.glob("*.json.example")) + sorted(
+            repo_root.glob("*-example.json")
+        )
+        assert paths, "no example configs found - has the naming changed?"
+        return paths
+
+    def test_examples_contain_no_retired_keys(self):
+        for path in self._example_paths():
+            data = json.loads(path.read_text())
+            exposure = data.get("content_exposure", {})
+            retired = set(exposure) & set(
+                JoplinMCPConfig.DEPRECATED_CONTENT_EXPOSURE_KEYS
+            )
+            assert not retired, f"{path.name} still sets {sorted(retired)}"
+
+    def test_examples_load_and_validate(self):
+        for path in self._example_paths():
+            data = json.loads(path.read_text())
+            if not data.get("token"):
+                data["token"] = "a" * 32  # examples ship without a real token
+
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False
+            ) as f:
+                json.dump(data, f)
+                temp_path = f.name
+
+            try:
+                config = JoplinMCPConfig.from_file(temp_path)
+                config.validate()
+            finally:
+                os.unlink(temp_path)

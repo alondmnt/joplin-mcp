@@ -469,10 +469,15 @@ Note: Claude Desktop currently uses STDIO transport and does not consume HTTP/SS
 #### Content Exposure (Privacy Settings)
 | Option | Default | Description |
 |--------|---------|-------------|
-| `content_exposure.search_results` | `"preview"` | Content visibility in search results: `"none"`, `"preview"`, `"full"` |
+| `content_exposure.search_results` | `"preview"` | Content visibility in all search and listing results: `"none"`, `"preview"`, `"full"` |
 | `content_exposure.individual_notes` | `"full"` | Content visibility for individual notes: `"none"`, `"preview"`, `"full"` |
-| `content_exposure.listings` | `"none"` | Content visibility in note listings: `"none"`, `"preview"`, `"full"` |
 | `content_exposure.max_preview_length` | `300` | Maximum length of content previews (characters) |
+| `content_exposure.smart_toc_threshold` | `2000` | Notes longer than this show a table of contents instead of the full body |
+| `content_exposure.enable_smart_toc` | `true` | Turn the table-of-contents fallback off to always return full note bodies |
+
+Lowering `max_preview_length` and `smart_toc_threshold`, or setting
+`search_results` to `"none"`, is the main way to cut how many tokens a
+session spends. See [docs/content-privacy.md](docs/content-privacy.md).
 
 ## Docker
 
