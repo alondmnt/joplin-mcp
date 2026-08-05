@@ -1748,3 +1748,177 @@ class TestServerDiscoveryPrecedence:
             assert config.port == 8080
         finally:
             os.unlink(path)
+
+
+class TestBlankEnvironmentVariables:
+    """A blank variable must read as "not set", everywhere.
+
+    The parser strips and collapses blanks to None while the merge used to test
+    os.environ membership, so `JOPLIN_VERIFY_SSL=` replaced a file's true with
+    the environment's own default - silently turning HTTPS into HTTP. Blank
+    values are common: clients emit them for fields a user left empty.
+    """
+
+    def _write(self, data):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(data, f)
+            return f.name
+
+    def _discover(self, config_path, env):
+        with patch.dict(os.environ, env, clear=True):
+            with patch.object(
+                JoplinMCPConfig,
+                "get_default_config_paths",
+                return_value=[Path(config_path)],
+            ):
+                return JoplinMCPConfig.auto_discover()
+
+    def test_blank_scalars_do_not_override_file_values(self):
+        path = self._write(
+            {
+                "host": "file-host",
+                "port": 8080,
+                "token": "f" * 32,
+                "timeout": 15,
+                "verify_ssl": True,
+            }
+        )
+        try:
+            config = self._discover(
+                path,
+                {
+                    "JOPLIN_HOST": "",
+                    "JOPLIN_PORT": "",
+                    "JOPLIN_TOKEN": "",
+                    "JOPLIN_TIMEOUT": "",
+                    "JOPLIN_VERIFY_SSL": "   ",
+                },
+            )
+
+            assert config.host == "file-host"
+            assert config.port == 8080
+            assert config.token == "f" * 32
+            assert config.timeout == 15
+            assert config.verify_ssl is True  # a blank must not downgrade to HTTP
+        finally:
+            os.unlink(path)
+
+    def test_blank_tool_variable_neither_overrides_nor_raises(self):
+        """It used to raise "Invalid boolean value", which degraded to defaults."""
+        path = self._write({"token": "f" * 32, "tools": {"create_note": False}})
+        try:
+            config = self._discover(path, {"JOPLIN_TOOL_CREATE_NOTE": ""})
+            assert config.tools["create_note"] is False
+        finally:
+            os.unlink(path)
+
+    def test_blank_content_exposure_variable_does_not_override(self):
+        path = self._write(
+            {"token": "f" * 32, "content_exposure": {"search_results": "none"}}
+        )
+        try:
+            config = self._discover(path, {"JOPLIN_CONTENT_SEARCH_RESULTS": ""})
+            assert config.get_content_exposure_level("search_results") == "none"
+        finally:
+            os.unlink(path)
+
+    def test_blank_allowlist_variable_does_not_remove_restrictions(self):
+        path = self._write({"token": "f" * 32, "notebook_allowlist": ["Work"]})
+        try:
+            config = self._discover(path, {"JOPLIN_NOTEBOOK_ALLOWLIST": ""})
+            assert config.notebook_allowlist == ["Work"]
+            assert config.has_notebook_allowlist is True
+        finally:
+            os.unlink(path)
+
+
+class TestConfigLoadFailureIsNotPermissive:
+    """Discovery failure must not quietly install a more permissive config.
+
+    Import cannot raise, so a failure still returns defaults - but defaults
+    enable 19 tools and no notebook allowlist, and get_joplin_client() recovers
+    JOPLIN_TOKEN from the environment on its own. Without a recorded failure
+    state, a malformed override on a restrictive config yields an
+    authenticated server with write tools and unrestricted notebooks.
+    """
+
+    def _restrictive_file(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(
+                {
+                    "token": "f" * 32,
+                    "notebook_allowlist": ["Work"],
+                    "tools": {"create_note": False, "update_note": False},
+                    "content_exposure": {"search_results": "none"},
+                },
+                f,
+            )
+            return f.name
+
+    def test_malformed_override_records_a_load_error(self):
+        from joplin_mcp.config import (
+            _auto_discover_with_logging,
+            get_config_load_error,
+        )
+
+        path = self._restrictive_file()
+        try:
+            with patch.dict(
+                os.environ,
+                {
+                    "JOPLIN_MCP_CONFIG": path,
+                    "JOPLIN_TOKEN": "e" * 32,
+                    "JOPLIN_PORT": "abc",
+                },
+                clear=True,
+            ):
+                config = _auto_discover_with_logging()
+
+                # The returned stand-in is permissive, which is exactly why the
+                # error has to be visible to the startup path.
+                assert config.tools["create_note"] is True
+                assert config.has_notebook_allowlist is False
+                assert get_config_load_error() is not None
+        finally:
+            os.unlink(path)
+
+    def test_successful_load_records_no_error(self):
+        from joplin_mcp.config import (
+            _auto_discover_with_logging,
+            get_config_load_error,
+        )
+
+        path = self._restrictive_file()
+        try:
+            with patch.dict(
+                os.environ, {"JOPLIN_MCP_CONFIG": path}, clear=True
+            ):
+                config = _auto_discover_with_logging()
+
+                assert config.tools["create_note"] is False
+                assert get_config_load_error() is None
+        finally:
+            os.unlink(path)
+
+    def test_set_config_clears_the_error(self):
+        """An explicitly supplied config that loaded supersedes the failure."""
+        from joplin_mcp.config import (
+            _auto_discover_with_logging,
+            get_config_load_error,
+            set_config,
+        )
+
+        path = self._restrictive_file()
+        try:
+            with patch.dict(
+                os.environ,
+                {"JOPLIN_MCP_CONFIG": path, "JOPLIN_PORT": "abc"},
+                clear=True,
+            ):
+                _auto_discover_with_logging()
+                assert get_config_load_error() is not None
+
+                set_config(JoplinMCPConfig.from_file(path))
+                assert get_config_load_error() is None
+        finally:
+            os.unlink(path)

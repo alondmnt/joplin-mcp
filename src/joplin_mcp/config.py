@@ -93,9 +93,27 @@ class ConfigParser:
 
     @staticmethod
     def get_env_var(name: str, prefix: str = "JOPLIN_") -> Optional[str]:
-        """Get environment variable and strip whitespace."""
+        """Get environment variable and strip whitespace.
+
+        A blank or whitespace-only value reads as absent - clients routinely
+        pass an empty string for a field the user left unfilled.
+        """
         value = os.environ.get(f"{prefix}{name}")
-        return value.strip() if value else None
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+    @staticmethod
+    def env_is_set(name: str, prefix: str = "JOPLIN_") -> bool:
+        """Whether a variable is set to something meaningful.
+
+        The single source of truth for "did the user configure this?". Any
+        caller that tests ``os.environ`` membership directly disagrees with
+        ``get_env_var`` about blank values, which is how an empty
+        JOPLIN_VERIFY_SSL came to replace a file's value with a default.
+        """
+        return ConfigParser.get_env_var(name, prefix) is not None
 
 
 class ConfigValidator:
@@ -477,15 +495,16 @@ class JoplinMCPConfig:
         # Load tools configuration from environment
         tools = {}
         for tool_name in cls.DEFAULT_TOOLS:
-            env_var = f"{prefix}TOOL_{tool_name.upper()}"
-            tool_value = os.environ.get(env_var)
+            tool_value = ConfigParser.get_env_var(
+                f"TOOL_{tool_name.upper()}", prefix
+            )
             if tool_value is not None:
                 tools[tool_name] = ConfigParser.parse_bool(tool_value)
 
         # Load content exposure configuration from environment
         content_exposure = {}
         for key, (suffix, value_kind) in cls.CONTENT_EXPOSURE_ENV_VARS.items():
-            raw_value = os.environ.get(f"{prefix}{suffix}")
+            raw_value = ConfigParser.get_env_var(suffix, prefix)
             if raw_value is None:
                 continue
             if value_kind == "int":
@@ -495,9 +514,12 @@ class JoplinMCPConfig:
             else:
                 content_exposure[key] = raw_value
 
-        # Load notebook allowlist from environment (comma-separated)
+        # Load notebook allowlist from environment (comma-separated).
+        # Blank reads as unset rather than as an empty allowlist: an empty list
+        # would either lock the agent out of everything or, worse, read as
+        # "unrestricted" depending on the consumer.
         notebook_allowlist = None
-        raw = os.environ.get(f"{prefix}NOTEBOOK_ALLOWLIST")
+        raw = ConfigParser.get_env_var("NOTEBOOK_ALLOWLIST", prefix)
         if raw is not None:
             notebook_allowlist = [e.strip() for e in raw.split(",") if e.strip()]
 
@@ -912,8 +934,7 @@ class JoplinMCPConfig:
             """
             if override_key in overrides:
                 return overrides[override_key]
-            env_var_name = f"{prefix}{key.upper()}"
-            if env_var_name in os.environ:
+            if ConfigParser.env_is_set(key.upper(), prefix):
                 return env_value
             return file_value
 
@@ -921,8 +942,7 @@ class JoplinMCPConfig:
         merged_tools = config.tools.copy()
         # Override with environment tools
         for tool_name, enabled in env_config.tools.items():
-            env_var_name = f"{prefix}TOOL_{tool_name.upper()}"
-            if env_var_name in os.environ:
+            if ConfigParser.env_is_set(f"TOOL_{tool_name.upper()}", prefix):
                 merged_tools[tool_name] = enabled
         # Override with direct tool overrides
         if "tools" in overrides:
@@ -933,7 +953,7 @@ class JoplinMCPConfig:
         # Override with environment content exposure
         for key, value in env_config.content_exposure.items():
             suffix, _ = cls.CONTENT_EXPOSURE_ENV_VARS.get(key, (key.upper(), "str"))
-            if f"{prefix}{suffix}" in os.environ:
+            if ConfigParser.env_is_set(suffix, prefix):
                 merged_content_exposure[key] = value
         # Override with direct content exposure overrides
         if "content_exposure" in overrides:
@@ -946,7 +966,7 @@ class JoplinMCPConfig:
 
         # Merge notebook allowlist: env overrides file if explicitly set
         merged_notebook_allowlist = config.notebook_allowlist
-        if f"{prefix}NOTEBOOK_ALLOWLIST" in os.environ:
+        if ConfigParser.env_is_set("NOTEBOOK_ALLOWLIST", prefix):
             merged_notebook_allowlist = env_config.notebook_allowlist
         if "notebook_allowlist" in overrides:
             merged_notebook_allowlist = overrides["notebook_allowlist"]
@@ -1314,9 +1334,16 @@ def _auto_discover_with_logging() -> JoplinMCPConfig:
 
     Honours JOPLIN_MCP_CONFIG / JOPLIN_CONFIG_FILE for an explicit path,
     otherwise falls back to JoplinMCPConfig.auto_discover() (standard
-    locations + cwd). On any failure, returns a default config so import
-    never raises.
+    locations + cwd).
+
+    Import must never raise, so a failure still returns a usable object -
+    but the defaults it returns are *more permissive* than any config a
+    user bothered to write (19 tools enabled, no notebook allowlist). The
+    error is recorded in ``_config_load_error`` and ``main()`` refuses to
+    start while it is set, so a typo can never quietly widen access.
     """
+    global _config_load_error
+    _config_load_error = None
     logger.info("Auto-discovering Joplin MCP configuration...")
 
     try:
@@ -1369,11 +1396,18 @@ def _auto_discover_with_logging() -> JoplinMCPConfig:
         return config
 
     except Exception as e:
+        _config_load_error = e
         logger.error(f"Failed to load configuration: {e}")
-        logger.warning("Falling back to default configuration.")
+        logger.error(
+            "Refusing to apply default settings over a configuration that "
+            "failed to load - defaults enable more tools and no notebook "
+            "allowlist. Fix the error above, or unset the config file to run "
+            "on defaults deliberately."
+        )
         return JoplinMCPConfig()
 
 
+_config_load_error: Optional[Exception] = None
 _current_config: JoplinMCPConfig = _auto_discover_with_logging()
 
 
@@ -1386,11 +1420,24 @@ def get_config() -> JoplinMCPConfig:
     return _current_config
 
 
+def get_config_load_error() -> Optional[Exception]:
+    """The error from discovery, if the discovered config failed to load.
+
+    Non-None means the live config is permissive defaults standing in for a
+    config the user actually wrote. Callers that grant access on the strength
+    of the config - the server's startup path - must refuse rather than run.
+    """
+    return _config_load_error
+
+
 def set_config(cfg: JoplinMCPConfig) -> None:
     """Replace the live config wholesale.
 
     Subsequent get_config() calls return ``cfg``. This is a replace, not
-    a merge: fields not present on ``cfg`` are gone.
+    a merge: fields not present on ``cfg`` are gone. Clears any discovery
+    error: the caller has supplied a config that loaded, which supersedes
+    whatever failed at import.
     """
-    global _current_config
+    global _current_config, _config_load_error
     _current_config = cfg
+    _config_load_error = None

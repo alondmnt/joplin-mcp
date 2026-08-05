@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from unittest.mock import patch
 
 # Add src directory to path so we can import our modules
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -826,6 +827,54 @@ async def test_register_tools_is_idempotent_under_recall(_restore_all_tools):
     async with Client(mcp) as client:
         listed_on = {tool.name for tool in await client.list_tools()}
     assert "get_note" in listed_on
+
+
+class TestStartupRefusesPermissiveFallback:
+    """main() must not serve the permissive stand-in config.
+
+    Discovery cannot raise at import, so a failed load leaves defaults in
+    place: 19 tools enabled, no notebook allowlist. get_joplin_client() also
+    recovers JOPLIN_TOKEN from the environment by itself, so without this
+    guard a restrictive config plus one malformed override yields a live,
+    authenticated server with write tools and unrestricted notebook access.
+    """
+
+    def test_main_refuses_to_start_when_discovery_failed(self):
+        from joplin_mcp.config import ConfigError
+        from joplin_mcp import fastmcp_server
+
+        with patch.object(
+            fastmcp_server,
+            "get_config_load_error",
+            return_value=ConfigError("Invalid integer value for port: abc"),
+        ):
+            with patch.object(fastmcp_server, "register_tools") as register:
+                with patch.object(fastmcp_server.mcp, "run") as run:
+                    with pytest.raises(ConfigError, match="Refusing to start"):
+                        fastmcp_server.main()
+
+        # No tools registered and nothing served.
+        register.assert_not_called()
+        run.assert_not_called()
+
+    def test_main_proceeds_when_discovery_succeeded(self):
+        from joplin_mcp import fastmcp_server
+
+        with patch.object(
+            fastmcp_server, "get_config_load_error", return_value=None
+        ):
+            with patch.object(
+                fastmcp_server, "register_tools", return_value=["ping_joplin"]
+            ):
+                with patch.object(fastmcp_server, "get_joplin_client"):
+                    with patch.object(
+                        fastmcp_server.notebook_resolver,
+                        "validate_allowlist_at_startup",
+                    ):
+                        with patch.object(fastmcp_server.mcp, "run") as run:
+                            fastmcp_server.main()
+
+        run.assert_called_once()
 
 
 def main():

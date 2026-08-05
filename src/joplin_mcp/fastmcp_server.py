@@ -60,7 +60,13 @@ from typing_extensions import Annotated
 from joplin_mcp import __version__ as MCP_VERSION
 
 # Import our existing configuration for compatibility
-from joplin_mcp.config import JoplinMCPConfig, get_config, set_config
+from joplin_mcp.config import (
+    ConfigError,
+    JoplinMCPConfig,
+    get_config,
+    get_config_load_error,
+    set_config,
+)
 
 # Import content utilities
 from joplin_mcp.content_utils import (
@@ -853,6 +859,19 @@ def main(
             logger.info(f"Runtime configuration loaded from {config_file}")
         else:
             logger.info("Using auto-discovered configuration for runtime")
+            # Discovery failed but had to return something so import could
+            # finish, and what it returns is more permissive than any config
+            # a user wrote. Serving that would let a typo in one variable
+            # enable write tools and drop the notebook allowlist.
+            discovery_error = get_config_load_error()
+            if discovery_error is not None:
+                raise ConfigError(
+                    "Refusing to start: the discovered configuration failed to "
+                    f"load ({discovery_error}). Running on defaults would enable "
+                    "tools and notebook access your configuration does not "
+                    "grant. Fix the configuration, or remove it to run on "
+                    "defaults deliberately."
+                )
 
         registered_tools = register_tools(mcp, get_config())
         logger.info(f"FastMCP server has {len(registered_tools)} tools registered")
