@@ -161,8 +161,15 @@ Two things to know:
 - `notebook_allowlist` from the environment replaces the file's list
   wholesale rather than intersecting with it, the same as every other
   key. An env allowlist can therefore widen access, not only narrow it.
+- A variable set to an empty or whitespace-only value counts as **not
+  set**, so it leaves the file's value alone. Clients routinely emit an
+  empty string for a field the user left blank, and treating that as an
+  override would replace a configured value with a default.
 - A malformed variable (`JOPLIN_PORT=abc`) fails config load rather than
-  being ignored. The parse error is logged to stderr.
+  being ignored, and **the server refuses to start**. It does not fall
+  back to defaults: defaults enable more tools and no notebook allowlist,
+  so a typo in one variable must never widen what the agent can reach.
+  The parse error is logged to stderr.
 
 ## Security Best Practices
 
