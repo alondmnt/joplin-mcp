@@ -144,9 +144,25 @@ export JOPLIN_SMART_TOC_THRESHOLD=2000
 export JOPLIN_ENABLE_SMART_TOC=true
 ```
 
-**Precedence:** the server loads a config file *or* the environment, not
-both. If `joplin-mcp.json` (or one of the other discovered paths) exists,
-these variables are ignored - put the settings in the file instead.
+**Precedence:** environment variables override the config file, key by
+key. A variable only takes part when it is actually set, so setting one
+does not disturb the rest of your file. Full order:
+
+```
+direct parameters  >  environment  >  config file  >  defaults
+```
+
+This is what makes an MCP client's `env` block work: Claude Desktop,
+Cursor and the VS Code extension all configure a server that way, and
+those settings need to win over whatever file happens to be discovered.
+
+Two things to know:
+
+- `notebook_allowlist` from the environment replaces the file's list
+  wholesale rather than intersecting with it, the same as every other
+  key. An env allowlist can therefore widen access, not only narrow it.
+- A malformed variable (`JOPLIN_PORT=abc`) fails config load rather than
+  being ignored. The parse error is logged to stderr.
 
 ## Security Best Practices
 

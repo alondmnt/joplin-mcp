@@ -342,7 +342,7 @@ Fine-tune which operations the AI can perform by editing your config:
 
 ### Environment Variables
 
-Alternative to JSON configuration:
+Usable instead of a JSON config file, or alongside one:
 
 ```bash
 # Connection settings
@@ -351,6 +351,12 @@ export JOPLIN_HOST="localhost"
 export JOPLIN_PORT="41184"
 export JOPLIN_TIMEOUT="30"
 ```
+
+Environment variables override the config file key by key, so the `env`
+block in your MCP client's configuration wins over whatever file the
+server discovers. A variable only takes part when it is actually set, so
+setting one leaves the rest of your file alone. Full order: direct
+parameters > environment > config file > defaults.
 
 #### Per-Tool Env Vars
 
