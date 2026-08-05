@@ -488,7 +488,7 @@ class TestFormatNoteMetadataLines:
         assert not any("DELETED" in line for line in lines)
 
     def test_content_stats_included(self):
-        """Should include content stats when provided."""
+        """Should render content stats as a single line."""
         metadata = {
             "note_id": "stats123",
             "content_stats": {
@@ -498,12 +498,10 @@ class TestFormatNoteMetadataLines:
             },
         }
         lines = format_note_metadata_lines(metadata)
-        assert "CONTENT_SIZE_CHARS: 1500" in lines
-        assert "CONTENT_SIZE_WORDS: 250" in lines
-        assert "CONTENT_SIZE_LINES: 45" in lines
+        assert "CONTENT_SIZE: 1500 chars, 250 words, 45 lines" in lines
 
     def test_content_stats_lower_style(self):
-        """Should format content stats with lowercase labels."""
+        """Should format content stats with a lowercase label."""
         metadata = {
             "note_id": "lower123",
             "content_stats": {
@@ -513,9 +511,13 @@ class TestFormatNoteMetadataLines:
             },
         }
         lines = format_note_metadata_lines(metadata, style="lower")
-        assert "content_size_chars: 500" in lines
-        assert "content_size_words: 80" in lines
-        assert "content_size_lines: 20" in lines
+        assert "content_size: 500 chars, 80 words, 20 lines" in lines
+
+    def test_content_stats_partial(self):
+        """Should render only the stats that are present."""
+        metadata = {"note_id": "partial123", "content_stats": {"characters": 42}}
+        lines = format_note_metadata_lines(metadata)
+        assert "CONTENT_SIZE: 42 chars" in lines
 
     def test_key_order_preserved(self):
         """Should output keys in defined order."""

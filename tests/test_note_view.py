@@ -439,3 +439,71 @@ class TestRenderNoteDefault:
 
         assert result == "METADATA_OUTPUT"
         mock_format.assert_called_once_with(note, False, "individual_notes", config=cfg)
+
+
+# === Notebook metadata ===
+
+
+class TestCollectNoteMetadataNotebook:
+    """_collect_note_metadata's notebook fields.
+
+    Both the ID and the path are emitted. A displayed path is not always
+    resolvable, so dropping the ID to save tokens can leave a result with no
+    usable notebook identifier at all.
+    """
+
+    def _note(self, parent_id="nb1"):
+        note = MagicMock()
+        note.id = "note1"
+        note.title = "Test"
+        note.parent_id = parent_id
+        note.created_time = None
+        note.updated_time = None
+        note.deleted_time = None
+        note.is_todo = 0
+        note.body = ""
+        return note
+
+    def test_emits_both_id_and_path(self):
+        metadata = note_view._collect_note_metadata(
+            self._note(),
+            notebooks_map={"nb1": {"title": "Work", "parent_id": None}},
+        )
+
+        assert metadata["notebook_path"] == "Work"
+        assert metadata["notebook_id"] == "nb1"
+
+    def test_slash_in_title_keeps_the_id_usable(self):
+        """The escaped path resolves to nothing, so the ID is the only handle.
+
+        "R&D/Trials" is escaped to U+2215 in the path (it would otherwise read
+        as two path segments), which matches no notebook title.
+        """
+        metadata = note_view._collect_note_metadata(
+            self._note(),
+            notebooks_map={"nb1": {"title": "R&D/Trials", "parent_id": None}},
+        )
+
+        assert metadata["notebook_path"] == "R&D\u2215Trials"
+        assert metadata["notebook_id"] == "nb1"
+
+    def test_unresolved_path_still_gives_the_id(self):
+        metadata = note_view._collect_note_metadata(self._note(), notebooks_map={})
+
+        assert metadata["notebook_id"] == "nb1"
+        assert "notebook_path" not in metadata
+
+    def test_path_override_is_honoured(self):
+        metadata = note_view._collect_note_metadata(
+            self._note(), notebook_path_override="Projects/Work"
+        )
+
+        assert metadata["notebook_path"] == "Projects/Work"
+        assert metadata["notebook_id"] == "nb1"
+
+    def test_missing_parent_uses_explicit_default(self):
+        metadata = note_view._collect_note_metadata(
+            self._note(parent_id=None), default_notebook_id_if_missing="unknown"
+        )
+
+        assert metadata["notebook_id"] == "unknown"

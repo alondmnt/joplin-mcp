@@ -238,18 +238,7 @@ def format_note_metadata_lines(
         },
     }
 
-    stats_label_map = {
-        "upper": {
-            "characters": "CONTENT_SIZE_CHARS",
-            "words": "CONTENT_SIZE_WORDS",
-            "lines": "CONTENT_SIZE_LINES",
-        },
-        "lower": {
-            "characters": "content_size_chars",
-            "words": "content_size_words",
-            "lines": "content_size_lines",
-        },
-    }
+    stats_label = {"upper": "CONTENT_SIZE", "lower": "content_size"}
 
     lines: List[str] = []
     labels = label_map[style]
@@ -264,13 +253,15 @@ def format_note_metadata_lines(
             value_str = value
         lines.append(f"{indent}{labels[key]}: {value_str}")
 
+    # One line rather than three: every search result carries these, so the
+    # repeated labels cost more than the numbers they introduce.
     stats = metadata.get("content_stats")
     if stats:
-        stats_labels = stats_label_map[style]
-        for stat_key in ["characters", "words", "lines"]:
-            if stat_key in stats:
-                lines.append(
-                    f"{indent}{stats_labels[stat_key]}: {stats[stat_key]}"
-                )
+        units = [("characters", "chars"), ("words", "words"), ("lines", "lines")]
+        parts = [
+            f"{stats[stat_key]} {unit}" for stat_key, unit in units if stat_key in stats
+        ]
+        if parts:
+            lines.append(f"{indent}{stats_label[style]}: {', '.join(parts)}")
 
     return lines

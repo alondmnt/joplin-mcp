@@ -1,13 +1,11 @@
 {
+  "_comment": "MINIMAL CORE TOOLS - ultra-simple for small LLMs. Everything not listed under 'tools' stays at its default; everything set to false here is explicitly off. Comment keys only work at the top level: the 'tools' and 'content_exposure' blocks reject unknown keys.",
   "host": "localhost",
   "port": 41184,
   "token": "your_joplin_api_token_here",
   "timeout": 30,
   "verify_ssl": false,
   "tools": {
-    "_comment": "MINIMAL CORE TOOLS - Ultra-simple for small LLMs (8 tools only)",
-    
-    "_comment_essential": "ABSOLUTE ESSENTIALS ONLY",
     "find_notes": true,
     "find_notes_with_tag": true,
     "find_notes_in_notebook": true,
@@ -17,29 +15,29 @@
     "list_notebooks": true,
     "tag_note": true,
     "untag_note": true,
-    
-    "_comment_disabled": "EVERYTHING ELSE DISABLED",
     "get_note": false,
     "get_links": false,
+    "get_note_resources": false,
+    "get_tags_by_note": false,
+    "find_in_note": false,
     "create_notebook": false,
     "create_tag": false,
     "update_note": false,
+    "edit_note": false,
     "update_notebook": false,
     "update_tag": false,
     "delete_note": false,
     "delete_notebook": false,
     "delete_tag": false,
+    "restore_from_trash": false,
     "ping_joplin": false,
-    "import_from_file": false,
-    "get_tags_by_note": false,
-    "update_tag": false
+    "import_from_file": false
   },
   "content_exposure": {
     "search_results": "preview",
     "individual_notes": "preview",
-    "listings": "none",
     "max_preview_length": 150,
     "smart_toc_threshold": 2000,
     "enable_smart_toc": true
   }
-} 
+}

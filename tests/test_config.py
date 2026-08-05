@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+from pathlib import Path
 import uuid
 from unittest.mock import patch
 
@@ -161,6 +162,36 @@ class TestConfigEnvironmentVariables:
             assert config.host == "mcp-host"
             assert config.port == 9999
             assert config.token == "mcp-token"
+
+    def test_config_loads_content_exposure_from_environment(self):
+        """Every documented content-exposure env var must reach the config."""
+        with patch.dict(
+            os.environ,
+            {
+                "JOPLIN_TOKEN": "test-token",
+                "JOPLIN_CONTENT_SEARCH_RESULTS": "none",
+                "JOPLIN_CONTENT_INDIVIDUAL_NOTES": "preview",
+                "JOPLIN_MAX_PREVIEW_LENGTH": "150",
+                "JOPLIN_SMART_TOC_THRESHOLD": "500",
+                "JOPLIN_ENABLE_SMART_TOC": "false",
+            },
+            clear=True,
+        ):
+            config = JoplinMCPConfig.from_environment()
+
+            assert config.get_content_exposure_level("search_results") == "none"
+            assert config.get_content_exposure_level("individual_notes") == "preview"
+            assert config.get_max_preview_length() == 150
+            assert config.get_smart_toc_threshold() == 500
+            assert config.is_smart_toc_enabled() is False
+
+    def test_config_smart_toc_env_vars_fall_back_to_defaults(self):
+        """Unset smart TOC env vars leave the defaults in place."""
+        with patch.dict(os.environ, {"JOPLIN_TOKEN": "test-token"}, clear=True):
+            config = JoplinMCPConfig.from_environment()
+
+            assert config.get_smart_toc_threshold() == 2000
+            assert config.is_smart_toc_enabled() is True
 
 
 class TestConfigInitialization:
@@ -459,6 +490,70 @@ class TestConfigPriority:
                 assert config.token == "direct-token"
                 # Should still use file value for port (no env or direct override)
                 assert config.port == 8080
+        finally:
+            os.unlink(config_file)
+
+    def test_deprecated_listings_key_is_dropped_not_rejected(self):
+        """Config files written by the old installer must still load.
+
+        `listings` was never read by any tool, so it is ignored - but
+        rejecting it would break every config the old installer produced.
+        """
+        config_data = {
+            "token": "file-token",
+            "content_exposure": {"search_results": "preview", "listings": "none"},
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(config_data, f)
+            config_file = f.name
+
+        try:
+            config = JoplinMCPConfig.from_file(config_file)
+
+            assert "listings" not in config.content_exposure
+            assert config.get_content_exposure_level("search_results") == "preview"
+            config.validate()  # must not raise
+        finally:
+            os.unlink(config_file)
+
+    def test_content_exposure_env_vars_override_file(self):
+        """Env vars must win over file values for every content-exposure key.
+
+        Guards the name mapping: the merge looks env vars up by name, so a
+        mismatch between it and from_environment() makes the var a no-op.
+        """
+        config_data = {
+            "token": "file-token",
+            "content_exposure": {
+                "search_results": "full",
+                "max_preview_length": 300,
+                "smart_toc_threshold": 2000,
+                "enable_smart_toc": True,
+            },
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(config_data, f)
+            config_file = f.name
+
+        try:
+            with patch.dict(
+                os.environ,
+                {
+                    "JOPLIN_CONTENT_SEARCH_RESULTS": "none",
+                    "JOPLIN_MAX_PREVIEW_LENGTH": "100",
+                    "JOPLIN_SMART_TOC_THRESHOLD": "800",
+                    "JOPLIN_ENABLE_SMART_TOC": "false",
+                },
+                clear=True,
+            ):
+                config = JoplinMCPConfig.from_file_and_environment(config_file)
+
+                assert config.get_content_exposure_level("search_results") == "none"
+                assert config.get_max_preview_length() == 100
+                assert config.get_smart_toc_threshold() == 800
+                assert config.is_smart_toc_enabled() is False
         finally:
             os.unlink(config_file)
 
@@ -1420,3 +1515,46 @@ class TestConfigToolConfiguration:
         # Should have errors for invalid tool and invalid tool value
         tool_errors = [e for e in errors if "tool" in str(e).lower()]
         assert len(tool_errors) >= 2
+
+
+class TestShippedExampleConfigs:
+    """The example configs we ship must load without warnings or errors.
+
+    Catches the case where a config key is retired in code but left behind in
+    an example, so anyone copying it hits a deprecation warning on first run.
+    """
+
+    def _example_paths(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        paths = sorted(repo_root.glob("*.json.example")) + sorted(
+            repo_root.glob("*-example.json")
+        )
+        assert paths, "no example configs found - has the naming changed?"
+        return paths
+
+    def test_examples_contain_no_retired_keys(self):
+        for path in self._example_paths():
+            data = json.loads(path.read_text())
+            exposure = data.get("content_exposure", {})
+            retired = set(exposure) & set(
+                JoplinMCPConfig.DEPRECATED_CONTENT_EXPOSURE_KEYS
+            )
+            assert not retired, f"{path.name} still sets {sorted(retired)}"
+
+    def test_examples_load_and_validate(self):
+        for path in self._example_paths():
+            data = json.loads(path.read_text())
+            if not data.get("token"):
+                data["token"] = "a" * 32  # examples ship without a real token
+
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False
+            ) as f:
+                json.dump(data, f)
+                temp_path = f.name
+
+            try:
+                config = JoplinMCPConfig.from_file(temp_path)
+                config.validate()
+            finally:
+                os.unlink(temp_path)

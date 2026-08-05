@@ -106,7 +106,14 @@ def _collect_note_metadata(
     timestamp_format: Optional[str] = None,
     default_notebook_id_if_missing: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Collect note metadata fields with configurable sections."""
+    """Collect note metadata fields with configurable sections.
+
+    Emits both ``notebook_id`` and ``notebook_path``: not every path we can
+    display can be resolved back to an ID. Titles containing "/" are escaped
+    to U+2215 (so they match no title, and the unescaped form splits into
+    fictional segments), and two notebooks can share a computed path. The ID
+    is the only identifier that always works, so it stays.
+    """
 
     metadata: Dict[str, Any] = {}
     metadata["note_id"] = getattr(note, "id", "unknown")
