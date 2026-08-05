@@ -849,7 +849,7 @@ def main(
         # Runtime config supersedes the auto-discovered one -- one config
         # identity at a time, wholesale replace.
         if config_file:
-            set_config(JoplinMCPConfig.from_file(config_file))
+            set_config(JoplinMCPConfig.from_file_and_environment(config_file))
             logger.info(f"Runtime configuration loaded from {config_file}")
         else:
             logger.info("Using auto-discovered configuration for runtime")

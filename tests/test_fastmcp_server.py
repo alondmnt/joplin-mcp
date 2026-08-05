@@ -20,14 +20,16 @@ from joplin_mcp.fastmcp_server import mcp
 
 
 @pytest.mark.asyncio
-async def test_basic_functionality():
+async def test_basic_functionality(monkeypatch):
     """Test basic FastMCP server functionality."""
     print("🧪 Testing FastMCP Joplin Server...")
 
-    # Check if we have the required environment variables
+    # Set via monkeypatch so it reverts: environment variables now override
+    # config files, so a token leaking out of this test changes what every
+    # later file-precedence test resolves to.
     if not os.getenv("JOPLIN_TOKEN"):
         print("⚠️  JOPLIN_TOKEN not set. Setting a dummy token for testing...")
-        os.environ["JOPLIN_TOKEN"] = "dummy_token_for_testing"
+        monkeypatch.setenv("JOPLIN_TOKEN", "dummy_token_for_testing")
 
     try:
         # Test server initialization

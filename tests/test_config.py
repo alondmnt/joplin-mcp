@@ -580,9 +580,12 @@ class TestConfigPriority:
             json.dump(config_data, f)
 
         try:
-            config = JoplinMCPConfig.auto_discover(
-                search_filenames=["test-joplin-mcp.json"]
-            )
+            # Cleared environment: discovery merges env over file, so file
+            # values are only assertable when nothing is set.
+            with patch.dict(os.environ, {}, clear=True):
+                config = JoplinMCPConfig.auto_discover(
+                    search_filenames=["test-joplin-mcp.json"]
+                )
 
             assert config.host == "auto-host"
             assert config.token == "auto-token"
@@ -763,10 +766,12 @@ class TestConfigValidationAndEdgeCases:
             with open(yaml_file, "w") as f:
                 yaml.dump(config_data2, f)
 
-            # Test auto discovery with specific filenames
-            config = JoplinMCPConfig.auto_discover(
-                search_filenames=[json_file, yaml_file]
-            )
+            # Test auto discovery with specific filenames, under a cleared
+            # environment so the file's own values are what gets asserted.
+            with patch.dict(os.environ, {}, clear=True):
+                config = JoplinMCPConfig.auto_discover(
+                    search_filenames=[json_file, yaml_file]
+                )
 
             # Should find the first file in the search order (JSON comes first)
             assert config.host == "json-host"
@@ -1558,3 +1563,188 @@ class TestShippedExampleConfigs:
                 config.validate()
             finally:
                 os.unlink(temp_path)
+
+
+class TestServerDiscoveryPrecedence:
+    """The paths the server actually loads config through.
+
+    MCP clients (Claude Desktop, Cursor, the VS Code extension) configure a
+    server through an `env` block, so a discovered config file must not shadow
+    the environment. These cover auto_discover() and the explicit
+    JOPLIN_MCP_CONFIG path rather than from_file_and_environment() directly,
+    because the bug in #60 was which loader the server reached for.
+    """
+
+    def _write(self, data):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(data, f)
+            return f.name
+
+    def _discover(self, config_path, env):
+        """Run auto_discover() against one discovered file and a given env."""
+        with patch.dict(os.environ, env, clear=True):
+            with patch.object(
+                JoplinMCPConfig,
+                "get_default_config_paths",
+                return_value=[Path(config_path)],
+            ):
+                return JoplinMCPConfig.auto_discover()
+
+    def test_env_token_reaches_a_file_without_one(self):
+        """The #60 headline case: a tokenless file made JOPLIN_TOKEN unreachable."""
+        path = self._write({"host": "localhost", "port": 41184})
+        try:
+            config = self._discover(path, {"JOPLIN_TOKEN": "e" * 32})
+            assert config.token == "e" * 32
+            config.validate()  # would raise "Token is required" before #60
+        finally:
+            os.unlink(path)
+
+    def test_env_overrides_file_scalars(self):
+        path = self._write(
+            {"host": "file-host", "port": 8080, "token": "file-token", "timeout": 15}
+        )
+        try:
+            config = self._discover(
+                path, {"JOPLIN_HOST": "env-host", "JOPLIN_TOKEN": "env-token"}
+            )
+            assert config.host == "env-host"
+            assert config.token == "env-token"
+            assert config.port == 8080  # untouched by env
+            assert config.timeout == 15
+        finally:
+            os.unlink(path)
+
+    def test_file_values_survive_an_empty_environment(self):
+        path = self._write({"host": "file-host", "port": 8080, "token": "file-token"})
+        try:
+            config = self._discover(path, {})
+            assert config.host == "file-host"
+            assert config.port == 8080
+            assert config.token == "file-token"
+        finally:
+            os.unlink(path)
+
+    def test_empty_environment_changes_nothing_versus_file_only(self):
+        """Merging must not shift defaults for keys the file omits.
+
+        from_environment() carries its own fallbacks (timeout 60 against the
+        constructor's 30), so a sparse file plus an empty environment has to
+        resolve exactly as from_file() alone would.
+        """
+        path = self._write({"host": "file-host", "token": "file-token"})
+        try:
+            with patch.dict(os.environ, {}, clear=True):
+                file_only = JoplinMCPConfig.from_file(path)
+            merged = self._discover(path, {})
+
+            for field in ("host", "port", "token", "timeout", "verify_ssl"):
+                assert getattr(merged, field) == getattr(file_only, field), field
+            assert merged.tools == file_only.tools
+            assert merged.content_exposure == file_only.content_exposure
+            assert merged.notebook_allowlist == file_only.notebook_allowlist
+        finally:
+            os.unlink(path)
+
+    def test_env_can_disable_a_tool_the_file_enabled(self):
+        """The direction that matters for locking down a shared install."""
+        path = self._write({"token": "t" * 32, "tools": {"delete_note": True}})
+        try:
+            config = self._discover(
+                path, {"JOPLIN_TOOL_DELETE_NOTE": "false", "JOPLIN_TOKEN": "t" * 32}
+            )
+            assert config.tools["delete_note"] is False
+        finally:
+            os.unlink(path)
+
+    def test_env_can_enable_a_tool_the_file_disabled(self):
+        path = self._write({"token": "t" * 32, "tools": {"delete_note": False}})
+        try:
+            config = self._discover(
+                path, {"JOPLIN_TOOL_DELETE_NOTE": "true", "JOPLIN_TOKEN": "t" * 32}
+            )
+            assert config.tools["delete_note"] is True
+        finally:
+            os.unlink(path)
+
+    def test_untouched_tools_keep_their_file_values(self):
+        path = self._write(
+            {"token": "t" * 32, "tools": {"delete_note": True, "create_note": False}}
+        )
+        try:
+            config = self._discover(
+                path, {"JOPLIN_TOOL_DELETE_NOTE": "false", "JOPLIN_TOKEN": "t" * 32}
+            )
+            assert config.tools["delete_note"] is False
+            assert config.tools["create_note"] is False  # not clobbered by env defaults
+        finally:
+            os.unlink(path)
+
+    def test_env_content_exposure_overrides_file(self):
+        path = self._write(
+            {
+                "token": "t" * 32,
+                "content_exposure": {
+                    "search_results": "full",
+                    "smart_toc_threshold": 2000,
+                },
+            }
+        )
+        try:
+            config = self._discover(
+                path,
+                {
+                    "JOPLIN_TOKEN": "t" * 32,
+                    "JOPLIN_CONTENT_SEARCH_RESULTS": "none",
+                    "JOPLIN_SMART_TOC_THRESHOLD": "800",
+                },
+            )
+            assert config.get_content_exposure_level("search_results") == "none"
+            assert config.get_smart_toc_threshold() == 800
+        finally:
+            os.unlink(path)
+
+    def test_env_allowlist_replaces_the_file_allowlist(self):
+        """Wholesale replace, consistent with every other key - it can widen access."""
+        path = self._write(
+            {"token": "t" * 32, "notebook_allowlist": ["Work", "Personal/**"]}
+        )
+        try:
+            config = self._discover(
+                path,
+                {"JOPLIN_TOKEN": "t" * 32, "JOPLIN_NOTEBOOK_ALLOWLIST": "Archive"},
+            )
+            assert config.notebook_allowlist == ["Archive"]
+        finally:
+            os.unlink(path)
+
+    def test_search_filenames_branch_also_merges(self):
+        path = self._write({"host": "file-host", "token": "file-token"})
+        name = Path(path).name
+        try:
+            with patch.dict(os.environ, {"JOPLIN_HOST": "env-host"}, clear=True):
+                with patch(
+                    "joplin_mcp.config.Path.cwd", return_value=Path(path).parent
+                ):
+                    config = JoplinMCPConfig.auto_discover(search_filenames=[name])
+            assert config.host == "env-host"
+            assert config.token == "file-token"
+        finally:
+            os.unlink(path)
+
+    def test_explicit_config_env_var_path_merges(self):
+        """JOPLIN_MCP_CONFIG names the file; it must not silence the environment."""
+        from joplin_mcp.config import _auto_discover_with_logging
+
+        path = self._write({"host": "file-host", "port": 8080})
+        try:
+            with patch.dict(
+                os.environ,
+                {"JOPLIN_MCP_CONFIG": path, "JOPLIN_TOKEN": "env-token"},
+                clear=True,
+            ):
+                config = _auto_discover_with_logging()
+            assert config.token == "env-token"
+            assert config.port == 8080
+        finally:
+            os.unlink(path)

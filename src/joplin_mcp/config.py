@@ -902,18 +902,20 @@ class JoplinMCPConfig:
             override_key: str,
             env_value: Any,
             file_value: Any,
-            default_value: Any,
         ):
-            """Get value with proper priority: override > env (if not default) > file > default."""
+            """Pick a value by priority: override > env > file.
+
+            Only an environment variable that is actually set wins. Falling
+            through to ``file_value`` (rather than to ``env_value``) is what
+            keeps ``from_environment()``'s own defaults from clobbering the
+            file, so defaults are the constructor's job, not this function's.
+            """
             if override_key in overrides:
                 return overrides[override_key]
-            else:
-                # Check if environment variable was explicitly set (not using default)
-                env_var_name = f"{prefix}{key.upper()}"
-                if env_var_name in os.environ:
-                    return env_value
-                else:
-                    return file_value
+            env_var_name = f"{prefix}{key.upper()}"
+            if env_var_name in os.environ:
+                return env_value
+            return file_value
 
         # Merge tools configuration specially
         merged_tools = config.tools.copy()
@@ -950,24 +952,19 @@ class JoplinMCPConfig:
             merged_notebook_allowlist = overrides["notebook_allowlist"]
 
         merged_data = {
-            "host": get_value(
-                "host", "host_override", env_config.host, config.host, "localhost"
-            ),
-            "port": get_value(
-                "port", "port_override", env_config.port, config.port, 41184
-            ),
+            "host": get_value("host", "host_override", env_config.host, config.host),
+            "port": get_value("port", "port_override", env_config.port, config.port),
             "token": get_value(
-                "token", "token_override", env_config.token, config.token, None
+                "token", "token_override", env_config.token, config.token
             ),
             "timeout": get_value(
-                "timeout", "timeout_override", env_config.timeout, config.timeout, 60
+                "timeout", "timeout_override", env_config.timeout, config.timeout
             ),
             "verify_ssl": get_value(
                 "verify_ssl",
                 "verify_ssl_override",
                 env_config.verify_ssl,
                 config.verify_ssl,
-                True,
             ),
             "tools": merged_tools,
             "content_exposure": merged_content_exposure,
@@ -986,18 +983,25 @@ class JoplinMCPConfig:
     def auto_discover(
         cls, search_filenames: Optional[List[str]] = None
     ) -> "JoplinMCPConfig":
-        """Automatically discover and load configuration from standard locations."""
+        """Automatically discover and load configuration from standard locations.
+
+        A discovered file is merged with the environment rather than replacing
+        it: MCP clients configure servers through an ``env`` block, so a file
+        that shadowed those variables made the client's settings unreachable.
+        Precedence is environment > file > defaults, and only variables that
+        are actually set take part.
+        """
         if search_filenames:
             # Search for custom filenames in current directory
             for filename in search_filenames:
                 file_path = Path.cwd() / filename
                 if file_path.exists():
-                    return cls.from_file(file_path)
+                    return cls.from_file_and_environment(file_path)
         else:
             # Search default paths
             for path in cls.get_default_config_paths():
                 if path.exists():
-                    return cls.from_file(path)
+                    return cls.from_file_and_environment(path)
 
         # If no file found, return default configuration
         return cls.from_environment()
@@ -1327,7 +1331,7 @@ def _auto_discover_with_logging() -> JoplinMCPConfig:
                 logger.info(
                     f"Using explicit configuration from: {cfg_path}"
                 )
-                config = JoplinMCPConfig.from_file(cfg_path)
+                config = JoplinMCPConfig.from_file_and_environment(cfg_path)
                 loaded_from = cfg_path
             else:
                 logger.warning(
