@@ -282,8 +282,13 @@ def _format_note_entry(
     elif should_show_content:
         entry.append("  content: (empty)")
     else:
-        content_status = "(hidden by privacy settings)" if body else "(empty)"
-        entry.append(f"  content: {content_status}")
+        toc = create_toc_only(body) if body and config.is_smart_toc_enabled() else ""
+        if toc:
+            entry.append("  content: (hidden by privacy settings)")
+            entry.extend(f"  {line}" for line in toc.splitlines())
+        else:
+            content_status = "(hidden by privacy settings)" if body else "(empty)"
+            entry.append(f"  content: {content_status}")
 
     entry.append("")
     return entry

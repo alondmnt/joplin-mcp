@@ -507,3 +507,107 @@ class TestCollectNoteMetadataNotebook:
         )
 
         assert metadata["notebook_id"] == "unknown"
+
+# === Search result entry formatting ===
+
+
+def _search_note(body, **overrides):
+    """Build a minimal real note for _format_note_entry (no metadata mocking)."""
+    from types import SimpleNamespace
+
+    fields = {
+        "id": "note123",
+        "title": "Test Note",
+        "body": body,
+        "created_time": None,
+        "updated_time": None,
+        "parent_id": None,
+        "deleted_time": None,
+        "is_todo": 0,
+    }
+    fields.update(overrides)
+    return SimpleNamespace(**fields)
+
+
+def _search_config(should_show_content=False, smart_toc_enabled=True):
+    """Build a minimal config double for _format_note_entry."""
+    cfg = MagicMock()
+    cfg.should_show_content.return_value = should_show_content
+    cfg.should_show_full_content.return_value = False
+    cfg.is_smart_toc_enabled.return_value = smart_toc_enabled
+    cfg.get_max_preview_length.return_value = 200
+    return cfg
+
+
+class TestFormatNoteEntryHiddenContent:
+    """When search-result content is hidden, headings surface as a TOC."""
+
+    def test_toc_shown_for_note_with_headings(self):
+        note = _search_note("# Introduction\nIntro text.\n# Conclusion\nEnd text.")
+        cfg = _search_config(should_show_content=False, smart_toc_enabled=True)
+
+        entry = note_view._format_note_entry(
+            note,
+            index=1,
+            config=cfg,
+            context="search_results",
+            original_query=None,
+            query="test",
+        )
+        result = "\n".join(entry)
+
+        assert "content: (hidden by privacy settings)" in result
+        assert "TABLE_OF_CONTENTS:" in result
+        assert "Introduction (line 0)" in result
+        assert "Conclusion (line 2)" in result
+
+    def test_unchanged_when_no_headings(self):
+        note = _search_note("Just plain text, no headings here.")
+        cfg = _search_config(should_show_content=False, smart_toc_enabled=True)
+
+        entry = note_view._format_note_entry(
+            note,
+            index=1,
+            config=cfg,
+            context="search_results",
+            original_query=None,
+            query="test",
+        )
+        result = "\n".join(entry)
+
+        assert "content: (hidden by privacy settings)" in result
+        assert "TABLE_OF_CONTENTS:" not in result
+
+    def test_unchanged_when_smart_toc_disabled(self):
+        note = _search_note("# Heading\nText.")
+        cfg = _search_config(should_show_content=False, smart_toc_enabled=False)
+
+        entry = note_view._format_note_entry(
+            note,
+            index=1,
+            config=cfg,
+            context="search_results",
+            original_query=None,
+            query="test",
+        )
+        result = "\n".join(entry)
+
+        assert "content: (hidden by privacy settings)" in result
+        assert "TABLE_OF_CONTENTS:" not in result
+
+    def test_empty_body_unaffected(self):
+        note = _search_note("")
+        cfg = _search_config(should_show_content=False, smart_toc_enabled=True)
+
+        entry = note_view._format_note_entry(
+            note,
+            index=1,
+            config=cfg,
+            context="search_results",
+            original_query=None,
+            query="test",
+        )
+        result = "\n".join(entry)
+
+        assert "content: (empty)" in result
+        assert "TABLE_OF_CONTENTS:" not in result
