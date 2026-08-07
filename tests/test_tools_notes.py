@@ -170,6 +170,39 @@ class TestUpdateNoteTool:
         assert "SUCCESS" in result
 
     @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_echoes_new_title(self, mock_get_client):
+        """A renamed note should say which title it now has, not just its ID."""
+        from joplin_mcp.tools.notes import update_note
+
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        result = await update_note.fn(
+            "12345678901234567890123456789012",
+            title="New Title",
+        )
+
+        assert "TITLE: New Title" in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_omits_title_when_only_body_changes(self, mock_get_client):
+        """A body-only update never learns the title, so it must not claim one."""
+        from joplin_mcp.tools.notes import update_note
+
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        result = await update_note.fn(
+            "12345678901234567890123456789012",
+            body="New content",
+        )
+
+        mock_client.get_note.assert_not_called()
+        assert "TITLE:" not in result
+
+    @pytest.mark.asyncio
     @patch("joplin_mcp.tools.notes.get_notebook_id_by_name")
     @patch("joplin_mcp.tools.notes.get_joplin_client")
     async def test_moves_note_to_notebook(self, mock_get_client, mock_resolve_nb):
