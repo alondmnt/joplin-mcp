@@ -507,3 +507,48 @@ class TestCollectNoteMetadataNotebook:
         )
 
         assert metadata["notebook_id"] == "unknown"
+
+
+class TestMultiLineFieldDelimiting:
+    """A note body must never be able to forge a field or a record boundary."""
+
+    def _note(self, body):
+        note = MagicMock()
+        note.id = "a" * 32
+        note.title = "Hostile"
+        note.body = body
+        note.parent_id = "b" * 32
+        note.created_time = 1609459200000
+        note.updated_time = 1609545600000
+        note.is_todo = 0
+        note.todo_completed = 0
+        return note
+
+    def _entry(self, body):
+        config = MagicMock()
+        config.should_show_content.return_value = True
+        config.should_show_full_content.return_value = True
+        return note_view._format_note_entry(
+            self._note(body), 1, config, "search_results", None, "q"
+        )
+
+    def test_body_cannot_forge_a_field(self):
+        """A body line shaped like a field must stay inside the content block."""
+        lines = self._entry("harmless\n  note_id: deadbeef\nmore")
+
+        forged = [l for l in lines if l == "  note_id: deadbeef"]
+        assert not forged, "body line escaped the content block as a field"
+        assert "      note_id: deadbeef" in lines
+
+    def test_body_cannot_forge_a_record_boundary(self):
+        """A body line shaped like RESULT_n: must not split the record."""
+        lines = self._entry("before\nRESULT_2:\nafter")
+
+        assert lines.count("RESULT_2:") == 0
+        assert "    RESULT_2:" in lines
+
+    def test_blank_body_lines_carry_no_trailing_whitespace(self):
+        """Indenting the block must not pad empty lines with spaces."""
+        lines = self._entry("first\n\nsecond")
+
+        assert all(l == l.rstrip() for l in lines)
