@@ -86,19 +86,19 @@ async def test_e2e_create_notebook(e2e_client):
     nb_id = match.group(1)
 
     # Listing should surface the emoji we just set.
-    listing = await _call(list_notebooks)
+    listing = await _call(list_notebooks, verbose=True)
     assert "E2E Test Notebook" in listing
     assert "emoji: 🎯" in listing
 
     # Replace the emoji with a different glyph, then verify the change shows up.
     await _call(update_notebook, notebook_id=nb_id, emoji="🕰️")
-    listing = await _call(list_notebooks)
+    listing = await _call(list_notebooks, verbose=True)
     assert "emoji: 🕰️" in listing
     assert "emoji: 🎯" not in listing
 
     # Clearing via empty string should remove the line for this notebook.
     await _call(update_notebook, notebook_id=nb_id, emoji="")
-    listing = await _call(list_notebooks)
+    listing = await _call(list_notebooks, verbose=True)
     nb_section = listing[listing.index("E2E Test Notebook"):]
     next_item = nb_section.find("ITEM_")
     nb_block = nb_section if next_item == -1 else nb_section[:next_item]
