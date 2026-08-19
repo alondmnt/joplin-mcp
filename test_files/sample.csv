@@ -1,5 +1,0 @@
-Task,Priority,Status,Due Date,Notes
-"Review Import PR",High,In Progress,2025-01-03,"Test CSV import functionality"
-"Write Documentation",Medium,Pending,2025-01-05,"Update README with import examples"
-"User Testing",High,Pending,2025-01-04,"Test various file formats"
-"Bug Fixes",Low,Completed,2025-01-02,"Fix configuration test failures"
