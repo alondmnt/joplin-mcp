@@ -115,19 +115,16 @@ def build_pagination_header(
 ) -> List[str]:
     """Build pagination header with search and pagination info."""
     count = min(limit, total_count - offset) if total_count > offset else 0
-    current_page = (offset // limit) + 1
-    total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
     start_result = offset + 1 if count > 0 else 0
     end_result = offset + count
 
+    # One statement of the window. page number and page count are derivable
+    # from offset/limit/total, and were previously given twice: once here and
+    # again in a PAGINATION_SUMMARY footer.
+    span = f"{start_result}-{end_result}" if count else "0"
     header = [
         f"SEARCH_QUERY: {query}",
-        f"TOTAL_RESULTS: {total_count}",
-        f"SHOWING_RESULTS: {start_result}-{end_result}",
-        f"CURRENT_PAGE: {current_page}",
-        f"TOTAL_PAGES: {total_pages}",
-        f"LIMIT: {limit}",
-        f"OFFSET: {offset}",
+        f"RESULTS: {span} of {total_count} (offset={offset}, limit={limit})",
     ]
 
     if order_by is not None:
@@ -144,33 +141,6 @@ def build_pagination_header(
         )
 
     return header
-
-
-def build_pagination_summary(total_count: int, limit: int, offset: int) -> List[str]:
-    """Build pagination summary footer."""
-    count = min(limit, total_count - offset) if total_count > offset else 0
-    current_page = (offset // limit) + 1
-    total_pages = (total_count + limit - 1) // limit if total_count > 0 else 1
-    start_result = offset + 1 if count > 0 else 0
-    end_result = offset + count
-
-    if total_pages <= 1:
-        return []
-
-    summary = [
-        "PAGINATION_SUMMARY:",
-        f"  showing_page: {current_page} of {total_pages}",
-        f"  showing_results: {start_result}-{end_result} of {total_count}",
-        f"  results_per_page: {limit}",
-    ]
-
-    if current_page < total_pages:
-        summary.append(f"  next_page_offset: {offset + limit}")
-
-    if current_page > 1:
-        summary.append(f"  prev_page_offset: {max(0, offset - limit)}")
-
-    return summary
 
 
 def format_find_in_note_summary(

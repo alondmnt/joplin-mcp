@@ -5,7 +5,6 @@ import pytest
 from joplin_mcp.formatting import (
     ItemType,
     build_pagination_header,
-    build_pagination_summary,
     format_creation_success,
     format_delete_success,
     format_find_in_note_summary,
@@ -284,96 +283,49 @@ class TestFormatNoResultsMessage:
 
 
 class TestBuildPaginationHeader:
-    """Tests for build_pagination_header function."""
+    """The window is stated once; page numbers derive from offset and limit."""
 
     def test_first_page(self):
         """Should format first page header correctly."""
         header = build_pagination_header("test query", total_count=50, limit=10, offset=0)
         assert "SEARCH_QUERY: test query" in header
-        assert "TOTAL_RESULTS: 50" in header
-        assert "SHOWING_RESULTS: 1-10" in header
-        assert "CURRENT_PAGE: 1" in header
-        assert "TOTAL_PAGES: 5" in header
-        assert "LIMIT: 10" in header
-        assert "OFFSET: 0" in header
-        # Should include next page hint
+        assert "RESULTS: 1-10 of 50 (offset=0, limit=10)" in header
         assert any("NEXT_PAGE:" in line for line in header)
         assert any("offset=10" in line for line in header)
 
     def test_middle_page(self):
         """Should format middle page header correctly."""
         header = build_pagination_header("search", total_count=100, limit=20, offset=40)
-        assert "SHOWING_RESULTS: 41-60" in header
-        assert "CURRENT_PAGE: 3" in header
-        assert "TOTAL_PAGES: 5" in header
+        assert "RESULTS: 41-60 of 100 (offset=40, limit=20)" in header
         assert any("offset=60" in line for line in header)
 
     def test_last_page(self):
         """Should format last page without next page hint."""
         header = build_pagination_header("query", total_count=25, limit=10, offset=20)
-        assert "SHOWING_RESULTS: 21-25" in header
-        assert "CURRENT_PAGE: 3" in header
-        assert "TOTAL_PAGES: 3" in header
-        # Should NOT include next page hint
+        assert "RESULTS: 21-25 of 25 (offset=20, limit=10)" in header
         assert not any("NEXT_PAGE:" in line for line in header)
 
     def test_single_page(self):
         """Should handle single page results correctly."""
         header = build_pagination_header("small", total_count=5, limit=10, offset=0)
-        assert "SHOWING_RESULTS: 1-5" in header
-        assert "CURRENT_PAGE: 1" in header
-        assert "TOTAL_PAGES: 1" in header
+        assert "RESULTS: 1-5 of 5 (offset=0, limit=10)" in header
         assert not any("NEXT_PAGE:" in line for line in header)
 
     def test_empty_results(self):
         """Should handle empty results correctly."""
         header = build_pagination_header("empty", total_count=0, limit=10, offset=0)
-        assert "SHOWING_RESULTS: 0-0" in header
-        assert "TOTAL_RESULTS: 0" in header
+        assert "RESULTS: 0 of 0 (offset=0, limit=10)" in header
 
     def test_offset_beyond_results(self):
-        """Should handle offset beyond total results."""
+        """An empty page past the end reports no span rather than a fake one."""
         header = build_pagination_header("far", total_count=10, limit=20, offset=100)
-        # When offset > total_count, count=0, start_result=0, end_result=offset+count=100
-        # This is the actual behavior - shows 0-100 range even though no results
-        assert "SHOWING_RESULTS: 0-100" in header
+        assert "RESULTS: 0 of 10 (offset=100, limit=20)" in header
 
-
-# === Tests for build_pagination_summary ===
-
-
-class TestBuildPaginationSummary:
-    """Tests for build_pagination_summary function."""
-
-    def test_multi_page_first(self):
-        """Should build summary for first page of multi-page results."""
-        summary = build_pagination_summary(total_count=50, limit=10, offset=0)
-        assert "PAGINATION_SUMMARY:" in summary
-        assert any("showing_page: 1 of 5" in line for line in summary)
-        assert any("showing_results: 1-10 of 50" in line for line in summary)
-        assert any("results_per_page: 10" in line for line in summary)
-        assert any("next_page_offset: 10" in line for line in summary)
-        # No prev_page on first page
-        assert not any("prev_page_offset" in line for line in summary)
-
-    def test_multi_page_middle(self):
-        """Should build summary for middle page with both prev and next."""
-        summary = build_pagination_summary(total_count=100, limit=20, offset=40)
-        assert any("showing_page: 3 of 5" in line for line in summary)
-        assert any("next_page_offset: 60" in line for line in summary)
-        assert any("prev_page_offset: 20" in line for line in summary)
-
-    def test_multi_page_last(self):
-        """Should build summary for last page without next."""
-        summary = build_pagination_summary(total_count=25, limit=10, offset=20)
-        assert any("showing_page: 3 of 3" in line for line in summary)
-        assert not any("next_page_offset" in line for line in summary)
-        assert any("prev_page_offset: 10" in line for line in summary)
-
-    def test_single_page_returns_empty(self):
-        """Should return empty list for single page results."""
-        summary = build_pagination_summary(total_count=5, limit=10, offset=0)
-        assert summary == []
+    def test_states_the_window_once(self):
+        """The whole point: no second restatement of the same numbers."""
+        header = build_pagination_header("q", total_count=50, limit=10, offset=0)
+        assert sum(1 for line in header if line.startswith("RESULTS:")) == 1
+        assert not any("PAGINATION_SUMMARY" in line for line in header)
 
 
 # === Tests for format_find_in_note_summary ===

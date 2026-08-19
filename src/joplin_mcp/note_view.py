@@ -29,7 +29,6 @@ from joplin_mcp.content_utils import (
 )
 from joplin_mcp.formatting import (
     build_pagination_header,
-    build_pagination_summary,
     format_find_in_note_summary,
     format_note_metadata_lines,
 )
@@ -383,7 +382,6 @@ def format_search_results_with_pagination(
             )
         )
 
-    result_parts.extend(build_pagination_summary(total_count, limit, offset))
 
     return "\n".join(result_parts)
 
