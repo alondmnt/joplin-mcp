@@ -240,6 +240,20 @@ def format_note_details(
     return "\n".join(result_parts)
 
 
+def _indent_block(label: str, value: str) -> List[str]:
+    """Emit a multi-line field as an indented block under its own label.
+
+    Search results repeat ``RESULT_n:`` records whose fields sit at two spaces.
+    A note body pasted in at column zero can therefore contain a line that reads
+    as the next field (``  todo: x``) or the next record (``RESULT_2:``), which
+    silently moves the record boundary. Indenting the value deeper than the
+    fields makes the block's extent unambiguous without a terminator.
+    """
+    return [f"  {label}:"] + [
+        f"    {line}" if line else "" for line in value.split("\n")
+    ]
+
+
 def _format_note_entry(
     note: Any,
     index: int,
@@ -270,7 +284,7 @@ def _format_note_entry(
     should_show_content = config.should_show_content(context)
     if should_show_content and body:
         if config.should_show_full_content(context):
-            entry.append(f"  content: {body}")
+            entry.extend(_indent_block("content", body))
         else:
             search_query_for_terms = (
                 original_query if original_query is not None else query
@@ -278,7 +292,7 @@ def _format_note_entry(
             preview = create_content_preview_with_search(
                 body, config.get_max_preview_length(), search_query_for_terms
             )
-            entry.append(f"  content_preview: {preview}")
+            entry.extend(_indent_block("content_preview", preview))
     elif should_show_content:
         entry.append("  content: (empty)")
     else:
