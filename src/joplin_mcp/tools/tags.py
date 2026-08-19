@@ -109,19 +109,24 @@ def _format_tag_op_report(
 
 
 @create_tool("list_tags", "List tags")
-async def list_tags() -> str:
+async def list_tags(
+    verbose: Annotated[
+        bool,
+        Field(description="Also return creation and update timestamps (default: False)"),
+    ] = False,
+) -> str:
     """List all tags in your Joplin instance with note counts.
 
     Retrieves and displays all tags that exist in your Joplin application. Tags are labels
     that can be applied to notes for categorization and organization.
 
     Returns:
-        str: Formatted list of all tags including title, unique ID, number of notes tagged with it, and creation date.
+        str: Formatted list of all tags including title, unique ID and number of notes tagged with it.
     """
     client = get_joplin_client()
     fields_list = "id,title,created_time,updated_time"
     tags = client.get_all_tags(fields=fields_list)
-    return format_tag_list_with_counts(tags, client)
+    return format_tag_list_with_counts(tags, client, verbose=verbose)
 
 
 @create_tool("create_tag", "Create tag")

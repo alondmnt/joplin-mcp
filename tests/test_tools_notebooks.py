@@ -652,3 +652,36 @@ class TestListNotebooksNoteCounts:
 
         assert "title: Work" in result
         assert "note_count:" not in result
+
+
+class TestListingVerbosity:
+    """Decorative fields stay out of the way unless asked for."""
+
+    def _notebook(self):
+        nb = MagicMock()
+        nb.id = "a" * 32
+        nb.title = "Work"
+        nb.parent_id = "b" * 32
+        nb.icon = '{"type": 1, "emoji": "\U0001f3af", "name": ""}'
+        nb.created_time = 1609459200000
+        nb.updated_time = 1609545600000
+        return nb
+
+    def test_default_listing_omits_decoration(self):
+        """id, title and path are what an agent acts on; the rest is noise."""
+        from joplin_mcp.fastmcp_server import ItemType, format_item_list
+
+        result = format_item_list([self._notebook()], ItemType.notebook)
+
+        assert "title: Work" in result
+        for field in ("parent_id:", "created:", "updated:", "emoji:"):
+            assert field not in result
+
+    def test_verbose_listing_restores_decoration(self):
+        """The off switch has to actually switch it back on."""
+        from joplin_mcp.fastmcp_server import ItemType, format_item_list
+
+        result = format_item_list([self._notebook()], ItemType.notebook, verbose=True)
+
+        for field in ("parent_id:", "created:", "updated:", "emoji:"):
+            assert field in result

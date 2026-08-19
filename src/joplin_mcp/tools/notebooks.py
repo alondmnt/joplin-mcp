@@ -58,13 +58,20 @@ def _build_icon_payload(emoji: str) -> str:
 
 
 @create_tool("list_notebooks", "List notebooks")
-async def list_notebooks() -> str:
-    """List all notebooks/folders in your Joplin instance.
+async def list_notebooks(
+    verbose: Annotated[
+        bool,
+        Field(description="Also return icon, parent_id and timestamps (default: False)"),
+    ] = False,
+) -> str:
+    """List all notebooks/folders in your Joplin instance, with note counts.
 
-    Retrieves and displays all notebooks (folders) in your Joplin application.
+    Returns each notebook's id, title, path and note_count. Pass verbose=True
+    to also get the emoji icon, parent_id and timestamps -- rarely needed, and
+    on a large collection they roughly double the size of this response.
 
     Returns:
-        str: Formatted list of all notebooks including title, unique ID, parent notebook (if sub-notebook), and creation date.
+        str: Formatted list of all notebooks including title, unique ID, path, and note count.
     """
     client = get_joplin_client()
     fields_list = "id,title,created_time,updated_time,parent_id,icon"
@@ -83,7 +90,9 @@ async def list_notebooks() -> str:
     except Exception:
         note_counts = None
 
-    return format_item_list(notebooks, ItemType.notebook, note_counts=note_counts)
+    return format_item_list(
+        notebooks, ItemType.notebook, note_counts=note_counts, verbose=verbose
+    )
 
 
 @create_tool("create_notebook", "Create notebook")

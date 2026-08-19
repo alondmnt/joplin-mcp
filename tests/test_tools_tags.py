@@ -51,7 +51,8 @@ class TestListTagsTool:
         result = await fn()
 
         mock_client.get_all_tags.assert_called_once()
-        mock_format.assert_called_once_with(mock_tags, mock_client)
+        mock_format.assert_called_once()
+        assert mock_format.call_args[0] == (mock_tags, mock_client)
         assert result == "FORMATTED_TAG_LIST"
 
 
