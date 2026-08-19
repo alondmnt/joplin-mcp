@@ -647,11 +647,13 @@ def format_tag_list_with_counts(tags: List[Any], client: Any) -> str:
         title = getattr(tag, "title", "Untitled")
         tag_id = getattr(tag, "id", "unknown")
 
-        # Get note count for this tag
+        # Counting needs the ids and nothing else: asking for COMMON_NOTE_FIELDS
+        # dragged every tagged note's full body across the wire per tag. get_notes
+        # is also paginated, so len() of one page capped the count at Joplin's
+        # page size -- get_all_notes unpaginates.
         try:
-            notes_result = client.get_notes(tag_id=tag_id, fields=COMMON_NOTE_FIELDS)
-            notes = process_search_results(notes_result)
-            note_count = len(notes)
+            notes = client.get_all_notes(tag_id=tag_id, fields="id")
+            note_count = len(process_search_results(notes))
         except Exception:
             note_count = 0
 
