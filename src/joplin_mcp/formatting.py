@@ -112,8 +112,14 @@ def build_pagination_header(
     *,
     order_by: Optional[str] = None,
     order_dir: Optional[str] = None,
+    include_hints: bool = False,
 ) -> List[str]:
-    """Build pagination header with search and pagination info."""
+    """Build pagination header with search and pagination info.
+
+    ``include_hints`` adds the worked-example NEXT_PAGE line. It is a parameter
+    rather than a config lookup so this module stays free of config imports;
+    callers read the setting.
+    """
     count = min(limit, total_count - offset) if total_count > offset else 0
     start_result = offset + 1 if count > 0 else 0
     end_result = offset + count
@@ -134,7 +140,7 @@ def build_pagination_header(
     header.append("")
 
     # Add next page guidance
-    if total_count > end_result:
+    if include_hints and total_count > end_result:
         next_offset = offset + limit
         header.extend(
             [f"NEXT_PAGE: Use offset={next_offset} to get the next {limit} results", ""]

@@ -1976,3 +1976,28 @@ class TestEnvironmentOnlyAllowlist:
 
         assert config.notebook_allowlist == ["Work", "Personal/**"]
         assert config.has_notebook_allowlist is True
+
+
+class TestOutputHintsSetting:
+    """Worked-example hints are opt-in, and reachable from the environment."""
+
+    def test_hints_default_to_off(self):
+        """A fresh config must not pay for hints nobody asked for."""
+        assert JoplinMCPConfig(token="t").are_output_hints_enabled() is False
+
+    def test_hints_can_be_enabled_from_the_environment(self):
+        """The deployer, not the agent, decides -- so it is a server setting."""
+        import os
+        from unittest.mock import patch as _patch
+
+        with _patch.dict(os.environ, {"JOPLIN_OUTPUT_HINTS": "true"}):
+            config = JoplinMCPConfig.from_environment()
+
+        assert config.are_output_hints_enabled() is True
+
+    def test_non_boolean_hints_value_is_rejected(self):
+        """A typo in the config file should not silently disable the switch."""
+        config = JoplinMCPConfig(token="t")
+        config.content_exposure["output_hints"] = "yes please"
+
+        assert config.is_valid is False

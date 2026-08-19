@@ -320,6 +320,12 @@ class JoplinMCPConfig:
         "max_preview_length": 300,  # Maximum preview length in characters
         "smart_toc_threshold": 2000,  # Show TOC for notes longer than this (in characters)
         "enable_smart_toc": True,  # Enable smart TOC behavior in get_note
+        # Worked-example follow-up calls (NEXT_STEPS, NEXT_PAGE). Off by
+        # default: the parameters they demonstrate are already in the tool
+        # schema, so for a capable model they are repetition charged per call.
+        # Smaller models attend to nearby examples better than to a schema
+        # defined earlier, so the deployer can switch them back on.
+        "output_hints": False,
     }
 
     # Environment variable suffix for each content_exposure key, and how to
@@ -332,6 +338,7 @@ class JoplinMCPConfig:
         "max_preview_length": ("MAX_PREVIEW_LENGTH", "int"),
         "smart_toc_threshold": ("SMART_TOC_THRESHOLD", "int"),
         "enable_smart_toc": ("ENABLE_SMART_TOC", "bool"),
+        "output_hints": ("OUTPUT_HINTS", "bool"),
     }
 
     # Sentinel value: when notebook_allowlist equals this, all notebooks are accessible
@@ -438,6 +445,10 @@ class JoplinMCPConfig:
     def is_smart_toc_enabled(self) -> bool:
         """Check if smart TOC behavior is enabled."""
         return self.content_exposure.get("enable_smart_toc", True)
+
+    def are_output_hints_enabled(self) -> bool:
+        """Check if worked-example follow-up hints should be emitted."""
+        return self.content_exposure.get("output_hints", False)
 
     def should_show_content(self, context: str) -> bool:
         """Check if content should be shown for a specific context."""
@@ -575,10 +586,10 @@ class JoplinMCPConfig:
                     raise ConfigError(
                         f"smart_toc_threshold must be a non-negative integer, got {type(value)}"
                     )
-            elif key == "enable_smart_toc":
+            elif key in ("enable_smart_toc", "output_hints"):
                 if not isinstance(value, bool):
                     raise ConfigError(
-                        f"enable_smart_toc must be a boolean, got {type(value)}"
+                        f"{key} must be a boolean, got {type(value)}"
                     )
             elif key in self.CONTENT_EXPOSURE_CONTEXTS:
                 if value not in self.CONTENT_EXPOSURE_LEVELS:
@@ -811,10 +822,10 @@ class JoplinMCPConfig:
                             raise ConfigError(
                                 f"Invalid value for 'smart_toc_threshold': expected non-negative integer, got {type(value)}"
                             )
-                    elif key == "enable_smart_toc":
+                    elif key in ("enable_smart_toc", "output_hints"):
                         if not isinstance(value, bool):
                             raise ConfigError(
-                                f"Invalid value for 'enable_smart_toc': expected boolean, got {type(value)}"
+                                f"Invalid value for '{key}': expected boolean, got {type(value)}"
                             )
                     elif key in cls.CONTENT_EXPOSURE_CONTEXTS:
                         if not isinstance(value, str):
@@ -1101,11 +1112,11 @@ class JoplinMCPConfig:
                                 f"smart_toc_threshold must be a non-negative integer, got {type(value)}"
                             )
                         )
-                elif key == "enable_smart_toc":
+                elif key in ("enable_smart_toc", "output_hints"):
                     if not isinstance(value, bool):
                         errors.append(
                             ConfigError(
-                                f"enable_smart_toc must be a boolean, got {type(value)}"
+                                f"{key} must be a boolean, got {type(value)}"
                             )
                         )
                 elif key in self.CONTENT_EXPOSURE_CONTEXTS:

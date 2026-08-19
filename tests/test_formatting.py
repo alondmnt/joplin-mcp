@@ -287,7 +287,9 @@ class TestBuildPaginationHeader:
 
     def test_first_page(self):
         """Should format first page header correctly."""
-        header = build_pagination_header("test query", total_count=50, limit=10, offset=0)
+        header = build_pagination_header(
+            "test query", total_count=50, limit=10, offset=0, include_hints=True
+        )
         assert "SEARCH_QUERY: test query" in header
         assert "RESULTS: 1-10 of 50 (offset=0, limit=10)" in header
         assert any("NEXT_PAGE:" in line for line in header)
@@ -295,7 +297,9 @@ class TestBuildPaginationHeader:
 
     def test_middle_page(self):
         """Should format middle page header correctly."""
-        header = build_pagination_header("search", total_count=100, limit=20, offset=40)
+        header = build_pagination_header(
+            "search", total_count=100, limit=20, offset=40, include_hints=True
+        )
         assert "RESULTS: 41-60 of 100 (offset=40, limit=20)" in header
         assert any("offset=60" in line for line in header)
 
@@ -320,6 +324,11 @@ class TestBuildPaginationHeader:
         """An empty page past the end reports no span rather than a fake one."""
         header = build_pagination_header("far", total_count=10, limit=20, offset=100)
         assert "RESULTS: 0 of 10 (offset=100, limit=20)" in header
+
+    def test_next_page_hint_is_off_by_default(self):
+        """The offset is already in the header; the worked call is opt-in."""
+        header = build_pagination_header("q", total_count=50, limit=10, offset=0)
+        assert not any("NEXT_PAGE:" in line for line in header)
 
     def test_states_the_window_once(self):
         """The whole point: no second restatement of the same numbers."""
