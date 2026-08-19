@@ -1,0 +1,16 @@
+ Plain Text Import Test
+======================
+
+This is a simple text file to test plain text import functionality.
+
+Key points to verify:
+- Text content is preserved
+- Line breaks are maintained
+- No formatting is lost
+- Basic structure is readable
+
+Multiple paragraphs should be handled correctly.
+
+This is the second paragraph with some additional content.
+
+End of test file.

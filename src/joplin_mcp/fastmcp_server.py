@@ -564,8 +564,16 @@ def _format_notebook_icon(icon_field: Optional[str]) -> Optional[str]:
     return None
 
 
-def format_item_list(items: List[Any], item_type: ItemType) -> str:
-    """Format a list of items (notebooks, tags, etc.) for display optimized for LLM comprehension."""
+def format_item_list(
+    items: List[Any],
+    item_type: ItemType,
+    note_counts: Optional[Dict[str, int]] = None,
+) -> str:
+    """Format a list of items (notebooks, tags, etc.) for display optimized for LLM comprehension.
+
+    ``note_counts`` maps item id to note count. Callers compute it in one bulk
+    query rather than per item; when omitted the count line is left out.
+    """
     if not items:
         return f"ITEM_TYPE: {item_type.value}\nTOTAL_ITEMS: 0\nSTATUS: No {item_type.value}s found in Joplin instance"
 
@@ -592,6 +600,9 @@ def format_item_list(items: List[Any], item_type: ItemType) -> str:
                 f"  title: {title}",
             ]
         )
+
+        if note_counts is not None:
+            result_parts.append(f"  note_count: {note_counts.get(item_id, 0)}")
 
         # Add parent folder ID if available (for notebooks)
         parent_id = getattr(item, "parent_id", None)

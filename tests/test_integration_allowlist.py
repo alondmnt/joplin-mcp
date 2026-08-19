@@ -392,7 +392,8 @@ class TestBackwardCompatibilityIntegration:
             # format_item_list should have received all 3 notebooks
             from joplin_mcp.fastmcp_server import ItemType
 
-            mock_format.assert_called_once_with(mock_notebooks, ItemType.notebook)
+            mock_format.assert_called_once()
+            assert mock_format.call_args[0] == (mock_notebooks, ItemType.notebook)
 
     @pytest.mark.asyncio
     async def test_delete_note_works_without_allowlist(self):
