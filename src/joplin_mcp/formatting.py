@@ -31,12 +31,21 @@ TITLE: {title}
 MESSAGE: {item_type.value} created successfully in Joplin"""
 
 
-def format_update_success(item_type: ItemType, item_id: str) -> str:
-    """Format a standardized success message for update operations optimized for LLM comprehension."""
+def format_update_success(
+    item_type: ItemType, item_id: str, title: Optional[str] = None
+) -> str:
+    """Format a standardized success message for update operations optimized for LLM comprehension.
+
+    ``title`` is optional because an update does not always carry one: only the
+    caller that actually changed the title knows it without a further fetch. The
+    ``TITLE:`` line is omitted when no title is available, so the caller never has
+    to invent a placeholder.
+    """
+    title_line = f"\nTITLE: {title}" if title else ""
     return f"""OPERATION: UPDATE_{item_type.value.upper()}
 STATUS: SUCCESS
 ITEM_TYPE: {item_type.value}
-ITEM_ID: {item_id}
+ITEM_ID: {item_id}{title_line}
 MESSAGE: {item_type.value} updated successfully in Joplin"""
 
 

@@ -115,6 +115,36 @@ class TestFormatUpdateSuccess:
         assert "ITEM_TYPE: tag" in result
         assert "tag updated successfully" in result
 
+    def test_update_success_omits_title_when_not_supplied(self):
+        """No title supplied should mean no TITLE line at all."""
+        result = format_update_success(ItemType.note, "note123456")
+        assert "TITLE:" not in result
+
+    def test_update_success_includes_title_when_supplied(self):
+        """A supplied title should be echoed on its own TITLE line."""
+        result = format_update_success(ItemType.note, "note123456", title="Renamed Note")
+        assert "TITLE: Renamed Note" in result
+        assert "ITEM_ID: note123456" in result
+        assert "note updated successfully" in result
+
+    def test_update_success_title_follows_item_id(self):
+        """TITLE should sit directly after ITEM_ID, matching creation messages."""
+        lines = format_update_success(
+            ItemType.notebook, "nb789", title="Archive"
+        ).splitlines()
+        assert lines.index("TITLE: Archive") == lines.index("ITEM_ID: nb789") + 1
+
+    def test_update_success_omits_empty_title(self):
+        """An empty title carries no information, so the line is dropped."""
+        result = format_update_success(ItemType.tag, "tag001", title="")
+        assert "TITLE:" not in result
+
+    def test_update_success_title_is_keyword_compatible(self):
+        """Passing title positionally and by keyword should agree."""
+        assert format_update_success(
+            ItemType.tag, "tag001", "important"
+        ) == format_update_success(ItemType.tag, "tag001", title="important")
+
 
 # === Tests for format_delete_success ===
 

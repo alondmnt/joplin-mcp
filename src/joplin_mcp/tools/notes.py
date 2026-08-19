@@ -696,7 +696,7 @@ async def update_note(
 
     note_view.modify_note(client, note_id, **update_data)
 
-    return format_update_success(ItemType.note, note_id)
+    return format_update_success(ItemType.note, note_id, title=title)
 
 
 @create_tool("edit_note", "Edit note")

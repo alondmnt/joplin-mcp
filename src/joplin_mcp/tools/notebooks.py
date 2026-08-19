@@ -219,7 +219,7 @@ async def update_notebook(
         )
 
     notebook_resolver.modify_notebook(notebook_id, **update_kwargs)
-    return format_update_success(ItemType.notebook, notebook_id)
+    return format_update_success(ItemType.notebook, notebook_id, title=title)
 
 
 @create_tool("delete_notebook", "Delete notebook")

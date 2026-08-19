@@ -158,7 +158,7 @@ async def update_tag(
     """
     client = get_joplin_client()
     client.modify_tag(tag_id, title=title)
-    return format_update_success(ItemType.tag, tag_id)
+    return format_update_success(ItemType.tag, tag_id, title=title)
 
 
 @create_tool("delete_tag", "Delete tag")
