@@ -373,6 +373,7 @@ def format_search_results_with_pagination(
     result_parts = build_pagination_header(
         query, total_count, limit, offset,
         order_by=order_by, order_dir=order_dir,
+        include_hints=config.are_output_hints_enabled(),
     )
 
     for i, note in enumerate(results, 1):
@@ -466,12 +467,17 @@ def _render_toc(
     force_clause = (
         "To get full content" if display_mode == "explicit" else "To force full content"
     )
-    steps = f"""NEXT_STEPS:
+    if config.are_output_hints_enabled():
+        steps = f"""
+
+NEXT_STEPS:
 - To get specific section: get_note("{note_id}", section="1") or get_note("{note_id}", section="{section_example}")
 - To jump to line number: get_note("{note_id}", start_line={line_example}) (using line numbers from TOC above)
 - {force_clause}: get_note("{note_id}", force_full=True)"""
+    else:
+        steps = ""
 
-    toc_info = f"DISPLAY_MODE: {display_mode}\n\n{toc}\n\n{steps}"
+    toc_info = f"DISPLAY_MODE: {display_mode}\n\n{toc}{steps}"
     return f"{metadata_result}\n\n{toc_info}"
 
 
@@ -579,7 +585,15 @@ def _render_smart_toc(note: Any, note_id: str, config: Any) -> Optional[str]:
         config=config,
     )
 
-    truncation_info = f'CONTENT_TRUNCATED: Note is long ({body_length} chars) but has no headings for navigation\nNEXT_STEPS: To force full content: get_note("{note_id}", force_full=True) or start sequential reading: get_note("{note_id}", start_line=1)\n'
+    truncation_info = (
+        f"CONTENT_TRUNCATED: Note is long ({body_length} chars) "
+        "but has no headings for navigation\n"
+    )
+    if config.are_output_hints_enabled():
+        truncation_info += (
+            f'NEXT_STEPS: To force full content: get_note("{note_id}", force_full=True)'
+            f' or start sequential reading: get_note("{note_id}", start_line=1)\n'
+        )
     return f"{truncation_info}{result}"
 
 
