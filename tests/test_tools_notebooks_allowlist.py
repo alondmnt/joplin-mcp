@@ -76,7 +76,8 @@ class TestListNotebooksAllowlist:
         # filter_accessible should NOT be called
         from joplin_mcp.fastmcp_server import ItemType
 
-        mock_format.assert_called_once_with(mock_notebooks, ItemType.notebook)
+        mock_format.assert_called_once()
+        assert mock_format.call_args[0] == (mock_notebooks, ItemType.notebook)
         assert result == "ALL_NOTEBOOKS"
 
     @pytest.mark.asyncio
@@ -115,7 +116,8 @@ class TestListNotebooksAllowlist:
         )
         from joplin_mcp.fastmcp_server import ItemType
 
-        mock_format.assert_called_once_with(filtered, ItemType.notebook)
+        mock_format.assert_called_once()
+        assert mock_format.call_args[0] == (filtered, ItemType.notebook)
         assert result == "FILTERED_NOTEBOOKS"
 
     @pytest.mark.asyncio
@@ -145,7 +147,8 @@ class TestListNotebooksAllowlist:
 
             from joplin_mcp.fastmcp_server import ItemType
 
-            mock_format.assert_called_once_with(mock_notebooks, ItemType.notebook)
+            mock_format.assert_called_once()
+            assert mock_format.call_args[0] == (mock_notebooks, ItemType.notebook)
             assert result == "ALL"
 
     @pytest.mark.asyncio
@@ -179,7 +182,8 @@ class TestListNotebooksAllowlist:
             )
             from joplin_mcp.fastmcp_server import ItemType
 
-            mock_format.assert_called_once_with([], ItemType.notebook)
+            mock_format.assert_called_once()
+            assert mock_format.call_args[0] == ([], ItemType.notebook)
             assert result == "EMPTY"
 
 

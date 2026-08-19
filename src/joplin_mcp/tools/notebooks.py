@@ -1,6 +1,7 @@
 """Notebook tools for Joplin MCP."""
 import json
-from typing import Annotated, Optional
+from collections import Counter
+from typing import Annotated, Dict, Optional
 
 from pydantic import Field
 
@@ -72,7 +73,17 @@ async def list_notebooks() -> str:
         notebooks = notebook_resolver.filter_accessible(
             notebooks, allowlist_entries=get_config().notebook_allowlist
         )
-    return format_item_list(notebooks, ItemType.notebook)
+    # One bulk fetch of ids and parents, counted in memory. Querying per
+    # notebook would be 40+ round-trips on a call agents make to resolve names.
+    try:
+        notes = client.get_all_notes(fields="id,parent_id")
+        note_counts: Optional[Dict[str, int]] = Counter(
+            getattr(note, "parent_id", "") for note in notes
+        )
+    except Exception:
+        note_counts = None
+
+    return format_item_list(notebooks, ItemType.notebook, note_counts=note_counts)
 
 
 @create_tool("create_notebook", "Create notebook")

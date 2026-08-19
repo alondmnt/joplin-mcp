@@ -52,7 +52,8 @@ class TestListNotebooksTool:
 
         mock_client.get_all_notebooks.assert_called_once()
         assert "id,title,created_time,updated_time,parent_id" in mock_client.get_all_notebooks.call_args[1]["fields"]
-        mock_format.assert_called_once_with(mock_notebooks, ItemType.notebook)
+        assert mock_format.call_args[0] == (mock_notebooks, ItemType.notebook)
+        assert "note_counts" in mock_format.call_args[1]
         assert result == "FORMATTED_NOTEBOOKS"
 
 
@@ -590,3 +591,64 @@ class TestFormatNotebookIcon:
         from joplin_mcp.fastmcp_server import _format_notebook_icon
 
         assert _format_notebook_icon('{"type":1,"name":""}') is None
+
+
+class TestListNotebooksNoteCounts:
+    """Counts come from one bulk query, not one query per notebook."""
+
+    def _notebook(self, nb_id, title):
+        nb = MagicMock()
+        nb.id = nb_id
+        nb.title = title
+        nb.parent_id = ""
+        nb.icon = None
+        nb.created_time = 1609459200000
+        nb.updated_time = 1609545600000
+        return nb
+
+    def _note(self, parent_id):
+        note = MagicMock()
+        note.parent_id = parent_id
+        return note
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.get_joplin_client")
+    async def test_counts_notes_per_notebook(self, mock_get_client):
+        """Each notebook reports how many notes sit directly in it."""
+        from joplin_mcp.tools.notebooks import list_notebooks
+
+        client = MagicMock()
+        client.get_all_notebooks.return_value = [
+            self._notebook("a" * 32, "Work"),
+            self._notebook("b" * 32, "Empty"),
+        ]
+        client.get_all_notes.return_value = [
+            self._note("a" * 32),
+            self._note("a" * 32),
+            self._note("c" * 32),
+        ]
+        mock_get_client.return_value = client
+
+        result = await _get_tool_fn(list_notebooks)()
+
+        assert client.get_all_notes.call_count == 1
+        assert client.get_all_notes.call_args[1]["fields"] == "id,parent_id"
+        work = result.split("ITEM_2:")[0]
+        assert "note_count: 2" in work
+        assert "note_count: 0" in result.split("ITEM_2:")[1]
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notebooks.get_joplin_client")
+    async def test_listing_survives_a_failed_count(self, mock_get_client):
+        """A count query that fails must not take the whole listing down."""
+        from joplin_mcp.tools.notebooks import list_notebooks
+
+        client = MagicMock()
+        client.get_all_notebooks.return_value = [self._notebook("a" * 32, "Work")]
+        client.get_all_notes.side_effect = RuntimeError("boom")
+        mock_get_client.return_value = client
+
+        result = await _get_tool_fn(list_notebooks)()
+
+        assert "title: Work" in result
+        assert "note_count:" not in result
