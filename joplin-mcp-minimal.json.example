@@ -38,6 +38,7 @@
     "individual_notes": "preview",
     "max_preview_length": 150,
     "smart_toc_threshold": 2000,
-    "enable_smart_toc": true
+    "enable_smart_toc": true,
+    "output_hints": false
   }
 }

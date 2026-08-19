@@ -480,10 +480,13 @@ Note: Claude Desktop currently uses STDIO transport and does not consume HTTP/SS
 | `content_exposure.max_preview_length` | `300` | Maximum length of content previews (characters) |
 | `content_exposure.smart_toc_threshold` | `2000` | Notes longer than this show a table of contents instead of the full body |
 | `content_exposure.enable_smart_toc` | `true` | Turn the table-of-contents fallback off to always return full note bodies |
+| `content_exposure.output_hints` | `false` | Emit worked follow-up calls (`NEXT_STEPS`, `NEXT_PAGE`) alongside results. Useful for smaller models, repetition for capable ones |
 
 Lowering `max_preview_length` and `smart_toc_threshold`, or setting
 `search_results` to `"none"`, is the main way to cut how many tokens a
-session spends. See [docs/content-privacy.md](docs/content-privacy.md).
+session spends. `list_notebooks` and `list_tags` return only the fields
+an agent acts on; pass `verbose=True` for icons, parent ids and
+timestamps. See [docs/content-privacy.md](docs/content-privacy.md).
 
 ## Docker
 

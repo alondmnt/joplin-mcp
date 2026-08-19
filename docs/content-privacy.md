@@ -52,6 +52,21 @@ Global toggle for smart TOC behavior.
 
 **Default:** `true`
 
+### `output_hints`
+Worked follow-up calls appended to results: the `NEXT_STEPS` block under a
+TOC, and the `NEXT_PAGE` line in paginated searches.
+- `false`: results carry data only. The parameters these examples demonstrate
+  are already in the tool schema, so for a capable model they are repetition
+  charged on every call
+- `true`: restore them. Smaller models attend to an example next to the result
+  more reliably than to a schema defined earlier in the context
+
+This is a server setting rather than a per-call parameter on purpose: a model
+weak enough to need the examples is not reliable at asking for them, while
+whoever deploys the server knows which model it serves.
+
+**Default:** `false`
+
 ## Configuration Examples
 
 ### 1. Privacy-Focused Configuration
@@ -139,6 +154,7 @@ export JOPLIN_CONTENT_INDIVIDUAL_NOTES=preview
 export JOPLIN_MAX_PREVIEW_LENGTH=150
 export JOPLIN_SMART_TOC_THRESHOLD=2000
 export JOPLIN_ENABLE_SMART_TOC=true
+export JOPLIN_OUTPUT_HINTS=false
 ```
 
 **Precedence:** environment variables override the config file, key by
@@ -252,6 +268,7 @@ The system validates content exposure settings:
 - `max_preview_length` must be a non-negative integer
 - `smart_toc_threshold` must be a positive integer
 - `enable_smart_toc` must be a boolean value
+- `output_hints` must be a boolean value
 - Unknown settings will cause validation errors
 
 Invalid configuration example:
