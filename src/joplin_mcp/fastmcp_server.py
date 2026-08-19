@@ -568,11 +568,17 @@ def format_item_list(
     items: List[Any],
     item_type: ItemType,
     note_counts: Optional[Dict[str, int]] = None,
+    verbose: bool = False,
 ) -> str:
     """Format a list of items (notebooks, tags, etc.) for display optimized for LLM comprehension.
 
     ``note_counts`` maps item id to note count. Callers compute it in one bulk
     query rather than per item; when omitted the count line is left out.
+
+    ``verbose`` restores the fields an agent rarely acts on -- parent id, icon
+    and timestamps. They are off by default because this call is typically made
+    once per session just to resolve names to ids, where they were roughly half
+    the payload. ``path`` already encodes the hierarchy that ``parent_id`` gives.
     """
     if not items:
         return f"ITEM_TYPE: {item_type.value}\nTOTAL_ITEMS: 0\nSTATUS: No {item_type.value}s found in Joplin instance"
@@ -604,9 +610,9 @@ def format_item_list(
         if note_counts is not None:
             result_parts.append(f"  note_count: {note_counts.get(item_id, 0)}")
 
-        # Add parent folder ID if available (for notebooks)
+        # parent_id duplicates the hierarchy that path already spells out
         parent_id = getattr(item, "parent_id", None)
-        if parent_id:
+        if verbose and parent_id:
             result_parts.append(f"  parent_id: {parent_id}")
 
         # Add full path for notebooks
@@ -621,19 +627,20 @@ def format_item_list(
             except Exception:
                 pass
 
-            icon_line = _format_notebook_icon(getattr(item, "icon", None))
-            if icon_line:
-                result_parts.append(icon_line)
+            if verbose:
+                icon_line = _format_notebook_icon(getattr(item, "icon", None))
+                if icon_line:
+                    result_parts.append(icon_line)
 
         # Add creation time if available
-        created_time = getattr(item, "created_time", None)
+        created_time = getattr(item, "created_time", None) if verbose else None
         if created_time:
             created_date = format_timestamp(created_time, "%Y-%m-%d %H:%M")
             if created_date:
                 result_parts.append(f"  created: {created_date}")
 
         # Add update time if available
-        updated_time = getattr(item, "updated_time", None)
+        updated_time = getattr(item, "updated_time", None) if verbose else None
         if updated_time:
             updated_date = format_timestamp(updated_time, "%Y-%m-%d %H:%M")
             if updated_date:
@@ -644,8 +651,14 @@ def format_item_list(
     return "\n".join(result_parts)
 
 
-def format_tag_list_with_counts(tags: List[Any], client: Any) -> str:
-    """Format a list of tags with note counts for display optimized for LLM comprehension."""
+def format_tag_list_with_counts(
+    tags: List[Any], client: Any, verbose: bool = False
+) -> str:
+    """Format a list of tags with note counts for display optimized for LLM comprehension.
+
+    ``verbose`` restores the creation and update timestamps, which an agent
+    resolving tag names to ids has no use for.
+    """
     if not tags:
         return (
             "ITEM_TYPE: tag\nTOTAL_ITEMS: 0\nSTATUS: No tags found in Joplin instance"
@@ -679,14 +692,14 @@ def format_tag_list_with_counts(tags: List[Any], client: Any) -> str:
         )
 
         # Add creation time if available
-        created_time = getattr(tag, "created_time", None)
+        created_time = getattr(tag, "created_time", None) if verbose else None
         if created_time:
             created_date = format_timestamp(created_time, "%Y-%m-%d %H:%M")
             if created_date:
                 result_parts.append(f"  created: {created_date}")
 
         # Add update time if available
-        updated_time = getattr(tag, "updated_time", None)
+        updated_time = getattr(tag, "updated_time", None) if verbose else None
         if updated_time:
             updated_date = format_timestamp(updated_time, "%Y-%m-%d %H:%M")
             if updated_date:
