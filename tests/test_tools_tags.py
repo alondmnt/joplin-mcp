@@ -584,3 +584,36 @@ class TestUntagNoteTool:
 
         assert "SECRET999" not in result
         assert "token=***" in result
+
+
+class TestTagNoteCounts:
+    """Note counts must be complete and must not pull note bodies."""
+
+    def _tag(self, tag_id="t" * 32, title="work"):
+        tag = MagicMock()
+        tag.id = tag_id
+        tag.title = title
+        return tag
+
+    def test_count_is_not_capped_by_a_page(self):
+        """A tag with more notes than one page still reports the full count."""
+        from joplin_mcp.fastmcp_server import format_tag_list_with_counts
+
+        client = MagicMock()
+        client.get_all_notes.return_value = [MagicMock() for _ in range(250)]
+
+        result = format_tag_list_with_counts([self._tag()], client)
+
+        assert "note_count: 250" in result
+
+    def test_counting_does_not_request_note_bodies(self):
+        """Only ids are needed to count, so nothing else may be requested."""
+        from joplin_mcp.fastmcp_server import format_tag_list_with_counts
+
+        client = MagicMock()
+        client.get_all_notes.return_value = []
+
+        format_tag_list_with_counts([self._tag()], client)
+
+        client.get_notes.assert_not_called()
+        assert client.get_all_notes.call_args[1]["fields"] == "id"
