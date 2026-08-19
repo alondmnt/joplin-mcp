@@ -978,6 +978,88 @@ class TestEditNoteTool:
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_replace_names_the_note(self, mock_get_client):
+        """The edited note is already in hand, so the response should name it."""
+        from joplin_mcp.tools.notes import edit_note
+
+        note = self._make_note("Fix the color here.")
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        fn = _get_tool_fn(edit_note)
+        result = await fn(
+            "12345678901234567890123456789012",
+            new_string="colour",
+            old_string="color",
+        )
+
+        assert 'Replaced 1 occurrence(s) in "Test Note".' in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_append_names_the_note(self, mock_get_client):
+        """Positional inserts read as 'to' the note rather than 'in' it."""
+        from joplin_mcp.tools.notes import edit_note
+
+        note = self._make_note("Existing content.")
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        fn = _get_tool_fn(edit_note)
+        result = await fn(
+            "12345678901234567890123456789012",
+            new_string="tail",
+            position="end",
+        )
+
+        assert 'characters to "Test Note".' in result
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_omits_note_name_when_untitled(self, mock_get_client):
+        """An untitled note must not produce an empty quoted name."""
+        from joplin_mcp.tools.notes import edit_note
+
+        note = self._make_note("Fix the color here.")
+        note.title = "   "
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        fn = _get_tool_fn(edit_note)
+        result = await fn(
+            "12345678901234567890123456789012",
+            new_string="colour",
+            old_string="color",
+        )
+
+        assert result == "EDIT_NOTE: Replaced 1 occurrence(s)."
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
+    async def test_quoted_note_name_stays_unambiguous(self, mock_get_client):
+        """A title containing double quotes must not break the quoted name."""
+        from joplin_mcp.tools.notes import edit_note
+
+        note = self._make_note("Fix the color here.")
+        note.title = 'The "Big" Refactor'
+        mock_client = MagicMock()
+        mock_client.get_note.return_value = note
+        mock_get_client.return_value = mock_client
+
+        fn = _get_tool_fn(edit_note)
+        result = await fn(
+            "12345678901234567890123456789012",
+            new_string="colour",
+            old_string="color",
+        )
+
+        assert result == "EDIT_NOTE: Replaced 1 occurrence(s) in \"The 'Big' Refactor\"."
+
+    @pytest.mark.asyncio
+    @patch("joplin_mcp.tools.notes.get_joplin_client")
     async def test_append_to_note(self, mock_get_client):
         """Should append text to end of note body."""
         from joplin_mcp.tools.notes import edit_note

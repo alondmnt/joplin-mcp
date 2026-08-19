@@ -778,6 +778,13 @@ async def edit_note(
 
     body = getattr(note, "body", "") or ""
 
+    # edit_note already fetched the note, so naming it in the response costs
+    # nothing. Omitted when the note has no title, mirroring the rule in
+    # format_update_success: never invent a placeholder.
+    note_title = (getattr(note, "title", "") or "").strip().replace('"', "'")
+    in_note = f' in "{note_title}"' if note_title else ""
+    to_note = f' to "{note_title}"' if note_title else ""
+
     if old_string is not None:
         # Replacement / deletion mode
         count = body.count(old_string)
@@ -807,8 +814,8 @@ async def edit_note(
         note_view.modify_note(client, note_id, body=new_body)
 
         if new_string == "":
-            return f"EDIT_NOTE: Deleted {replacements} occurrence(s) of the specified text."
-        return f"EDIT_NOTE: Replaced {replacements} occurrence(s)."
+            return f"EDIT_NOTE: Deleted {replacements} occurrence(s) of the specified text{in_note}."
+        return f"EDIT_NOTE: Replaced {replacements} occurrence(s){in_note}."
 
     else:
         # Positional insertion mode
@@ -821,7 +828,7 @@ async def edit_note(
 
         note_view.modify_note(client, note_id, body=new_body)
 
-        return f"EDIT_NOTE: {action} {len(new_string)} characters."
+        return f"EDIT_NOTE: {action} {len(new_string)} characters{to_note}."
 
 
 @create_tool("delete_note", "Delete note")
