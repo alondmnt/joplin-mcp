@@ -32,7 +32,6 @@ from joplin_mcp.fastmcp_server import (
 )
 from joplin_mcp.formatting import (
     build_pagination_header,
-    build_pagination_summary,
 )
 from joplin_mcp.note_view import (
     _build_find_in_note_header,
@@ -1124,7 +1123,6 @@ async def find_in_note(
             notebook_path_override=notebook_path,
             status="STATUS: Note has no content to search",
         )
-        header_parts.extend(build_pagination_summary(0, limit, offset))
         return "\n".join(header_parts)
 
     # Split once to derive both offsets and display lines
@@ -1205,7 +1203,6 @@ async def find_in_note(
             notebook_path_override=notebook_path,
             status="STATUS: No matches found",
         )
-        result_parts.extend(build_pagination_summary(0, limit, offset))
         return "\n".join(result_parts)
 
     match_entries: List[Dict[str, Any]] = []
@@ -1243,7 +1240,6 @@ async def find_in_note(
         result_parts.append(
             f"STATUS: No matches available for offset {offset} with limit {limit}"
         )
-        result_parts.extend(build_pagination_summary(total_count, limit, offset))
         return "\n".join(result_parts)
 
     for page_index, match_info in enumerate(paginated_matches, start=1):
@@ -1257,7 +1253,6 @@ async def find_in_note(
 
         result_parts.append("")
 
-    result_parts.extend(build_pagination_summary(total_count, limit, offset))
 
     return "\n".join(result_parts)
 
