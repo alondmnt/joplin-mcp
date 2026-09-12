@@ -4,6 +4,14 @@ on:
   push:
     tags:
       - "v*"
+  # Rehearse the checks without tagging: a manual run stops after the build
+  # and publishes nothing. Needs a version to check against, since there is
+  # no tag to read one from.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to verify, e.g. 0.10.0"
+        required: true
 
 jobs:
   publish:
@@ -23,8 +31,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Verify versions match tag
-        run: python scripts/bump_version.py --check "${GITHUB_REF#refs/tags/v}"
+      - name: Verify versions match the release version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          python scripts/bump_version.py --check "${INPUT_VERSION:-${GITHUB_REF#refs/tags/v}}"
 
       - name: Install package and test dependencies
         run: |
@@ -38,8 +49,17 @@ jobs:
       - name: Build distribution
         run: python -m build
 
+      - name: Check the PyPI token is present
+        if: github.event_name == 'push'
+        run: |
+          if [ -z "$PYPI_API_TOKEN" ]; then
+            echo "PYPI_API_TOKEN is not set; refusing to publish to the MCP" \
+                 "registry a version that would never reach PyPI." >&2
+            exit 1
+          fi
+
       - name: Publish to PyPI
-        if: ${{ env.PYPI_API_TOKEN != '' }}
+        if: github.event_name == 'push'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
@@ -47,6 +67,7 @@ jobs:
           skip-existing: true
 
       - name: Install MCP Publisher
+        if: github.event_name == 'push'
         run: |
           VERSION=$(curl -s https://api.github.com/repos/modelcontextprotocol/registry/releases/latest | jq -r '.tag_name')
           OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -55,7 +76,9 @@ jobs:
             | tar xz mcp-publisher
 
       - name: Login to MCP Registry
+        if: github.event_name == 'push'
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
+        if: github.event_name == 'push'
         run: ./mcp-publisher publish
