@@ -456,14 +456,23 @@ class TestDeleteNotebookAllowlist:
 
     @pytest.mark.asyncio
     @patch("joplin_mcp.tools.notebooks.notebook_resolver")
+    @patch("joplin_mcp.tools.notebooks.get_joplin_client")
     async def test_delete_notebook_non_allowlisted(
         self,
+        mock_get_client,
         mock_resolver,
         mock_allowlist_config,
     ):
-        """Should raise error when notebook is not allowlisted."""
+        """Should raise error when notebook is not allowlisted.
+
+        get_joplin_client is patched because delete_notebook builds the client
+        before it checks the allowlist, so without this the test only passes on
+        a machine that happens to have a joplin-mcp.json with a token in the
+        working directory - it fails on a fresh clone and in CI.
+        """
         from joplin_mcp.tools.notebooks import delete_notebook
 
+        mock_get_client.return_value = MagicMock()
         mock_resolver.validate_access.side_effect = ValueError(
             "Notebook not accessible"
         )
