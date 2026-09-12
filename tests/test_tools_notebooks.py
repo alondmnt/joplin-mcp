@@ -9,7 +9,7 @@ methods rather than the raw client.
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pydantic import ValidationError
+from conftest import ARG_VALIDATION_ERRORS
 
 RESOLVED_PARENT_ID = "abcdefabcdefabcdefabcdefabcdefab"
 
@@ -340,7 +340,7 @@ class TestUpdateNotebookTool:
         it at the Pydantic boundary instead. Regression guard."""
         from joplin_mcp.tools.notebooks import update_notebook
 
-        with pytest.raises(ValidationError, match="at least 1 character"):
+        with pytest.raises(ARG_VALIDATION_ERRORS, match="at least 1 character"):
             await update_notebook.run(
                 {
                     "notebook_id": "12345678901234567890123456789012",

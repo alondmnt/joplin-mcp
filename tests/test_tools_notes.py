@@ -137,10 +137,10 @@ class TestUpdateNoteTool:
     async def test_rejects_empty_title(self):
         """An empty `title` would silently rename the note to "" — reject it
         at the Pydantic boundary."""
-        from pydantic import ValidationError
+        from conftest import ARG_VALIDATION_ERRORS
         from joplin_mcp.tools.notes import update_note
 
-        with pytest.raises(ValidationError, match="at least 1 character"):
+        with pytest.raises(ARG_VALIDATION_ERRORS, match="at least 1 character"):
             await update_note.run(
                 {
                     "note_id": "12345678901234567890123456789012",
