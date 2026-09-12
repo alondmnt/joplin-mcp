@@ -60,7 +60,7 @@ If you need to change a paragraph, fix a typo, or append a section: always use `
 | `note_id` | 32-char hex ID only |
 | `notebook_name` | Human-readable name (e.g., "Work") |
 | `tag_name` | Human-readable name (e.g., "important") |
-| `parent_id` | Omit for top-level notebooks, or pass a 32-char hex parent notebook ID only |
+| `parent_name` | Notebook name or path (e.g., "Projects/Work"); omit for top-level, `"/"` to move to top-level |
 
 Search results return IDs — use those IDs in subsequent calls.
 
