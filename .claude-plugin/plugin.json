@@ -1,5 +1,5 @@
 {
   "name": "joplin-mcp",
-  "version": "0.6.0",
+  "version": "0.10.0",
   "description": "Claude Code plugin for Joplin MCP server — orchestration guidance for 26 note-management tools"
 }

@@ -11,7 +11,7 @@
     {
       "name": "joplin-mcp",
       "description": "Orchestration skill for 26 Joplin note-management tools — smart edit vs update, long-note reading, bulk tagging",
-      "version": "0.6.0",
+      "version": "0.10.0",
       "author": {
         "name": "Alon Diament"
       },
