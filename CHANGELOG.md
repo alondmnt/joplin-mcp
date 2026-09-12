@@ -1,3 +1,47 @@
+# [v0.10.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.10.0)
+*Released on 2026-09-12*
+
+## Breaking Changes
+
+- **Environment variables now override the config file.** `auto_discover()` used to pick one source or the other: it called `from_file()` as soon as it found a config file and only fell back to `from_environment()` when there was none. Every `JOPLIN_*` variable was therefore inert for anyone who had run the installer, which is most people, even though the README already claimed the per-tool variables took precedence. That matters because MCP clients configure servers through an env block (Claude Desktop, Cursor and the VS Code extension all pass settings that way), and a config file without a token made `JOPLIN_TOKEN` unreachable entirely. If you have been setting `JOPLIN_*` alongside a `joplin-mcp.json` and relying on the file winning, the file no longer wins (#60).
+- **A blank `JOPLIN_NOTEBOOK_ALLOWLIST` stays deny-all.** Blank env vars read as unset for every other key, but an empty allowlist is not the same as no allowlist: only `None` becomes allow-all, so treating blank as absent would have flipped an install from "no notebooks" to "every notebook" on upgrade. The allowlist reads raw presence instead. Layered over a config file, blank still counts as unset and the file's own list stands, so neither path can widen access (#60).
+- **The server refuses to start when config loading fails.** A malformed variable used to be able to widen access: with a restrictive file, a valid `JOPLIN_TOKEN` and `JOPLIN_PORT=abc`, the merge raised, discovery substituted a default `JoplinMCPConfig()` so the import could finish, and the client recovered the token from the environment on its own. The result was a live, authenticated server with `create_note` and `update_note` enabled and an allowlist of `**`, none of which the file granted. Discovery now records the failure and `main()` refuses to start rather than serving the stand-in (#60).
+
+## Response Format
+
+Four changes that cut what every call costs, prompted by BennyTramell's report on token use (#59). Measured against a 41-notebook instance: `list_notebooks` 8442 to 4990 characters despite gaining `note_count`, `list_tags` 613 to 389, and 600 characters off a 20-result listing from the content-stats line alone.
+
+- **Listings drop decorative fields.** `list_notebooks` returned `icon`, `parent_id` and both timestamps for every notebook, roughly half the payload, on a call normally made once per session to resolve names to ids. `parent_id` was the clearest case, since `path` already spells out the same hierarchy. Default output is now `id`, `title`, `path` and `note_count`; pass `verbose=True` to restore the rest. Same treatment for `list_tags` timestamps.
+- **Pagination is stated once.** Every `find_*` response gave the same numbers twice, a seven-line header and a `PAGINATION_SUMMARY` footer restating page, span and next offset. Page number and page count are both derivable, so one line carries all of it: `RESULTS: 1-5 of 446 (offset=0, limit=5)`. An empty page past the end now reports `0 of 10` instead of `0-100`, which read as a range that had results in it.
+- **Worked-example hints are opt-in, default off.** `get_note` in TOC mode appended a `NEXT_STEPS` block with fully worked follow-up calls, and paginated responses carried a `NEXT_PAGE` line in the same style. Both restate parameters the tool schema already documents, charged per call. Removal is not unconditional: smaller models attend to an example next to the result better than to a schema defined earlier, and copy-paste templates cut malformed follow-ups. So it is a server setting (`output_hints` / `JOPLIN_OUTPUT_HINTS`) rather than a per-call parameter, since a model weak enough to need the hints cannot reliably ask for them, whereas whoever deploys the server knows which model it serves.
+- **Note content stats collapse onto one line**, in listings and single-note views alike (#59).
+
+## What's New
+
+- **`note_count` in `list_notebooks`** - one of the few fields an agent acts on when picking a notebook, and the one field that was missing. Counting is a single bulk fetch of ids and parent ids tallied in memory, not a round trip per notebook on a call that already lists 40+ of them. A failed count leaves the line out rather than failing the listing, since the names and ids are what the caller came for.
+
+## Fixes
+
+- **Tag note counts no longer cap at 100.** `list_tags` counted through the paginated `get_notes`, so a tag on 250 notes reported 100. It also asked for the full note fields when all it does with the result is `len()` it, dragging every tagged note's body across the wire once per tag (#59).
+- **Multi-line note content no longer breaks search-result parsing.** Result records put their fields at two spaces while the body was pasted in at column zero, so a body line reading `  todo: x` looked like the next field, and one reading `RESULT_2:` moved the record boundary outright and silently reattributed the rest of that note to a different result. `content` and `content_preview` now sit under their own label, indented deeper than the fields.
+- **Smart TOC environment variables are actually read.** `JOPLIN_SMART_TOC_THRESHOLD` and `JOPLIN_ENABLE_SMART_TOC` have been documented since the knobs were added, but `from_environment` never read them, so anyone tuning token use through the environment silently got the defaults. The JSON config path always worked (#59).
+- **`update_note`, `update_notebook` and `update_tag` name the item they changed** in their success message, as does `edit_note` (#63 by @Vpatel1093).
+- **The `content_exposure.listings` knob is gone.** It was written by the installer, validated, and documented as governing `find_notes_in_notebook` and `find_notes_with_tag`, but no tool ever read it: all four callers pass `search_results`, so setting `listings=none` to cut token use changed nothing. Existing config files still load, since the key is tolerated with a warning rather than rejected, which would break every file the old installer wrote. The installer's privacy score rescales accordingly, having been propped up by the dead knob (#59, raised by BennyTramell).
+- **`import_from_file` schemas work with strict clients** that require every declared property to appear in `required`, even nullable ones (#57 by @toniher).
+
+## Other Changes
+
+- **`scripts/bump_version.py`** sets or verifies the version across every file that hard-codes it (`pyproject.toml`, `__init__.py`, `server.json`, and both plugin manifests). The release workflow runs `--check` against the tag, so a partial bump now fails the release loudly instead of being silently rewritten at publish time, which is how `server.json` drifted in the first place.
+- **Release workflow fixes.** It still installed from `requirements.txt`, which had been removed in favour of pyproject, and would have failed at the next tag; it now installs the `dev` extra, which also restores the test dependencies that the `Run tests` step needs. `workflow_dispatch` runs the checks, tests and build without publishing anything, so the release path can be rehearsed without a tag. A missing `PYPI_API_TOKEN` fails the run instead of skipping the upload and letting the registry publish a version that never reached PyPI.
+- **Test suite passes against fastmcp 3.4.** 3.4 re-raises Pydantic argument errors as `fastmcp.exceptions.ValidationError`, which does not inherit from Pydantic's, so six argument-validation tests failed on a clean install even though the constraints themselves still reject. Assertions now accept either type.
+- **Claude Code plugin manifests track the project version** and no longer advertise 24 tools when there are 26. `SKILL.md` also still documented `parent_id` for notebooks, which v0.9.0 replaced with `parent_name`.
+- **`requirements.txt` removed** in favour of pyproject. It duplicated the dependency list and had drifted, missing three runtime deps (`beautifulsoup4`, `markdownify`, `pathspec`), so installing from it produced an incomplete environment.
+- **`uv.lock` is no longer tracked**, and the unused `import_source` code path is gone.
+
+**Full Changelog**: https://github.com/alondmnt/joplin-mcp/compare/v0.9.0...v0.10.0
+
+---
+
 # [v0.9.0](https://github.com/alondmnt/joplin-mcp/releases/tag/v0.9.0)
 *Released on 2026-06-10*
 
