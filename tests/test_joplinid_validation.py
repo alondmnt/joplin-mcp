@@ -14,7 +14,7 @@ List[JoplinIdType]]) and gets its own check.
 """
 
 import pytest
-from pydantic import ValidationError
+from conftest import ARG_VALIDATION_ERRORS
 
 
 class TestJoplinIdValidation:
@@ -26,7 +26,7 @@ class TestJoplinIdValidation:
         """Pydantic enforces 32-char length at parse time, before the body runs."""
         from joplin_mcp.tools.notes import get_note
 
-        with pytest.raises(ValidationError, match=r"(at least 32|at most 32)"):
+        with pytest.raises(ARG_VALIDATION_ERRORS, match=r"(at least 32|at most 32)"):
             await get_note.run({"note_id": bad_id})
 
     @pytest.mark.asyncio
@@ -42,5 +42,5 @@ class TestJoplinIdValidation:
         """tag_note accepts Union[JoplinIdType, List[JoplinIdType]] — the list branch validates too."""
         from joplin_mcp.tools.tags import tag_note
 
-        with pytest.raises(ValidationError, match="at least 32"):
+        with pytest.raises(ARG_VALIDATION_ERRORS, match="at least 32"):
             await tag_note.run({"note_id": ["short"], "tag_name": "Work"})

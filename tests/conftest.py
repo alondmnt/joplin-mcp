@@ -11,6 +11,8 @@ from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastmcp.exceptions import ValidationError as FastMCPValidationError
+from pydantic import ValidationError as PydanticValidationError
 
 from joplin_mcp.config import get_config, set_config
 
@@ -39,6 +41,19 @@ def override_config(**fields):
         yield get_config()
     finally:
         set_config(snapshot)
+
+
+# Which exception a tool.run({...}) call raises when Pydantic rejects an
+# argument. Use this in pytest.raises for any assertion about argument
+# validation (min_length, max_length, required fields); do NOT use it for
+# errors the tool body raises itself, which stay plain ValueError.
+#
+# fastmcp >= 3.4 catches the Pydantic error at the argument boundary and
+# re-raises it as fastmcp.exceptions.ValidationError, which does not inherit
+# from Pydantic's. Earlier 3.x let the original through. The message is
+# preserved either way, so match= still works; only the type moved. Accepting
+# both keeps the suite green across the whole fastmcp>=3,<4 range we support.
+ARG_VALIDATION_ERRORS = (PydanticValidationError, FastMCPValidationError)
 
 # Test data constants
 TEST_TOKEN = "test_token_123456789"
