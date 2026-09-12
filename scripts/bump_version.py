@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Bump (or verify) the project version across every file that hard-codes it.
 
-The version lives in four places that must agree, or a release ships
+The version lives in several places that must agree, or a release ships
 inconsistent metadata:
 
 - ``pyproject.toml``        -> ``version`` (the PyPI build reads this)
 - ``src/joplin_mcp/__init__.py`` -> ``__version__``
 - ``server.json``          -> top-level ``version`` AND ``packages[*].version``
   (the MCP registry publish reads server.json as committed)
+- ``.claude-plugin/plugin.json`` -> ``version``
+- ``.claude-plugin/marketplace.json`` -> ``plugins[*].version``
+  (both are served from main at HEAD, so they are live the moment they
+  are committed - there is no publish step to catch a stale value)
 
 This script is the single owner of that list. Use it two ways:
 
@@ -32,11 +36,29 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 INIT = REPO_ROOT / "src" / "joplin_mcp" / "__init__.py"
 SERVER_JSON = REPO_ROOT / "server.json"
+PLUGIN_JSON = REPO_ROOT / ".claude-plugin" / "plugin.json"
+MARKETPLACE_JSON = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-.+][0-9A-Za-z.-]+)?$")
 # A line that is exactly `version = "X"` — not target-version/python_version/etc.
 PYPROJECT_RE = re.compile(r'^version = "([^"]+)"', re.MULTILINE)
 INIT_RE = re.compile(r'^__version__ = "([^"]+)"', re.MULTILINE)
+
+
+def _read_json(path: Path) -> dict:
+    """Load a JSON file as UTF-8, independent of the platform's locale."""
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _write_json(path: Path, data: dict) -> None:
+    """Write a JSON file back in the shape the repo already uses: 2-space
+    indent, trailing newline, and literal non-ASCII characters.
+
+    ensure_ascii=False matters. The plugin descriptions contain an em dash,
+    and the default would rewrite it as \\u2014 on every bump - valid JSON,
+    but a spurious diff on a file nobody edited.
+    """
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def read_versions() -> dict[str, list[str]]:
@@ -47,13 +69,19 @@ def read_versions() -> dict[str, list[str]]:
     """
     pyproject_match = PYPROJECT_RE.search(PYPROJECT.read_text())
     init_match = INIT_RE.search(INIT.read_text())
-    server = json.loads(SERVER_JSON.read_text())
+    server = _read_json(SERVER_JSON)
+    plugin = _read_json(PLUGIN_JSON)
+    marketplace = _read_json(MARKETPLACE_JSON)
 
     return {
         "pyproject.toml": [pyproject_match.group(1)] if pyproject_match else [],
         "src/joplin_mcp/__init__.py": [init_match.group(1)] if init_match else [],
         "server.json": [server["version"]]
         + [pkg["version"] for pkg in server.get("packages", [])],
+        ".claude-plugin/plugin.json": [plugin["version"]],
+        ".claude-plugin/marketplace.json": [
+            p["version"] for p in marketplace.get("plugins", [])
+        ],
     }
 
 
@@ -89,12 +117,20 @@ def bump(version: str) -> None:
         raise SystemExit(f"expected exactly one __version__ in __init__.py, found {n}")
     INIT.write_text(init_text)
 
-    server = json.loads(SERVER_JSON.read_text())
+    server = _read_json(SERVER_JSON)
     server["version"] = version
     for pkg in server.get("packages", []):
         pkg["version"] = version
-    # Match the file's existing 2-space indent and trailing newline.
-    SERVER_JSON.write_text(json.dumps(server, indent=2) + "\n")
+    _write_json(SERVER_JSON, server)
+
+    plugin = _read_json(PLUGIN_JSON)
+    plugin["version"] = version
+    _write_json(PLUGIN_JSON, plugin)
+
+    marketplace = _read_json(MARKETPLACE_JSON)
+    for entry in marketplace.get("plugins", []):
+        entry["version"] = version
+    _write_json(MARKETPLACE_JSON, marketplace)
 
     print(f"bumped all locations to {version}")
     for loc, values in read_versions().items():
