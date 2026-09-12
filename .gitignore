@@ -257,6 +257,9 @@ temp-*.json
 # Test output
 test_output/
 temp_test_files/
+# Sample notes, importer fixtures and live-API scripts used when exercising
+# the tools by hand. Not part of the pytest suite.
+test_files/
 
 # Development database files
 *.db
@@ -267,4 +270,11 @@ temp_test_files/
 
 # Local development overrides
 local_config.py
-dev_settings.py 
+dev_settings.py
+
+# Coding-agent instructions and design notes kept local to a working copy.
+# Untracked on purpose: they follow whoever is working on the repo, not the
+# release. .* already covers the dot-prefixed ones (.claude/, .codex/).
+AGENTS.md
+CLAUDE.md
+docs/mcp-design-patterns.md 
